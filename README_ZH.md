@@ -3,203 +3,216 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-agent-teams 把一个 DeepSeek Harness 会话变成可协作的多智能体团队">
+  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-ctf-teams 把一个 DeepSeek Harness 会话变成多智能体 CTF 战队">
 </p>
 
-<p align="center">
-  <a href="https://dshfind.com/zh/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://img.shields.io/badge/%E7%94%B1%20dshfind-%E6%8E%A8%E8%8D%90-FFD700?style=flat-square" alt="由 dshfind 推荐"></a>
-  <a href="https://dshfind.com/zh/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?lang=zh" alt="dshfind 评分"></a>
-  <a href="https://dshfind.com/zh/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?metric=downloads&amp;lang=zh" alt="dshfind 下载量"></a>
-</p>
+# dsh-ctf-teams
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@nanmicoder/dsh-agent-teams"><img src="https://img.shields.io/npm/v/@nanmicoder/dsh-agent-teams?style=flat-square&amp;color=5B4CF0" alt="npm 版本"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0B7285?style=flat-square" alt="MIT 许可证"></a>
-  <a href="./cordis.patch.yml"><img src="https://img.shields.io/badge/DSH-Web%20%2B%20Headless-5B4CF0?style=flat-square" alt="DSH Web 与 Headless"></a>
-</p>
+**CTFTeams** —— DeepSeek Harness 的多智能体 CTF 插件，fork 自 [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) 并为 CTF 重新打造。一个会话成为**队长**，派出四名**全能型 CTF 专家**（web / pwn / reverse / crypto / forensics / misc，每个 agent 全域覆盖），从不同角度**并行攻打同一道题**，**每轮同步进展**，共享 flag 候选看板，战况通过**终端 dashboard** 直接呈现。
 
-## 一句话，拉起一支真正协作的团队
+## 为什么
 
-`dsh-agent-teams` 让当前 DeepSeek Harness 会话成为队长：创建可续聊的子 Agent、把目标拆成有依赖的任务，并通过直达消息协调成员工作。
+真实的 CTF 解题本来就是多条战线同时推进。CTFTeams 完整保留了 agent-teams 的底座（可续聊的持久化成员、带依赖的任务 DAG、邮箱消息、两阶段计划审批、质量门），再加上 CTF 真正需要的东西：
 
-你只需用自然语言提出目标。插件会提供精简的固定团队协议、14 个业务工具、持久化状态、自动共享任务调度和实时 Web UI，不需要额外的 Workflow 引擎。
+- **可选中的 agent 模式**——插件同时声明了 `ctf-teams` 这个 Harness **agent 预设**（显示名「CTF 团队模式」），于是战队成为一个可在应用里直接选中的模式（会话模式选择器 / 设置 → 通用里的默认预设），而不用靠记工具名。该模式组合出完整的 agent 平面（shell、文件系统、技能、委派、计划模式、上下文压缩）并叠加 CTF 队长人格；`ctf_teams_*` 工具来自 profile 级的宿主行，在任何模式下都可调用。
+- **ctf-teams 团队模板**——内置零配置团队模板：`/ctf-teams <题目>` 一键派出四名全能专家攻打题目，队长现场规划攻击图。
+- **轮次同步协议**——每一条有价值的中间结论都发到共享 findings 看板；成员一次调用即可拉取自己没看过的增量，调度器把最新进展附在每个任务派发里，还会主动推送给空闲成员。没有新进展的一轮零开销。
+- **证据门控的 flag 流程**——候选 flag 必须带可复现证据提交，按题目 flag 格式校验、自动去重；只有队长能录入平台判定结果。一旦 verified，全队切换到 writeup 模式。
+- **内置知识库**——kali 工具箱、pwntools、SageMath、Volatility 3、分领域作战手册（web / pwn / reverse / crypto / forensics / misc），以及全新 PoC/CVE 的狩猎流程，会话内用 `ctf_teams_knowledge` 直接阅读。
+- **工具链服务**——`ctf_teams_env` 先检测本机：pwntools、volatility3、sage、gdb、nmap、hashcat、tshark、exiftool 等约 40 个托管工具的状态与版本；缺失的按预置 apt/pip/brew/gem 映射直接安装（逐参数执行、不走 shell）。重型工具（sage、ghidra、pwndbg）只报告手动安装命令，不擅自执行。
+- **引用库预置**——小型 PoC/技能库（ctf-skills、Awesome-POC）在**建队时自动克隆**；其余（exphub、0xMarcio pocindex/cve、trickest/cve、PoC-in-GitHub、cvelistV5）用 `ctf_teams_references` 按需同步到 `<workspace>/.ctf-teams/references/`，并给每个 agent 返回绝对路径和 `rg` 检索提示——N-day 狩猎先查本地、再上网。
+- **实时 dashboard 页签，而且能操作**——应用里「对话 / 轨迹」旁边多一个**「解题面板」**页签：题目头信息、任务进度条、成员泳道（实时活动、`⚡` 未同步看板动态、未读邮件、当前任务）、findings 流、flag 看板，以及宿主算好的 `Next` 下一步提示，每 1.5 秒从一条带信任围栏的路由刷新。面板上的按钮能直接推动解题——开始解题（题目表单）、批准并运行、推进一轮、暂停/继续、核对 flag、附件（工作区文件选择器）、写 WRITEUP、导出 WP / 导出复盘——每次点击只投入**一条你自己的消息**，队伍状态的唯一写者仍然是对长 agent。
+- **终端 dashboard**——同一份战况的文本版，给没有页签的界面用：`ctf_teams_status`（模型 + 人类）和 `/ctf-teams-board`（仅人类，不唤醒模型）。
 
-<p align="center">
-  <img src="./assets/readme/workspace.png" width="100%" alt="DeepSeek Harness 对话与 AgentTeams 实时活动面板，展示成员、任务依赖和回报">
-</p>
+## 快速开始
 
-## 版本更新
+**DeepSeek Harness 桌面版（主要安装目标）：** 在应用侧栏打开「插件 → 添加插件」，输入 npm 包名和版本（`@nanmicoder/dsh-ctf-teams`），安装完成后点击「立即启用」，宿主提示需要重启时重启桌面应用。桌面端自带 Harness 内核与包管理器，自行管理 profile。
 
-[v0.1.22](./release-notes/v0.1.22.md) 切换到已发布的 Harness `0.2.0-rc.2`，保留无需构建脚本的 Git 安装。本插件正式版使用 npm `latest` 渠道；推荐搭配 Harness `0.2.0-rc.2`（宿主的 `next` 渠道）。精确支持范围见 [compatibility.json](./compatibility.json)。
+**CLI / Web：**
 
-## 为什么需要 AgentTeams？
-
-| 能力 | 带来的变化 |
-| --- | --- |
-| **队长式委派** | 当前会话负责建队、分配角色并汇总最终结果。 |
-| **可续聊成员** | 成员是可持续唤醒的 DSH 子 Agent，可以继续执行聚焦的后续轮次。 |
-| **带依赖的任务** | 任务有明确状态；依赖未完成时不能领取。 |
-| **自动续领与安全接管** | 成员空闲后自动领取下一项就绪任务；转派会撤销旧 attempt，冷恢复会重试遗留任务，迟到结果无法覆盖。 |
-| **成员直达消息** | 成员通过持久化邮箱直接联系队友或队长，不需要队长中转。 |
-| **实时活动面板** | Web UI 用分段进度、可折叠成员树和可交互 DAG 展示实时工作；运行中的子任务会标出使用的模型，团队结束后仍保留完整成员与任务历史。 |
-| **质量门禁** | 人只提供目标和约束。默认任务顺序是需求 → 实现 → 验证 → 审查 → 集成，失败后自动修复/复审，恢复团队必须显式 resume。第一版范围控制是完成时审计，不是 host 写入拦截。详见 [docs/quality-gates.md](./docs/quality-gates.md)。 |
-
-对话卡片与活动面板接入 Harness 官方多语言服务，会随宿主在简体中文和英文之间实时切换；任务/成员状态、动态摘要、操作按钮、历史归档标识和无障碍文案都会同步更新，无需刷新页面，也不增加插件自己的语言设置。
-
-## 安装与版本选择
-
-**推荐组合：DeepSeek Harness `0.2.0-rc.2` + AgentTeams `0.1.22`。宿主仍为 RC 版本。**
-
-| 使用场景 | DeepSeek Harness | AgentTeams 插件 |
-| --- | --- | --- |
-| **推荐版本** | **`0.2.0-rc.2`** | **`0.1.22`** |
-| 上一推荐 RC | `0.1.7-rc.2` | `0.1.22` |
-| 保留旧 RC | `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.5-rc.3` | `0.1.22` |
-| 保留旧 RC | `0.1.2-rc.1` | `0.1.22` |
-| 开发者测试 Alpha | `0.1.2-alpha.5` | `0.1.22` |
-| 保留旧 Alpha | `0.1.2-alpha.2` | `0.1.22` |
-
-### 桌面端
-
-在应用侧栏打开「插件 → 添加插件」，输入 npm 包名和版本：
-
-```text
-@nanmicoder/dsh-agent-teams@0.1.22
+```bash
+dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
 ```
 
-安装完成后点击「立即启用」；宿主提示需要重启时，重启桌面应用。发布版请使用上面的包名，npm 或 GitHub 网页链接与 npm 包名不是同一种安装来源。从 Git 安装时，请选用包含下方所述已验证构建产物的提交。
+（`<name>` 换成实际使用的 CLI profile；安装后重启该 profile 的 Harness 进程。）插件包含两层 patch：宿主层的插件行与 `ctf-teams` agent 预设层，两者都在组合（composition）加载时读取，所以**安装或升级后必须重启宿主 / 桌面应用**，然后选择模式：
 
-桌面端自带 Harness 内核与包管理器，升级全局 CLI 不会升级桌面端；普通独立 CLI 不能管理桌面 profile，桌面端自带的 CLI carrier 在此版本可以管理。当前精确目标是已发布的 `0.2.0-rc.2`，仍属于 RC；此前源码预测的 `0.2.0` 已退出支持声明。详见[迁移验收记录](./docs/harness-0.2.0-rc.2/README.md)。
+- 桌面版：新建会话时选择「CTF 团队模式」（或在「设置 → 通用」里设为默认预设）。刚装完模式列表里没有「CTF 团队模式」是没重启，不是没装上。
+- CLI / Web profile：模式同样来自该 profile 的预设名册。
 
-### CLI / Web：1. 安装 DeepSeek Harness
-
-```sh
-npm install --global @deepseek-ai/dsh@0.2.0-rc.2
-dsh --version
-```
-
-已有该版本可跳过。Alpha 仅供主动测试：手动指定表中的 Alpha 版本，并按[维护指南](./docs/maintenance-workflow.md)锁定整组宿主依赖。
-
-### CLI / Web：2. 安装 AgentTeams 插件
-
-从 npm 安装或升级插件（命令锁定本次 `latest` 正式版）：
-
-```sh
-dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.22
-```
-
-CLI 管理的安装可将 `web` 换成实际使用的 CLI profile。**安装后，停止并重新启动该 profile 的 Harness 进程，再刷新浏览器。** 安装插件不会自动升级宿主；Harness 的 `latest` 与插件的 `latest` 是两个独立渠道。
-
-从 Git 安装时，使用固定到包含已验证 `lib/` 构建产物的提交的 Git 包规格，不要填 npm 网页链接。仓库随代码分发服务端、客户端和类型产物，安装时不需要执行 `prepare` 或批准构建脚本。源码维护者每次修改源码后，都需运行 `pnpm build` 并更新已提交的产物。已经发布的 npm 产物保持不变。
-
-手动克隆源码的用户，拉取代码后需重新运行 `pnpm install --frozen-lockfile` 和 `pnpm build`，再重启对应的 Harness；只更新 Git 不会更新本地构建产物。详见[维护指南](./docs/maintenance-workflow.md)。
-
-> 旧 `0.1.0-*` / `0.1.1-*` 或其他未列出的宿主，请先保留已工作的组合，参考[旧版本与诊断指引](./docs/maintenance-workflow.md)。
-
-完整[兼容清单](./compatibility.json)、[源码安装与 Alpha 验证](./docs/maintenance-workflow.md)、[已验证范围与平台限制](./docs/maintenance-2026-09-06/release/README.md)。
-
-接着直接用自然语言拉团队：
-
-> 使用 AgentTeams 审查 v0.5.3 之后的提交，分别从性能、安全和产品角度分工，最后输出一份汇总报告。
-
-队长会话从第一轮起保留精简的固定核心协议和原有 14 个业务工具，直接调用，无需额外的加载工具或激活调用。已配置模板的精简目录固定保留。创建、批准、继续或结束团队都不会改写系统提示词和工具 schema，会话压缩或代码模式丢弃工具结果也不会丢失核心规则。成员保留四个团队工具、固定成员说明及普通编程/研究工具。Web 批准后会通知并唤醒队长，后续成员报告会再次唤醒它，无需忙轮询。详见[固定协议与 benchmark 标准](./docs/progressive-loading.md)。
-
-## 在工作区查看团队
-
-从当前聊天标题栏或回复下方的团队卡片点击 **查看团队**，在原生「团队协作」标签页中查看成员分工、任务依赖和执行进度。入口跟随所属聊天，不放在通用工作区开始页。
-
-页面直接呈现团队和任务内容；宽屏并排展示，窄分栏自动堆叠。点击任务可定位负责成员，成员图标可打开对应会话。关闭标签页不会停止团队；回到所属聊天可以再次打开。已完成团队保留归档，旧宿主继续使用活动面板。
-
-## 工作方式
-
-1. 当前会话创建团队并成为队长。
-2. 队长按角色添加由可续聊子 Agent 驱动的成员。
-3. 目标被拆成有负责人和显式依赖的任务。
-4. 共享调度器依据真实 `running / idle / ready` 状态，为每个空闲成员原子领取一项就绪任务并唤醒它；驻留成员被中断时会停驻当前 attempt，可通过直接消息继续而不丢 capability；只有冷进程重启后的遗留任务才会生成新 attempt 恢复。
-5. 成员携带当前 `attempt_id` 更新任务；转派或队长接管会先撤销旧 attempt、等待原成员安静，再启动新 attempt。
-6. 队长汇总结果，随后归档完整团队记录。
-
-团队状态保存在 `<workspace>/.agent-teams/`；Web 面板读取这份磁盘真相，并与实时子 Agent 活动合并展示。
-
-成员创建默认零交互：成员沿用队长当前 LLM 路由时会快照该 provider、model 与思考强度；用户要求改用其他路由时，则快照目标模型的默认强度，成员后续续跑仍使用最终解析出的快照。只有当用户明确提出异构分工（例如“后端用 provider A/model X，前端用 provider B/model Y”）时，队长才会把对应的 `provider` + `model` 传给该成员；不会逐个弹出模型或思考强度选择。
-
-## Slash 命令
-
-无需再说“用 AgentTeams”。插件注册了封闭命名空间的 `/agent-teams` 宿主命令，Web GUI 的 slash 菜单会显示 `agent-teams` 占位项与输入提示：选中它（或直接输入命令）、描述目标、回车即可。
+然后在该 profile 的任意会话里：
 
 ```
-/agent-teams 调研三家竞品的定价页
+/ctf-teams 解 http://chal.local:8000，附件在 ./dist
+/ctf-teams-board          # 直接打印解题看板，不消耗模型轮次
 ```
 
-这一行被命令管线认领后，会按用户提交的原文作为普通用户消息送入主会话，因此聊天记录中仍能看到完整的 `/agent-teams …`。手势边界会在 pre-step 注入确定性激活指令，队长协议仍会立即启动。调用也会持久化记录（`command/run` / `command/done`）。
+或者自然语言："用 CTFTeams 解出这道 pwn。" 队长先给出分阶段计划（阵容 + 任务图），你批准之后全员开始并行解题。战队跑起来后，切到**「解题面板」页签**（就在「对话 / 轨迹」旁边）实时看着它推进。
 
-没有命令裁决的表面（例如 headless CLI）也享有同等的确定性激活：任何以 `/agent-teams` 开头的真实用户消息，都会为其余文本激活该协议；句子中间出现的字样仍是普通文本。
+## 命令
+
+插件占用一个封闭的命令命名空间，所以 `/` 菜单很短，每条命令只有一个含义：
+
+| 命令 | 作用 |
+|---|---|
+| `/ctf-teams [--profile <名称>] <题目>` | 开始（或继续）解题。不带 `--profile` 时用配置里的默认阵容——内置的 `ctf-teams` 小队。 |
+| `/ctf-teams-board` | 把仪表盘直接打印到对话流。不产生模型轮次、不改任何状态。 |
+| `/ctf-teams-<名称>` | 为**其他**已配置的团队模板各生成一个别名，例如 `/ctf-teams-web-only <目标>` 显式选用该阵容。 |
+
+有两个别名是**故意不注册**的：**默认**模板自己的别名（那只是把 `/ctf-teams` 换个更长的名字，即 `ctf-teams-ctf-teams`），以及任何与插件既有命令撞名的模板（比如名字叫 `board`）。把 `defaultProfile` 设为 `''` 关掉默认阵容后，它的别名会回来。
+
+## Dashboard 长什么样
+
+同一份状态，两个界面。**「解题面板」页签**（对话 / 轨迹 / 解题面板）是实时版：客户端视图每 1.5 秒轮询 `GET /plugins/dsh-ctf-teams/state`，请求走 harness 的浏览器信任围栏（未认证的请求拿到的是 401，不是数据），渲染出
+
+- 题目头信息——🚩 已解出 / ◌ 进行中、分类、分值、远程目标、附件、flag 格式；
+- 任务进度条 + 统计（`3 完成 · 1 进行中 · 1 待办 · …`）；
+- 成员泳道：实时活动、`⚡` 未同步的看板动态数、未读邮件、当前任务、`done/total`；
+- 最新 findings（带时间）、flag 看板（带判定）、以及**下一步（`Next`）**提示；
+- 多队切换与已归档战队的回看。
+
+宿主重启时会保留最后一份快照并显示「重连中」，页面不在前台时暂停轮询。
+
+### 直接在页签上操作
+
+每个按钮只做一件事：**往会话里投入一条「你自己的消息」**。面板本身从不改队伍状态，所以队长协议（staged 批准、flag 判定、附件写入）照旧生效，而且对话流里能看到你到底点了什么：
+
+| 按钮 | 出现条件 | 发出的内容 |
+|---|---|---|
+| 开始解题 | 还没有战队 | 题目表单（目标、模板、远程、分类、分值、flag 格式）→ `/ctf-teams …` + 这些事实 |
+| 批准并运行 | 计划 staged（队长） | `ctf_teams_approve` + 派发就绪任务 |
+| 推进一轮 | 进行中 | `ctf_teams_status`、派发就绪任务、唤醒落后成员 |
+| 暂停 / 继续 | 进行中 / 已暂停（队长） | halt，或带理由 `ctf_teams_resume` |
+| 核对 flag fN | 存在候选（队长） | 核对平台 → `ctf_teams_mark_flag` |
+| 附件 | 未归档（队长） | 工作区文件选择器 → `ctf_teams_set_challenge` 写入所选路径 |
+| 写 WRITEUP | 参与者 | 把可复现解题链写入 `WRITEUP.md` |
+| 导出 WP / 导出复盘 | 始终 | 下载 `WRITEUP.md`，或生成的 markdown 复盘报告 |
+
+成员会话里「只有队长能做」的按钮是**禁用**状态（而不是点了才报错）；已归档战队只读、只留导出；**故意没有一键归档/删除**——丢弃未完成的工作始终是队长的决定。这些端点与读取路径一样走浏览器信任围栏，并且只允许指定方法、限制请求体大小、按磁盘上的真值校验权限。
+
+**终端面板**是同一份状态给没有页签的界面用的文本版（`ctf_teams_status` 给模型和人类看，`/ctf-teams-board` 只给人类看且不产生模型轮次）。每段标题栏都带自己的实时计数，最后一行的 `Next` 与页签由同一个函数算出，所以两边永远不会给出互相矛盾的建议：
+
+```
+╭─ CTF TEAMS ── 🚩 SOLVED ────────────────────────────────────────────────────╮
+│ Challenge  baby_rsa · crypto · 500pts                                      │
+│ Remote     nc chal.local:9999                                              │
+│ Files      rsa.pem, out.txt                                                │
+│ Flag fmt   /flag\{[^}]+\}/                                                 │
+│ Status     running · round 4 · 12m · 3 findings · 1 flag                   │
+│ Goal       解出 baby_rsa 并写出可复现的解题链                              │
+├─ Agents ─────────────────────────────────────────────────────── 1/4 working┤
+│ ○ agent-1     idle ⚡1      full-stack CTF expert                           │
+│ ○ agent-2     idle         full-stack CTF expert                           │
+│ ● agent-3     working      t3 Write the reproducible solve cha…            │
+│ ◇ agent-4     unspawned    full-stack CTF expert                           │
+├─ Task board ──────────────────── [████████████░░░░] 3/4 · last beat 30s ago┤
+│ t3 ▶       Write the reproducible solve chain to WRITEUP.md → agent-3      │
+│ t1 ✓       Recon attachments and fingerprint the challenge → agent-1       │
+│ t2 ✓       Attack the RSA parameters (Wiener / Coppersmith) → agent-2      │
+│ t4 ✓       Cross-check the flag against the platform → captain             │
+│            3 done · 1 active · 0 pending                                   │
+├─ Findings (latest) ──────────────────────────────── 3 total · newest 3m ago┤
+│ r1 fd1     [agent-1/recon] 两个附件 rsa.pem + out.txt；openssl rsa -pubin… │
+│ r2 fd2     [agent-2/crypto] Wiener 命中：e 极大、d 很小；已还原私钥并解出… │
+│ r3 fd3     [agent-3/dead-end] 远端无 HTTP 面，纯 nc 交互，排除 web 链路    │
+├─ Flags ─────────────────────────────────────────── 1 total · 1 verified    ┤
+│ f1 ✓       flag{w13n3r_4tt4ck_ftw} by agent-2 — platform accepted          │
+│ Next       ▸ solved — write WRITEUP.md, then archive the team              │
+╰─ live · ctf_teams_status for the full detail                               ╯
+```
+
+一眼读法：顶栏是结论（🚩 SOLVED / ◌ unsolved）；每段标题栏右侧是这一段的实时计数（几路在跑、任务进度条 + 最近一次看板更新、findings 新鲜度、已验证 flag 数）；成员后的 `⚡N` 表示他还有 N 条看板动态没拉；`Next` 是最值得立刻执行的一步——核对候选 flag、给空闲成员派发就绪任务、恢复被 halt 的队，或者去写 writeup。
+
+## 内置 ctf-teams 战队
+
+四名成员（`agent-1` … `agent-4`），刻意不做方向拆分：每人都是全栈 CTF 专家（web、pwn、reverse、crypto、forensics、misc），共享同一套知识库（kali-tools、pwntools、sage-math、volatility3、web、pwn、reverse、crypto、forensics、misc、cve-poc）。提速来自**并行角度**而不是领域分工：每个 agent 在选定攻击路线前先 sync，公开认领（`ctf_teams_report_finding`），要接手队友的路线必须先发 finding 声明，每轮把所有结果——包括死胡同——发上看板。
+
+任务规划是 `captain` 模式：模板只提供人与守则，任务图由队长根据题目实际情况推导（先侦察，再并行分域，最后收敛到 flag 验证 + writeup）。你在 `profiles.ctf-teams` 里的同名配置会整体覆盖内置模板。
+
+## 工具链与引用库服务
+
+开跑之前，队长（或任意成员）先把机器准备好：
+
+```
+ctf_teams_env  { action: "check" }                  # 检测 pwntools / vol3 / sage / kali 工具链 …
+ctf_teams_env  { action: "install", dry_run: true } # 先看安装计划
+ctf_teams_env  { action: "install" }                # 安装缺失项（apt/pip/brew/gem）
+ctf_teams_references { action: "sync", repo: "all" }# 克隆 PoC/CVE/技能库
+ctf_teams_references { action: "path", repo: "exphub" }
+```
+
+托管目录覆盖约 40 个工具（Python 栈、pwn/逆向、web、密码学、取证、杂项）。`check` 报告版本和安装提示；`install` 直接执行预置 argv 序列（不经 shell），装完自动复检；sage/ghidra/pwndbg 等重型工具只打印手动安装路径。配置 `env.allowInstall: false` 可彻底禁用执行（dry-run 仍可用）。
+
+引用库清单预置了以下仓库——它们保存在 GitHub（有的好几个 GB），所以服务按需浅克隆进 workspace，而不是把 npm 包撑爆：
+
+| 仓库 id | 来源 | 内容 |
+|---|---|---|
+| `ctf-skills` | [ljagiello/ctf-skills](https://github.com/ljagiello/ctf-skills) | 分 CTF 领域的 agent 作战手册（MIT） |
+| `awesome-poc` | [WyAtu/Awesome-POC](https://github.com/WyAtu/Awesome-POC) | 按产品整理的 PoC 索引 |
+| `exphub` | [zhzyker/exphub](https://github.com/zhzyker/exphub) | 经典 CVE 可直接运行的 exploit 脚本 |
+| `pocindex` | [0xMarcio/pocindex](https://github.com/0xMarcio/pocindex) | 8.2 万+ PoC 索引（按 CVE 检索） |
+| `marcio-cve` | [0xMarcio/cve](https://github.com/0xMarcio/cve) | 按年份聚合的 CVE+PoC |
+| `trickest-cve` | [trickest/cve](https://github.com/trickest/cve) | 自动聚合的 CVE 数据库（超大） |
+| `poc-in-github` | [nomi-sec/PoC-in-GitHub](https://github.com/nomi-sec/PoC-in-GitHub) | 每日更新的 PoC JSON 索引（大） |
+| `cvelistv5` | [CVEProject/cvelistV5](https://github.com/CVEProject/cvelistV5) | 官方 CVE JSON v5 档案（超大） |
+
+## 轮次同步协议
+
+1. 成员把每一条有价值的结论用 `ctf_teams_report_finding` 发上看板——死胡同也要发，打上 `dead-end` 标签，帮队友省一整轮。
+2. `ctf_teams_sync` 返回该成员没看过的全部增量并推进其游标；空结果意味着"没人有新进展——继续或让出"。
+3. 调度器顺路捎带：任务派发自动附上最新 findings，空闲成员若看板有新内容会收到 digest 推送。游标持久化——不重复、不丢失。
+4. flag 也是看板：`ctf_teams_submit_flag` 按题目格式校验并去重；队长对平台验证后用 `ctf_teams_mark_flag` 录入判定。`verified` 即标记题目已解出，全员转入 writeup。
+
+## 工具
+
+队长专属：`ctf_teams_create`、`ctf_teams_approve`、`ctf_teams_edit_plan`、`ctf_teams_add_member`、`ctf_teams_remove_member`、`ctf_teams_create_task`、`ctf_teams_reassign_task`、`ctf_teams_amend_task`、`ctf_teams_set_challenge`、`ctf_teams_mark_flag`、`ctf_teams_resume`、`ctf_teams_delete`
+
+成员共用：`ctf_teams_claim_task`、`ctf_teams_update_task`、`ctf_teams_send_message`、`ctf_teams_status`、`ctf_teams_submit_flag`、`ctf_teams_report_finding`、`ctf_teams_sync`、`ctf_teams_knowledge`、`ctf_teams_env`、`ctf_teams_references`
 
 ## 配置
 
-默认配置可以直接使用。受信任的 Profile 可以覆盖成员行为：
-
 ```yaml
-- id: agent-teams
-  config:
-    stateDir: .agent-teams
-    memberProvider: spawn
-    memberModel: deepseek-v4
-    memberMaxDepth: 0
-    maxMembers: 8
+# cordis.patch.yml / profile 配置
+stateDir: .ctf-teams          # 团队状态根目录（位于会话 workspace 下）
+memberProvider: spawn         # 'spawn' 或 'fork'
+maxMembers: 8
+defaultProfile: ctf-teams     # create 未指定 profile/plan 时生效（空串关闭）
+slashCommand: true            # /ctf-teams 命令 + 手势边界
+boardCommand: true            # /ctf-teams-board 看板命令
+profiles: {}                  # 自定义 profiles；同名覆盖内置模板
+env:
+  allowInstall: true          # false 时 ctf_teams_env 安装仅支持 dry-run
+  probeTimeoutMs: 10000
+  installTimeoutMs: 300000
+  # pythonBin: /usr/bin/python3
+references:
+  autoSync: small             # 建队时自动克隆小型库（'off'|'small'|'all'；随附 patch 配置默认开启，库层默认关闭）
+  depth: 1                    # 引用仓库浅克隆深度
+  dirName: references         # 位于 <stateDir> 下：.ctf-teams/references
+  timeoutMs: 600000
 ```
 
-`memberMaxDepth` 默认 `0`，团队成员不能再创建子代理；显式设为 `1` 可允许一层后代，运行时和代码工具调用同样受限。默认成员统一通过团队消息汇报，避免再走宿主消息重复通知队长。无任务成员不调用模型；任务分配开启独立轮次，纠正消息进入最近的模型步骤。消息投递与读取分别记录；移除和归档必须等成员分支及待处理输入清理完成后才报告成功。
+## agent 预设模式
 
-普通调研、仓库审计可用 `agent_teams_create({name, description, approval:"required", plan:{members:[{name:"researcher"}], tasks:[{id:"audit", subject:"审计现有实现", assignee:"researcher"}]}})` 一次创建完整草案。任务的 `dependencies` 引用同一批中的 `id`，支持前向引用并校验环；结果返回实际任务 ID。`kind=review` 专用于对既有 implementation/repair 任务的质量复审，普通仓库审计使用默认的 `kind=work`。
+本插件按 `dsh.bundle.patch` 的顺序应用两层 patch：
 
-这里的 `memberProvider` 指子 Agent 的运行后端（`spawn` / `fork`），不是 LLM provider。跨 LLM provider 由 `agent_teams_add_member` 的可选 `provider` + `model` 参数表达；`memberModel` 只是所有成员的模型默认覆盖。成员沿用队长当前 provider/model 时会继承队长的思考强度；provider 或 model 任一改变时会自动使用目标模型的默认档。需要指定特定强度时，可传入可选的 `reasoning_effort` 参数（目标模型支持的档位 id，或 `"default"` 表示强制使用模型自身默认档）。
+| 层 | 文件 | 贡献内容 |
+|---|---|---|
+| 1 | `cordis.patch.yml` | 宿主层的 `@nanmicoder/dsh-ctf-teams` 插件行：`ctf_teams_*` 工具、`/ctf-teams`、`/ctf-teams-board`、队长使用说明段落——对该 profile 的每个会话生效。 |
+| 2 | `presets/ctf-teams.patch.yml` | `ctf-teams` **agent 预设**（`@deepseek-ai/dsh-agent-preset`，显示名「CTF 团队模式」，order 3）：该模式的人格、shell、文件系统、技能、委派、计划模式与上下文压缩。 |
 
-`slashCommand: false` 可关闭确定性的 `/agent-teams` 激活面（slash 命令与手势边界），仅保留自然语言触发。
+想调整模式就改第 2 层：`plugins` 列表里的每一行都属于该 agent 的平面——去掉 `tool-web` 就只让这个模式失去联网搜索，启用 `tool-subagent-codex` 就只给这个模式多加一个委派 provider。预设行与官方预设一样从 Harness 安装目录和 profile 解析，**重启宿主后新建的会话**才能看到改动。
 
-## 使用边界
-
-- 一个队长同一时间只能带一个活动团队。
-- 没有开放任务的空闲成员会自动续领就绪任务；仍持有开放 attempt 的空闲成员会停驻，队长可发消息让其沿用原 attempt 继续，或显式转派；冷重启遗留的开放任务才会生成新 attempt。暂时无法实时投递的消息会持久保存在邮箱中并在后续状态边界重投。
-- 状态使用文件持久化，并在单个 DSH 进程内串行操作；多个进程同时修改同一团队不保证一致。
-- 历史面板依赖保存的团队状态或归档；早期版本删除团队时未保留归档的会话，暂不支持从日志重建完整面板。
-- 活动面板如实展示持久化状态；模型偶尔可能完成工作却没有按协议更新任务状态。
-
-完整工具列表、状态模型、Web UI 行为、配置与已知限制见 [docs/usage.md](./docs/usage.md)。
-
-## 插件开发 Skill
-
-仓库已引入社区升级、审计、测试和发布 skills，来源与本项目规则见 [skills/README.md](./skills/README.md)，贡献入口见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
-
-另提供开放 Agent Skills 包 [`dsh-plugin-development`](./skills/dsh-plugin-development/SKILL.md)：
-
-```sh
-npx skills add NanmiCoder/dsh-agent-teams --skill dsh-plugin-development
-```
-
-## 文档
-
-| 指南 | 内容 |
-| --- | --- |
-| [使用指南](./docs/usage.md) | 架构、UI 行为、工具、配置、限制与验证 |
-| [验证指南](./docs/verification-guide.md) | 离线、组合、真实 e2e 与 GUI 验证 |
-| [插件开发](./docs/developing-dsh-plugins.md) | 基于本插件整理的人类可读开发指南 |
-| [README 写作](./docs/readme-writing-guide.md) | 仓库文档约定 |
+第 2 层需要带 agent preset 注册表的 Harness（**0.2.0-rc.2 及以上**，该代预设是组合里的声明行）。更老的宿主上这一行无法解析，只是模式不出现，第 1 层照常工作——如果希望在那里显式挂载工具，可把 `- insert: [{ id: ctf-teams, name: '@nanmicoder/dsh-ctf-teams' }]` 加到该 profile 的 `cordis.patch.yml`。
 
 ## 开发
 
-```sh
+```bash
 pnpm install
-pnpm build
-pnpm verify
+pnpm build          # tsc -> lib/ + git-artifact 戳记
+pnpm typecheck
+pnpm verify         # 完整离线验证链，含 ctf-verify / lifecycle / 质量门
 ```
 
-## 命名多角色团队配置
+## 致谢
 
-在 `cordis.patch.yml` 的 `profiles` 中配置完整团队模板。每个 profile 都提供成员阵容，可独立指定 provider、model、role、reasoning_effort。`taskPlanning: captain` 表示只提供阵容和约束，由 Captain 根据用户目标设计 DAG；省略该字段或设为 `seed` 时，展开模板中的固定任务图。使用 `/agent-teams --profile <名称> <目标>` 显式激活；不会把首个普通 token 隐式识别为 profile。
-
-普通 `/agent-teams` 流程继续已有团队，按需调用 `agent_teams_status` 确认状态；仅在没有当前团队时调用 `agent_teams_create({ profile, approval: "required" })`：只落盘可编辑的成员占位和 DAG，不创建子会话、不领取任务。成员模型和推理等级直接读取 Harness 的模型目录。「返回对话修改」会终止仍在运行的规划轮次，让队长先追问修改方向，再用一次原子操作更新同一份草案；「放弃本次计划」经二次确认后会归档草案、中止轮次，并向模型注入不得自动重建团队的控制上下文。只有点击「确认并启动团队」才会提交最终配置并调度就绪任务；成员有就绪任务时才创建会话。运行中团队的停止入口位于该团队的面板标题，点击后需要二次确认，不再占用输入区域。直接工具调用方可显式传 `approval: "automatic"` 保留旧的立即执行路径。审查或测试失败不会解锁下游；自动 repair/review 不依赖 failed review。
-
-## 许可证
-
-[MIT](./LICENSE)
+Fork 自程序员阿江 (Relakkes) 的 [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams)——感谢优秀的多智能体底座。CTF 特化的轮次同步、flag 看板、知识库与终端 dashboard 是本 fork 的增量。基于 MIT 协议开源。

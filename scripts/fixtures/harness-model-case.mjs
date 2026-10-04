@@ -22,15 +22,15 @@ export const sources = {
 `,
 };
 export const reviewers = ['performance', 'security', 'interaction'];
-export const freshPrompt = `请使用 AgentTeams 立即执行这项审查；我明确授权跳过计划审批，不需要再次确认。
+export const freshPrompt = `请使用 CTFTeams 立即执行这项审查；我明确授权跳过计划审批，不需要再次确认。
 安排三位成员，名字分别为 performance、security、interaction，各自独立只读审查 app/ 中的小应用。给每人创建一项明确的审查任务，合计三项独立任务；不要增加其他成员。performance 检查性能和数据规模增长，security 检查不可信输入，interaction 检查正常用户流程能否完成。
 不要修改 app/ 或其他已有文件。每位成员只新增自己的 reports/<成员名>.json，格式为 {"reviewer":"成员名","findings":[{"path":"app/文件名","symbol":"函数名","problem":"具体问题","evidence":"可复现输入、操作及错误结果","recommendation":"最小修复建议"}]}。报告至少提供一个有源码依据的真实问题；没有发现时如实报告空 findings，不要编造。允许读代码和运行临时内存探针，禁止访问工作区外文件、网络、Harness 配置或插件源代码。
 队长负责委派与汇总，不代写成员报告。等待三位成员完成审查任务并回报后，新增 reports/summary.json，格式为 {"reports":["reports/performance.json","reports/security.json","reports/interaction.json"],"summary":"基于三份报告的结论"}。完成后保留团队和任务以便我继续复核，不要删除或归档。结束当前轮，成员报告会自动唤醒你。`;
-export const coldPrompt = `继续当前已有 AgentTeams 团队，不要重建团队、添加或替换成员，也不要覆盖先前报告。我现在要求一次后续复核：为原 security 成员新增且仅新增一项任务，确认 app/comments.mjs 原问题是否仍存在。不要修复代码。
+export const coldPrompt = `继续当前已有 CTFTeams 团队，不要重建团队、添加或替换成员，也不要覆盖先前报告。我现在要求一次后续复核：为原 security 成员新增且仅新增一项任务，确认 app/comments.mjs 原问题是否仍存在。不要修复代码。
 请让原 security 成员读取当前文件，独立执行或描述具体输入与结果，写 reports/security-followup.json，沿用之前报告 JSON 格式。队长等待该任务完成和成员回报后，写 reports/cold-summary.json，格式为 {"reports":["reports/security-followup.json"],"summary":"复核结论"}。只写这些新报告，禁止工作区外读取或网络请求，完成后继续保留当前团队。`;
 const digest = text => createHash('sha256').update(text).digest('hex');
 export function teamIn(workspace, captainId) {
-    const root = join(workspace, '.agent-teams');
+    const root = join(workspace, '.ctf-teams');
     if (!existsSync(root)) return undefined;
     const teams = readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name !== 'archive').map(entry => {
         const path = join(root, entry.name, 'team.json');
@@ -66,7 +66,7 @@ export function modelMetrics(events,captainId) {
     const latestUsage=new Map(events.filter(event=>event.event==='model-usage').map(event=>[event.request,event.usage]));
     const usage=[...latestUsage.values()];
     const sum=key=>usage.some(value=>typeof value[key]==='number')?usage.reduce((total,value)=>total+(typeof value[key]==='number'?value[key]:0),0):null;
-    return {sessionHeaders,stableSessionHeaders:sessionHeaders.length>0&&sessionHeaders.every(row=>row.systemHashes.length===1&&row.toolsHashes.length===1),openCalls:events.filter(event=>event.event==='tool-result'&&event.name==='agent_teams_open').length,usageRequests:usage.length,requestsWithoutUsage:requests.filter(event=>!latestUsage.has(event.request)).map(event=>event.request),usage:{uncachedInputTokens:sum('inputTokens'),cacheReadTokens:sum('cacheReadTokens'),cacheWriteTokens:sum('cacheWriteTokens'),outputTokens:sum('outputTokens'),reasoningTokens:sum('reasoningTokens')},usageSemantics:'Harness Usage counts inputTokens as uncached input; cacheRead/cacheWrite are separate. Last usage per request; unavailable fields remain null. Requests without usage are listed and excluded from sums. No price inference.'};
+    return {sessionHeaders,stableSessionHeaders:sessionHeaders.length>0&&sessionHeaders.every(row=>row.systemHashes.length===1&&row.toolsHashes.length===1),openCalls:events.filter(event=>event.event==='tool-result'&&event.name==='ctf_teams_open').length,usageRequests:usage.length,requestsWithoutUsage:requests.filter(event=>!latestUsage.has(event.request)).map(event=>event.request),usage:{uncachedInputTokens:sum('inputTokens'),cacheReadTokens:sum('cacheReadTokens'),cacheWriteTokens:sum('cacheWriteTokens'),outputTokens:sum('outputTokens'),reasoningTokens:sum('reasoningTokens')},usageSemantics:'Harness Usage counts inputTokens as uncached input; cacheRead/cacheWrite are separate. Last usage per request; unavailable fields remain null. Requests without usage are listed and excluded from sums. No price inference.'};
 }
 function groundedFinding(report, reviewer) {
     if (report?.reviewer !== reviewer || !Array.isArray(report.findings)) return false;
@@ -116,7 +116,7 @@ export function evaluate(workspace, captainId, events, phase, previous) {
     const summary = readReport(workspace, summaryPath);
     checks.summary = Boolean(summary && typeof summary.summary === 'string' && summary.summary.length >= 20 && Array.isArray(summary.reports) && reportPaths.every(path => summary.reports.includes(path)));
     const summaryWrite = events.find(event => event.sessionId === captainId && reportWrite(event,summaryPath));
-    const completed = events.filter(event => event.event === 'tool-result' && event.name === 'agent_teams_update_task' && !event.isError && event.arguments?.status === 'completed');
+    const completed = events.filter(event => event.event === 'tool-result' && event.name === 'ctf_teams_update_task' && !event.isError && event.arguments?.status === 'completed');
     checks.captainSummarizedAfterCompletion = Boolean(summaryWrite && completed.length >= targets.length && completed.every(event => event.order < summaryWrite.order));
     if (phase === 'cold') {
         checks.sameTeam = team?.id === previous.teamId;

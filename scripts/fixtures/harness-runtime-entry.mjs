@@ -24,31 +24,31 @@ export function apply(ctx) {
             agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }));
             await agent.whenIdle();
         };
-        const teamNames = async agent => (await ctx.systemPrompt.assemble({ agent, scope: agent })).tools.map(t => t.name).filter(n => n.startsWith('agent_teams_'));
+        const teamNames = async agent => (await ctx.systemPrompt.assemble({ agent, scope: agent })).tools.map(t => t.name).filter(n => n.startsWith('ctf_teams_'));
         const measure = async (agent, role) => {
             const assembly = await ctx.systemPrompt.assemble({ agent, scope: agent });
-            const teamTools = assembly.tools.filter(t => t.name.startsWith('agent_teams_'));
+            const teamTools = assembly.tools.filter(t => t.name.startsWith('ctf_teams_'));
             appendFileSync(process.env.LAB_TRACE, JSON.stringify({ event: 'exposure-budget', role,
-                teamPromptBytes: Buffer.byteLength(assembly.sections.find(s => s.name === 'agent-teams:usage')?.text ?? ''),
+                teamPromptBytes: Buffer.byteLength(assembly.sections.find(s => s.name === 'ctf-teams:usage')?.text ?? ''),
                 teamSchemaBytes: Buffer.byteLength(JSON.stringify(teamTools)), teamToolCount: teamTools.length }) + '\n');
         };
         const ordinary = await create('ordinary');
         await measure(ordinary.agent, 'captain-idle');
         for (const text of [
             'ENTRY_NO_ACTIVATION: What is 2 + 2?',
-            'ENTRY_NO_ACTIVATION: Explain what AgentTeams means.',
-            'ENTRY_NO_ACTIVATION: Do not use AgentTeams; answer directly.',
-            'ENTRY_NO_ACTIVATION: Translate this quote: "use AgentTeams to research this".',
+            'ENTRY_NO_ACTIVATION: Explain what CTFTeams means.',
+            'ENTRY_NO_ACTIVATION: Do not use CTFTeams; answer directly.',
+            'ENTRY_NO_ACTIVATION: Translate this quote: "use CTFTeams to research this".',
         ]) await send(ordinary.agent, text);
         assert.equal((await teamNames(ordinary.agent)).length, 14);
-        assert.equal(existsSync(join(ordinary.cwd, '.agent-teams/runtime-lab/team.json')), false);
+        assert.equal(existsSync(join(ordinary.cwd, '.ctf-teams/runtime-lab/team.json')), false);
         const cases = [
-            ['natural', 'Use AgentTeams to plan this task.', false],
-            ['natural-zh', '请使用 Agent Teams 团队协作来规划这个任务。', false],
-            ['raw-slash', '/agent-teams plan this task', false],
-            ['command', '/agent-teams plan this task', true],
-            ['profile-command', '/agent-teams-demo-profile plan this task', true],
-            ['profile-raw', '/agent-teams --profile demo-profile plan this task', false],
+            ['natural', 'Use CTFTeams to plan this task.', false],
+            ['natural-zh', '请使用 CTF Teams 团队协作来规划这个任务。', false],
+            ['raw-slash', '/ctf-teams plan this task', false],
+            ['command', '/ctf-teams plan this task', true],
+            ['profile-command', '/ctf-teams-demo-profile plan this task', true],
+            ['profile-raw', '/ctf-teams --profile demo-profile plan this task', false],
         ];
         for (const [label, input, command] of cases) {
             const { agent, cwd } = await create(label);
@@ -58,24 +58,24 @@ export function apply(ctx) {
                 assert.equal(execution?.result.kind, 'success');
                 await agent.whenIdle();
             } else await send(agent, input);
-            const statePath = join(cwd, '.agent-teams/runtime-lab/team.json');
+            const statePath = join(cwd, '.ctf-teams/runtime-lab/team.json');
             const before = readFileSync(statePath, 'utf8'), staged = JSON.parse(before);
             assert.equal(staged.phase, 'staged');
             assert.equal(staged.tasks.length, 1);
             assert.equal(staged.members.length, 1);
             assert.ok(staged.members.every(m => !m.id));
             const requests = trace().filter(x => x.event === 'request' && !x.purpose && x.sessionId === agent.id).slice(label === 'natural' ? 30 : 0);
-            assert.equal(requests[0].toolNames.filter(n => n.startsWith('agent_teams_')).length, 14);
+            assert.equal(requests[0].toolNames.filter(n => n.startsWith('ctf_teams_')).length, 14);
             const assembly = await ctx.systemPrompt.assemble({ agent, scope: agent });
-            assert.match(assembly.sections.find(s => s.name === 'agent-teams:usage')?.text ?? '', /Tasks carry attempt_id/);
+            assert.match(assembly.sections.find(s => s.name === 'ctf-teams:usage')?.text ?? '', /Tasks carry attempt_id/);
             assert.doesNotMatch(requests[1].lastToolText, /"instructions":/);
-            assert.equal(requests[1].called[0], 'agent_teams_create');
-            assert.ok(requests.every(request => !request.toolNames.includes('agent_teams_open')));
-            assert.equal(requests[1].toolNames.filter(n => n.startsWith('agent_teams_')).length, 14);
-            if (input.startsWith('/')) assert.match(requests[0].userText, /Inspect existing team state with agent_teams_status/);
+            assert.equal(requests[1].called[0], 'ctf_teams_create');
+            assert.ok(requests.every(request => !request.toolNames.includes('ctf_teams_open')));
+            assert.equal(requests[1].toolNames.filter(n => n.startsWith('ctf_teams_')).length, 14);
+            if (input.startsWith('/')) assert.match(requests[0].userText, /Inspect existing team state with ctf_teams_status/);
             assert.equal((await teamNames(ordinary.agent)).length, 14);
             await measure(agent, label.startsWith('profile') ? 'captain-profile' : 'captain');
-            await send(agent, 'REOPEN_ENTRY: inspect the existing AgentTeams plan.');
+            await send(agent, 'REOPEN_ENTRY: inspect the existing CTFTeams plan.');
             assert.equal(readFileSync(statePath, 'utf8'), before);
             await send(agent, 'APPROVE_ENTRY: I approve this plan. Start it now.');
             const completed = JSON.parse(readFileSync(statePath, 'utf8'));
@@ -84,11 +84,11 @@ export function apply(ctx) {
             assert.ok(completed.members[0].id);
             const memberRequests = trace().filter(x => x.event === 'request' && !x.purpose && x.sessionId === completed.members[0].id);
             assert.ok(memberRequests.length > 0);
-            for (const request of memberRequests) assert.deepEqual(request.toolNames.filter(n => n.startsWith('agent_teams_')).sort(), ['agent_teams_claim_task', 'agent_teams_send_message', 'agent_teams_status', 'agent_teams_update_task']);
+            for (const request of memberRequests) assert.deepEqual(request.toolNames.filter(n => n.startsWith('ctf_teams_')).sort(), ['ctf_teams_claim_task', 'ctf_teams_send_message', 'ctf_teams_status', 'ctf_teams_update_task']);
             await send(agent, 'END_ENTRY: End and archive this team.');
             assert.equal(existsSync(statePath), false);
             await send(agent, 'ENTRY_NO_ACTIVATION: Back to ordinary conversation.');
-            await send(agent, 'INSPECT_ENDED_ENTRY: Inspect whether any AgentTeams team remains.');
+            await send(agent, 'INSPECT_ENDED_ENTRY: Inspect whether any CTFTeams team remains.');
             assert.equal(existsSync(statePath), false);
             const budgets = trace().filter(x => x.event === 'request-budget' && !x.purpose && x.sessionId === agent.id);
             assert.ok(budgets.length > (label === 'natural' ? 35 : 5));

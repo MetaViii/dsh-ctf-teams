@@ -8,8 +8,8 @@ import { readTeamSync, readRetiredMemberIdsSync } from './state.ts'
 import type { TeamState } from './types.ts'
 import { MEMBER_TOOL_NAMES, TEAM_TOOL_NAMES } from './tool-names.ts'
 
-export const TEAM_ACTIVATION_PROMPT = 'AgentTeams (Agent Teams) provides multi-agent team collaboration. Apply these rules when the user requests it (including /agent-teams) or when continuing an existing team. Mentioning, quoting, discussing, or declining AgentTeams alone is not a request to start work.'
-export const TEAM_MEMBER_PROMPT = 'You are an AgentTeams member. Follow your assigned member persona and task contract. Use agent_teams_claim_task, agent_teams_update_task, agent_teams_send_message and agent_teams_status for your own work. Include the current attempt_id in updates; report completion or failure to the captain. Do not create, approve, edit or resume a team. If your durable membership is unavailable, report that to the parent instead of creating a replacement.'
+export const TEAM_ACTIVATION_PROMPT = 'CTFTeams (CTF Teams) solves one CTF challenge with a multi-agent squad: a captain plus interchangeable full-stack CTF experts (web, pwn, reverse, crypto, forensics, misc) who attack the same challenge from parallel angles, sharing a findings board, a flag board, and a round-sync protocol. Apply these rules when the user requests it (including /ctf-teams) or when continuing an existing team. Mentioning, quoting, discussing, or declining CTFTeams alone is not a request to start work.'
+export const TEAM_MEMBER_PROMPT = 'You are a CTFTeams expert agent. Follow your assigned member persona and task contract. Use ctf_teams_claim_task, ctf_teams_update_task, ctf_teams_send_message, ctf_teams_status, ctf_teams_report_finding, ctf_teams_sync, ctf_teams_submit_flag and ctf_teams_knowledge for your own work. Include the current attempt_id in updates; publish findings every round; report completion or failure to the captain. Do not create, approve, edit or resume a team, and do not mark flags verified. If your durable membership is unavailable, report that to the parent instead of creating a replacement.'
 
 interface Exposure {
   member: boolean
@@ -41,7 +41,7 @@ function currentTeam(agent: Agent, config: CapabilityConfig): TeamState | undefi
     const team = readTeamSync(root, entry.name)
     if (team === undefined || (team.captainSessionId !== agent.id
       && !team.members.some(member => member.id === agent.id))) continue
-    if (found !== undefined) throw new Error('ambiguous AgentTeams membership')
+    if (found !== undefined) throw new Error('ambiguous CTFTeams membership')
     found = team
   }
   return found
@@ -59,7 +59,7 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
   function attach(agent: Agent): Exposure {
     const prior = states.get(agent)
     if (prior !== undefined) return prior
-    if (!mounted) throw new Error('AgentTeams capability provider is disposed')
+    if (!mounted) throw new Error('CTFTeams capability provider is disposed')
     // Determine a member's role before its first request and retain it for the
     // lifetime of this scope. Team creation/archive must never rewrite the
     // captain's system/tools prefix, even after a long ordinary conversation.
@@ -71,7 +71,7 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
     } catch (error) {
       // Unrelated damaged state must not disable ordinary conversation.
       // Business tools still validate durable team state before acting.
-      ctx.logger.warn(`agent-teams: capability hydration failed: ${String(error)}`)
+      ctx.logger.warn(`ctf-teams: capability hydration failed: ${String(error)}`)
     }
     const state: Exposure = { member, dispose: () => undefined }
     let revoke: (() => void) | undefined
@@ -91,13 +91,13 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
       if (member) revoke = agent.ctx.tools.restrict({
         deny: TEAM_TOOL_NAMES.filter(name => !MEMBER_TOOL_NAMES.includes(name)),
       })
-      releaseLifetime = agent.ctx.effect(() => state.dispose, 'agent-teams: capability lifetime')
+      releaseLifetime = agent.ctx.effect(() => state.dispose, 'ctf-teams: capability lifetime')
       return state
     } catch (error) { state.dispose(); throw error }
   }
 
   ctx.systemPrompt.section({
-    name: 'agent-teams:usage', order: config.order ?? 117,
+    name: 'ctf-teams:usage', order: config.order ?? 117,
     text: ({ agent }) => {
       return agent !== undefined && states.get(agent)?.member ? TEAM_MEMBER_PROMPT : captainPrompt
     },
@@ -106,6 +106,6 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
   ctx.effect(() => () => {
     mounted = false
     for (const state of [...active]) state.dispose()
-  }, 'agent-teams: capability scopes')
+  }, 'ctf-teams: capability scopes')
   for (const agent of ctx.agents.list()) attach(agent)
 }

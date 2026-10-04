@@ -13,7 +13,7 @@ export function apply(ctx) {
         const handle = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd: process.cwd() }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } });
         ctx.effect(() => () => handle.dispose());
         await handle.agent.whenIdle();
-        handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Run the authorized deterministic AgentTeams fixture immediately.' }], source: { kind: 'user' } }));
+        handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Run the authorized deterministic CTFTeams fixture immediately.' }], source: { kind: 'user' } }));
         await handle.agent.whenIdle();
         appendFileSync(process.env.LAB_TRACE, JSON.stringify({ event: 'captain-idle-observed', sessionId: handle.agent.id, status: handle.agent.status, time: Date.now() }) + '\n');
         const deadline = Date.now() + 30000;

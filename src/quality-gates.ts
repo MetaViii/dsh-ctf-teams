@@ -1,7 +1,7 @@
 /**
  * Pure quality-gate rules: contracts, path audit, completion, follow-up,
  * coverage, and resume. Tools and persistence call these; they do not I/O.
- * @module dsh-agent-teams/quality-gates
+ * @module dsh-ctf-teams/quality-gates
  */
 
 import {
@@ -1140,7 +1140,7 @@ export function qualityPlanningPrompt(): string {
     'Do not write smoke-test scripts into tasks. Do not ask reviewers to submit needs_revision on purpose.',
     'Do not claim implementation or review yourself unless the user asked the captain to take over.',
     'After a failed review, wait for the automatic repair + next review. Do not recreate that loop by hand.',
-    'halted means the human stopped the team; call agent_teams_resume before creating more work. escalated means the automatic review loop hit its ceiling; that is not halt.',
+    'halted means the human stopped the team; call ctf_teams_resume before creating more work. escalated means the automatic review loop hit its ceiling; that is not halt.',
   ].join(' ')
 }
 
@@ -1152,7 +1152,7 @@ export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
       halted: true,
       escalated: team.escalated === true,
       deliverable: false,
-      summary: 'Team is halted. Call agent_teams_resume with a reason before creating more work.',
+      summary: 'Team is halted. Call ctf_teams_resume with a reason before creating more work.',
     }
   }
   if (delivery.ok) {

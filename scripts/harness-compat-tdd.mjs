@@ -16,7 +16,7 @@ import { CAPTAIN_TOOL_NAMES } from '../lib/tool-names.js'
 const queueKey = Symbol.for('dsh.subagent.queuePrompt')
 const deliverKey = Symbol.for('dsh.subagent.deliverPrompt')
 const signal = new AbortController().signal
-const source = { kind: 'agent-teams' }
+const source = { kind: 'ctf-teams' }
 const content = [{ type: 'text', text: 'next distinct turn' }]
 
 function scope(extra = {}) {
@@ -44,7 +44,7 @@ function modernRuntime() {
 
 function child({ workspace = process.cwd(), effort, inherited = false } = {}) {
   const descriptor = { type: 'subagent/descriptor', data: {
-    version: 3, mode: 'continuable', provider: 'spawn', label: 'agent-teams:team:worker',
+    version: 3, mode: 'continuable', provider: 'spawn', label: 'ctf-teams:team:worker',
     agentProvider: 'primary', agentModel: 'model',
   } }
   const agent = {
@@ -178,9 +178,9 @@ await test('legacy session history excludes its inherited prefix; modern uses ow
 
 await test('synchronous modern setup selects the first request, deduplicates events, and disposes for HMR', async () => {
   const ctx = scope({ subagents: modernRuntime() })
-  const bridge = installMemberSelectionRuntime(ctx, '.agent-teams')
+  const bridge = installMemberSelectionRuntime(ctx, '.ctf-teams')
   const agent = child()
-  await bridge.withPending('captain', 'agent-teams:team:worker', {
+  await bridge.withPending('captain', 'ctf-teams:team:worker', {
     provider: 'selected', model: 'selected-model', reasoningEffort: 'high',
   }, async () => {
     ctx.emit('agent/session-start', { agent, source: 'startup' })
@@ -225,7 +225,7 @@ await test('setup exception blocks request instead of being swallowed by session
 
 await test('a child inheriting another member descriptor does not acquire member selection or failure hooks', () => {
   const ctx = scope({ subagents: modernRuntime() })
-  installMemberSelectionRuntime(ctx, '.agent-teams')
+  installMemberSelectionRuntime(ctx, '.ctf-teams')
   const agent = child({ inherited: true })
   ctx.emit('agent/session-start', { agent })
   assert.equal(agent.ctx.listeners.size, 0)
@@ -241,9 +241,9 @@ await test('a child inheriting another member descriptor does not acquire member
 
 for (const fallbackActive of [false, true]) {
   await test(`cold resume restores route and effort coherently (fallbackActive=${fallbackActive})`, async t => {
-    const workspace = await mkdtemp(join(tmpdir(), 'agent-teams-compat-'))
+    const workspace = await mkdtemp(join(tmpdir(), 'ctf-teams-compat-'))
     t.after(() => rm(workspace, { recursive: true, force: true }))
-    await createTeamDir(join(workspace, '.agent-teams'), {
+    await createTeamDir(join(workspace, '.ctf-teams'), {
       id: 'team', name: 'Team', captainSessionId: 'captain', createdAt: 1, taskSeq: 0, tasks: [],
       members: [{ id: 'member-id', name: 'worker', status: 'idle', joinedAt: 1,
         provider: 'primary', model: 'model', reasoningEffort: 'high',
@@ -253,7 +253,7 @@ for (const fallbackActive of [false, true]) {
     })
     const ctx = scope({ subagents: modernRuntime() })
     t.after(() => ctx.dispose())
-    installMemberSelectionRuntime(ctx, '.agent-teams')
+    installMemberSelectionRuntime(ctx, '.ctf-teams')
     const agent = child({ workspace })
     ctx.emit('agent/session-start', { agent, source: 'resume' })
     assert.deepEqual(await selection(agent), fallbackActive
@@ -284,10 +284,10 @@ await test('spawn explicitly passes reasoning effort, preserving persona and too
   const team = { id: 'team', name: 'Team', captainSessionId: captain.id, members: [], tasks: [], createdAt: 1, taskSeq: 0 }
   const member = { id: '', name: 'worker', role: 'engineer', joinedAt: 1, status: 'idle' }
   await spawnMember(ctx, { provider: 'spawn', maxDepth: 0 }, { withPending: (_p, _l, _s, run) => run() },
-    { provider: 'chosen', model: 'model', reasoningEffort: 'high' }, captain, team, member, '.agent-teams', signal)
+    { provider: 'chosen', model: 'model', reasoningEffort: 'high' }, captain, team, member, '.ctf-teams', signal)
   assert.deepEqual(received.request.agentOptions, { provider: 'chosen', model: 'model', reasoningEffort: 'high' })
   assert.match(received.request.persona, /engineer/)
-  assert.ok(received.request.toolFilter.deny.includes('agent_teams_create'))
+  assert.ok(received.request.toolFilter.deny.includes('ctf_teams_create'))
   assert.ok(received.request.toolFilter.deny.includes('send_message'), 'default members have only one parent-report channel')
   assert.ok(received.request.toolFilter.deny.includes('subagent'))
   assert.equal(member.id, 'child')
@@ -326,7 +326,7 @@ await test('depth deny entries resolve against the host tool registry (#163, #16
   const team = { id: 'team', name: 'Team', captainSessionId: captain.id, members: [], tasks: [], createdAt: 1, taskSeq: 0 }
   const member = { id: '', name: 'worker', role: 'engineer', joinedAt: 1, status: 'idle' }
   await spawnMember(ctx, { provider: 'spawn', maxDepth: 0 }, { withPending: (_p, _l, _s, run) => run() },
-    { provider: 'chosen', model: 'model', reasoningEffort: 'high' }, captain, team, member, '.agent-teams', signal)
+    { provider: 'chosen', model: 'model', reasoningEffort: 'high' }, captain, team, member, '.ctf-teams', signal)
   assert.ok(received.request.toolFilter.deny.includes('send_message'))
   assert.ok(!received.request.toolFilter.deny.includes('subagent'), 'spawn survives hosts that renamed the delegation tool')
   assert.equal(member.id, 'child')

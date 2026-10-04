@@ -52,10 +52,10 @@ class WebApprovalAdapter extends LlmAdapter {
         assert.equal(failed, undefined, 'Real workflow tool failed: ' + JSON.stringify(failed));
         const isMember = system?.includes('WEB_APPROVAL_MEMBER') === true;
         record({ event: 'web-request', sessionId: options.sessionId, isMember, model: options.model, reasoningEffort: options.reasoningEffort, system: system, tools: options.tools, messages: options.messages });
-        const pluginMessages = options.messages.filter(message => message.role === 'user' && message.source?.kind === 'agent-teams');
+        const pluginMessages = options.messages.filter(message => message.role === 'user' && message.source?.kind === 'ctf-teams');
         const messageText = message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
-        const approvals = pluginMessages.filter(message => messageText(message).includes('The user approved the staged AgentTeams plan') && messageText(message).includes('from the pre-run review UI.'));
-        const reports = pluginMessages.filter(message => messageText(message).includes('AgentTeams message from member worker:') && messageText(message).includes('WEB_MEMBER_REPORT_OK'));
+        const approvals = pluginMessages.filter(message => messageText(message).includes('The user approved the staged CTFTeams plan') && messageText(message).includes('from the pre-run review UI.'));
+        const reports = pluginMessages.filter(message => messageText(message).includes('CTFTeams message from member worker:') && messageText(message).includes('WEB_MEMBER_REPORT_OK'));
         assert.ok(approvals.length <= 1, 'The Web route must not queue duplicate approval messages');
         assert.ok(reports.length <= 1, 'A single member report must not be delivered twice');
         const approvalNotice = approvals.find(message => !handledControlMessages.has(message.id));
@@ -65,19 +65,19 @@ class WebApprovalAdapter extends LlmAdapter {
             // This gates only external LLM output, never agent/scheduler/HTTP code.
             await memberGate;
             options.signal?.throwIfAborted();
-            if (!userText.includes('AgentTeams automatic task assignment')) chunks = textChunks('WEB_MEMBER_READY');
-            else if (!names.includes('agent_teams_claim_task')) chunks = call('agent_teams_claim_task', { task_id: 't1' });
-            else if (calls.filter(block => block.name === 'agent_teams_update_task').length < 2) {
+            if (!userText.includes('CTFTeams automatic task assignment')) chunks = textChunks('WEB_MEMBER_READY');
+            else if (!names.includes('ctf_teams_claim_task')) chunks = call('ctf_teams_claim_task', { task_id: 't1' });
+            else if (calls.filter(block => block.name === 'ctf_teams_update_task').length < 2) {
                 const attempt = toolText.match(/attempt_id ([^,\s)]+)/)?.[1];
                 assert.ok(attempt, 'Claim result must expose the real task attempt');
-                chunks = call('agent_teams_update_task', { task_id: 't1', status: names.includes('agent_teams_update_task') ? 'completed' : 'in_progress', output: 'WEB_MEMBER_TASK_DONE', attempt_id: attempt });
+                chunks = call('ctf_teams_update_task', { task_id: 't1', status: names.includes('ctf_teams_update_task') ? 'completed' : 'in_progress', output: 'WEB_MEMBER_TASK_DONE', attempt_id: attempt });
             }
-            else if (!names.includes('agent_teams_send_message')) chunks = call('agent_teams_send_message', { to: 'captain', content: 'WEB_MEMBER_REPORT_OK' });
+            else if (!names.includes('ctf_teams_send_message')) chunks = call('ctf_teams_send_message', { to: 'captain', content: 'WEB_MEMBER_REPORT_OK' });
             else chunks = textChunks('WEB_MEMBER_DONE');
         }
-        else if (!names.includes('agent_teams_create')) chunks = call('agent_teams_create', { name: 'runtime-lab', description: 'Web approval regression', approval: 'required' });
-        else if (!names.includes('agent_teams_add_member')) chunks = call('agent_teams_add_member', { name: 'worker', role: 'WEB_APPROVAL_MEMBER', executionPrompt: 'WEB_APPROVAL_MEMBER: complete the assigned task and report.', reasoning_effort: 'high' });
-        else if (!names.includes('agent_teams_create_task')) chunks = call('agent_teams_create_task', { subject: 'Web approval task', description: 'Complete the deterministic task after human approval', assignee: 'worker' });
+        else if (!names.includes('ctf_teams_create')) chunks = call('ctf_teams_create', { name: 'runtime-lab', description: 'Web approval regression', approval: 'required' });
+        else if (!names.includes('ctf_teams_add_member')) chunks = call('ctf_teams_add_member', { name: 'worker', role: 'WEB_APPROVAL_MEMBER', executionPrompt: 'WEB_APPROVAL_MEMBER: complete the assigned task and report.', reasoning_effort: 'high' });
+        else if (!names.includes('ctf_teams_create_task')) chunks = call('ctf_teams_create_task', { subject: 'Web approval task', description: 'Complete the deterministic task after human approval', assignee: 'worker' });
         else if (reportNotice) {
             handledControlMessages.add(reportNotice.id);
             record({ event: 'web-captain-report-wake', sessionId: options.sessionId, messageId: reportNotice.id, source: reportNotice.source });
@@ -123,9 +123,9 @@ export function apply(ctx) {
         const captain = handle.agent;
         await captain.whenIdle();
         record({ event: 'web-driver-user-message', sessionId: captain.id });
-        captain.followup(createUserMessage({ content: [{ type: 'text', text: 'Prepare an AgentTeams plan with one worker and one task. Wait for my approval in the review UI before running it.' }], source: { kind: 'user' } }));
+        captain.followup(createUserMessage({ content: [{ type: 'text', text: 'Prepare an CTFTeams plan with one worker and one task. Wait for my approval in the review UI before running it.' }], source: { kind: 'user' } }));
         await captain.whenIdle();
-        const statePath = join(process.cwd(), '.agent-teams/runtime-lab/team.json');
+        const statePath = join(process.cwd(), '.ctf-teams/runtime-lab/team.json');
         const readTeam = () => JSON.parse(readFileSync(statePath, 'utf8'));
         const staged = readTeam();
         assert.equal(staged.phase, 'staged');
@@ -141,7 +141,7 @@ export function apply(ctx) {
         assert.equal(auth.status, 303, 'The real browser token exchange must issue a cookie');
         const cookie = auth.headers.get('set-cookie')?.split(';', 1)[0];
         assert.ok(cookie, 'The real connection must mint a browser cookie');
-        const postApproval = teamId => fetch(baseUrl + '/plugins/dsh-agent-teams/plan', { method: 'POST', headers: { 'content-type': 'application/json', origin: baseUrl, cookie }, body: JSON.stringify({ sessionId: captain.id, teamId, action: 'approve' }), signal: AbortSignal.timeout(10000) });
+        const postApproval = teamId => fetch(baseUrl + '/plugins/dsh-ctf-teams/plan', { method: 'POST', headers: { 'content-type': 'application/json', origin: baseUrl, cookie }, body: JSON.stringify({ sessionId: captain.id, teamId, action: 'approve' }), signal: AbortSignal.timeout(10000) });
         const beforeInvalidRequests = events.filter(event => event.event === 'web-request' && !event.isMember).length;
         const invalid = await postApproval('missing-team-' + randomUUID());
         const invalidResponse = await invalid.json();
@@ -193,12 +193,12 @@ export function apply(ctx) {
         assert.equal(completed.tasks[0].status, 'completed');
         assert.equal(completed.tasks[0].output, 'WEB_MEMBER_TASK_DONE');
         const modelCalls = events.filter(event => event.event === 'web-model-tool-call');
-        assert.equal(modelCalls[0].name, 'agent_teams_create');
-        assert.ok(events.filter(event => event.event === 'web-request').every(event => !event.tools.some(tool => tool.name === 'agent_teams_open')));
-        assert.equal(modelCalls.filter(event => event.name === 'agent_teams_approve' || event.name === 'agent_teams_status').length, 0, 'No duplicate approval or status polling');
-        assert.equal(modelCalls.filter(event => event.name === 'agent_teams_create').length, 1);
-        assert.equal(modelCalls.filter(event => event.name === 'agent_teams_add_member').length, 1);
-        assert.equal(modelCalls.filter(event => event.name === 'agent_teams_create_task').length, 1);
+        assert.equal(modelCalls[0].name, 'ctf_teams_create');
+        assert.ok(events.filter(event => event.event === 'web-request').every(event => !event.tools.some(tool => tool.name === 'ctf_teams_open')));
+        assert.equal(modelCalls.filter(event => event.name === 'ctf_teams_approve' || event.name === 'ctf_teams_status').length, 0, 'No duplicate approval or status polling');
+        assert.equal(modelCalls.filter(event => event.name === 'ctf_teams_create').length, 1);
+        assert.equal(modelCalls.filter(event => event.name === 'ctf_teams_add_member').length, 1);
+        assert.equal(modelCalls.filter(event => event.name === 'ctf_teams_create_task').length, 1);
         assert.equal(events.filter(event => event.event === 'web-captain-approval-wake').length, 1);
         assert.equal(events.filter(event => event.event === 'web-captain-report-wake').length, 1);
         const captainRequests = events.filter(event => event.event === 'web-request' && !event.isMember);
@@ -207,8 +207,8 @@ export function apply(ctx) {
         assert.ok(captainRequests.every(request => sha256(JSON.stringify(request.tools ?? [])) === toolsSha256), 'Captain tool schemas must remain stable across the complete Web workflow');
         const memberRequests = events.filter(event => event.event === 'web-request' && event.isMember);
         assert.ok(memberRequests.length > 0);
-        const memberTools = ['agent_teams_claim_task', 'agent_teams_update_task', 'agent_teams_send_message', 'agent_teams_status'].sort();
-        for (const request of memberRequests) assert.deepEqual(request.tools.filter(tool => tool.name.startsWith('agent_teams_')).map(tool => tool.name).sort(), memberTools, 'Every real member request must expose exactly the four member tools');
+        const memberTools = ['ctf_teams_claim_task', 'ctf_teams_update_task', 'ctf_teams_send_message', 'ctf_teams_status'].sort();
+        for (const request of memberRequests) assert.deepEqual(request.tools.filter(tool => tool.name.startsWith('ctf_teams_')).map(tool => tool.name).sort(), memberTools, 'Every real member request must expose exactly the four member tools');
         record({ event: 'web-headers-stable', sessionId: captain.id, systemSha256, toolsSha256, captainRequests: captainRequests.length, memberRequests: memberRequests.length, memberTeamToolCount: memberTools.length });
         record({ event: 'web-approval-passed', sessionId: captain.id, teamId: completed.id, memberId: completed.members[0].id, taskStatus: completed.tasks[0].status, captainRequests: captainRequests.length });
         process.stdout.write('WEB_APPROVAL_OK\n');

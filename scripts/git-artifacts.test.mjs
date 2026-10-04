@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { writeGitArtifactStamp, verifyGitArtifacts } from './git-artifacts.mjs'
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-artifact-test-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-artifact-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const put = (path, value = '') => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), value) }
   put('package.json', JSON.stringify({ name: 'test', version: '1.0.0', devDependencies: { typescript: '5.9.3' }, scripts: { build: 'compile' } }))
@@ -25,7 +25,7 @@ test('modified and extra output cannot pass the stamp', t => {
   const { root, put } = fixture(t); writeGitArtifactStamp(root); put('lib/extra.js', 'unexpected'); assert.throws(() => verifyGitArtifacts(root), /stale or modified/)
 })
 test('missing entry cannot be stamped as a valid build', t => {
-  const { root } = fixture(t); rmSync(join(root, 'lib/client.js')); assert.throws(() => writeGitArtifactStamp(root), /Missing Git artifact/)
+  const { root } = fixture(t); rmSync(join(root, 'lib/index.js')); assert.throws(() => writeGitArtifactStamp(root), /Missing Git artifact/)
 })
 test('a source tree with no build stamp cannot pass', t => {
   const { root } = fixture(t); assert.throws(() => verifyGitArtifacts(root), /Missing Git artifact stamp/)

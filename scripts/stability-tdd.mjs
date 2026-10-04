@@ -16,7 +16,7 @@ function team() { return { id: 'team', name: 'Team', captainSessionId: 'captain'
 async function fixture(t) {
   const workspace = await mkdtemp(join(tmpdir(), 'teams-stability-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
-  const root = join(workspace, '.agent-teams'), state = team()
+  const root = join(workspace, '.ctf-teams'), state = team()
   await createTeamDir(root, state)
   const handlers = new Map()
   const ctx = { on(name, fn) { handlers.set(name, fn); return () => handlers.delete(name) }, effect(fn) { return fn() }, logger: { warn() {} } }
@@ -36,7 +36,7 @@ await test('work, empty, staged, halted and escalated teams cannot falsely decla
 
 await test('inbox acceptance leaves 32 messages unread; one admitted step consumes them exactly once', async t => {
   const h = await fixture(t)
-  installMailboxAdmission(h.ctx, '.agent-teams')
+  installMailboxAdmission(h.ctx, '.ctf-teams')
   const messages = Array.from({ length: 32 }, (_, n) => ({ ...createMessage('captain', 'worker', `guidance-${n}`), taskId: 't1', attemptId: 'a1' }))
   for (const message of messages) await appendMailbox(h.root, 'team', 'worker', message)
   await markMailboxDelivered(h.root, 'team', 'worker', messages.map(m => m.id))
@@ -57,7 +57,7 @@ await test('inbox acceptance leaves 32 messages unread; one admitted step consum
 
 await test('old-generation guidance is discarded while current mail survives the same batch', async t => {
   const h = await fixture(t)
-  installMailboxAdmission(h.ctx, '.agent-teams')
+  installMailboxAdmission(h.ctx, '.ctf-teams')
   const stale = { ...createMessage('captain', 'worker', 'STALE'), taskId: 't1', attemptId: 'old' }
   const current = { ...createMessage('captain', 'worker', 'CURRENT'), taskId: 't1', attemptId: 'a1' }
   for (const message of [stale, current]) await appendMailbox(h.root, 'team', 'worker', message)
@@ -70,7 +70,7 @@ await test('old-generation guidance is discarded while current mail survives the
 
 await test('reported completion suppresses only redundant native success settlements', async t => {
   const h = await fixture(t)
-  installMailboxAdmission(h.ctx, '.agent-teams')
+  installMailboxAdmission(h.ctx, '.ctf-teams')
   h.state.tasks[0].status = 'completed'
   await writeTeam(h.root, h.state)
   const summary = 'Background subagent worker finished and will do no further work unless you send it more.'
@@ -114,10 +114,10 @@ await test('next-step steering preserves the native delivery modes across all th
 
 await test('internal wakeups and cold admission are rejected for stopped or retired members', async t => {
   const h = await fixture(t), hooks = new Map()
-  const child = { id: 'worker', session: { header: { cwd: h.workspace, parentSession: 'captain' }, ownEvents: () => [{ type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: 'agent-teams:team:worker' } }] } }
+  const child = { id: 'worker', session: { header: { cwd: h.workspace, parentSession: 'captain' }, ownEvents: () => [{ type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: 'ctf-teams:team:worker' } }] } }
   let setup
   h.ctx.subagents = { registerContinuableSetup(fn) { setup = fn } }
-  installMemberSelectionRuntime(h.ctx, '.agent-teams')
+  installMemberSelectionRuntime(h.ctx, '.ctf-teams')
   setup({ agent: child, on(name, fn) { hooks.set(name, fn); return () => hooks.delete(name) } })
   const admit = () => hooks.get('agent/pre-step')({ agent: child }, async () => ({ kind: 'enter', messages: [] }))
   assert.equal((await admit()).kind, 'enter')
@@ -132,11 +132,11 @@ await test('internal wakeups and cold admission are rejected for stopped or reti
 await test('member-relative delegation limit covers raw runtime calls and preserves unrelated siblings', async t => {
   const h = await fixture(t), handles = new Map(), created = []
   const captain = { id: 'captain', session: { header: { cwd: h.workspace }, ownEvents: () => [] } }
-  const worker = { id: 'worker', session: { header: { cwd: h.workspace, parentSession: 'captain' }, ownEvents: () => [{ type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: 'agent-teams:team:worker' } }] } }
+  const worker = { id: 'worker', session: { header: { cwd: h.workspace, parentSession: 'captain' }, ownEvents: () => [{ type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: 'ctf-teams:team:worker' } }] } }
   handles.set('captain', captain); handles.set('worker', worker)
   h.ctx.agents = { get: id => handles.get(id) }
   h.ctx.subagents = { async start(_name, request) { created.push(request.parent.id) }, async startContinuable(spec) { created.push(spec.request.parent.id) } }
-  installMemberDelegationGuard(h.ctx, '.agent-teams', 0)
+  installMemberDelegationGuard(h.ctx, '.ctf-teams', 0)
   await assert.rejects(h.ctx.subagents.start('spawn', { parent: worker }), /delegation limit/)
   await assert.rejects(h.ctx.subagents.startContinuable({ request: { parent: worker } }), /delegation limit/)
   await h.ctx.subagents.start('spawn', { parent: captain })

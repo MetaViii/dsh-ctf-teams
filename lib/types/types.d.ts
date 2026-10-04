@@ -1,11 +1,11 @@
 /**
- * Durable AgentTeams state types.
+ * Durable CTFTeams state types.
  *
  * A team is one directory under the state root holding `team.json` plus an
  * `inbox/` of per-agent JSONL mailboxes. Members are continuable subagents
  * whose durable child session ids are recorded in the team file, so a team
  * survives harness restarts.
- * @module dsh-agent-teams/types
+ * @module dsh-ctf-teams/types
  */
 /** Task lifecycle statuses in progression order. */
 export type TaskStatus = 'pending' | 'claimed' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
@@ -198,6 +198,65 @@ export interface TeamModelFallback {
     provider: string;
     model: string;
 }
+/** CTF challenge metadata owned by the captain; drives flags and the dashboard. */
+export interface ChallengeInfo {
+    /** Challenge title, e.g. `baby_rsa`. */
+    title?: string;
+    /** Free-form category tag (`web`, `pwn`, `reverse`, `crypto`, `forensics`, `misc`, …). */
+    category?: string;
+    /** Point value when the platform publishes one. */
+    points?: number;
+    /** The original challenge description text. */
+    description?: string;
+    /** Workspace-relative attachment paths handed to the team. */
+    attachments?: string[];
+    /** Remote endpoint (URL or `host:port`) the challenge runs on. */
+    remote?: string;
+    /** Regex source a flag must match; defaults to the standard `flag{...}` shape. */
+    flagFormat?: string;
+    /** Set once a flag candidate is marked verified. */
+    solved?: boolean;
+    solvedAt?: number;
+    solvedBy?: string;
+}
+/** Lifecycle of one candidate flag. Only the captain confirms correctness. */
+export type FlagStatus = 'candidate' | 'verified' | 'rejected';
+/** One candidate flag on the team-wide flag board (append-only). */
+export interface FlagCandidate {
+    /** Stable id (`f1`, `f2`, …). */
+    id: string;
+    /** The candidate flag string, normalized (trimmed). */
+    flag: string;
+    /** Where it came from, as reproducible evidence. */
+    evidence?: string;
+    /** `captain` or the member name that submitted it. */
+    submittedBy: string;
+    status: FlagStatus;
+    /** Verification note (e.g. the platform's response) when reviewed. */
+    note?: string;
+    /** Who reviewed it (`captain`), when reviewed. */
+    reviewedBy?: string;
+    ts: number;
+}
+/** One shared progress finding on the team-wide findings board (append-only). */
+export interface TeamFinding {
+    /** Stable id (`fd1`, `fd2`, …). */
+    id: string;
+    /** `captain` or the member name that reported it. */
+    from: string;
+    /** Free tag, e.g. `recon`, `web`, `crypto`, `dead-end`. */
+    category?: string;
+    content: string;
+    /** Team round the finding belongs to; rounds advance with each board beat. */
+    round: number;
+    ts: number;
+}
+/** Per-participant round-sync cursor: what this participant has already seen. */
+export interface SyncCursor {
+    findingSeq: number;
+    flagSeq: number;
+    ts: number;
+}
 export interface TeamProfileSnapshot {
     name: string;
     description?: string;
@@ -252,4 +311,18 @@ export interface TeamState {
     reviewPolicy?: ReviewPolicy;
     /** Set when an automatic review/repair loop hits its configured ceiling. */
     escalated?: boolean;
+    /** CTF challenge metadata (title/category/flag format/…), captain-owned. */
+    challenge?: ChallengeInfo;
+    /** Team-wide candidate flag board, oldest first. */
+    flags?: FlagCandidate[];
+    /** Monotonic flag candidate id counter. */
+    flagSeq?: number;
+    /** Team-wide findings board (round-sync payloads), oldest first. */
+    findings?: TeamFinding[];
+    /** Monotonic finding id counter. */
+    findingSeq?: number;
+    /** Team round counter; advances with each board beat (finding/flag). */
+    round?: number;
+    /** Per-participant sync cursors keyed by `captain` or member name. */
+    syncCursors?: Record<string, SyncCursor>;
 }

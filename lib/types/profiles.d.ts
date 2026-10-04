@@ -6,7 +6,7 @@
  * `tools.ts`; this module only turns a config map + a profile name into a
  * validated, topologically ordered template (or parses `--profile` flags).
  *
- * @module dsh-agent-teams/profiles
+ * @module dsh-ctf-teams/profiles
  */
 /** Hard cap on named profiles so the usage prompt cannot grow without bound. */
 export declare const MAX_TEAM_PROFILES = 16;
@@ -84,7 +84,7 @@ export interface NormalizedTeamProfile {
     reviewPolicy?: import('./types.ts').ReviewPolicy;
 }
 /** The goal + optional named profile extracted from a slash / gesture line. */
-export interface AgentTeamsInvocation {
+export interface CTFTeamsInvocation {
     goal: string;
     profile?: string;
 }
@@ -114,7 +114,7 @@ export declare function formatProfilesForPrompt(profiles: Record<string, TeamPro
  * `--profile "name"` strips one matching pair of quotes. Repeat flags and a
  * `--profile` with no name throw.
  */
-export declare function parseProfileInvocation(rawInput: string): AgentTeamsInvocation;
+export declare function parseProfileInvocation(rawInput: string): CTFTeamsInvocation;
 /**
  * Normalize and pre-validate one named profile. Failures throw before any
  * caller should create a directory or spawn members.

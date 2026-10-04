@@ -1,5 +1,5 @@
 /**
- * Durable AgentTeams session events and their emitter.
+ * Durable CTFTeams session events and their emitter.
  *
  * Every team-state mutation appends one event to the captain's Session, so
  * the web client's Conversation Node mechanism can fold the tree view from
@@ -10,20 +10,20 @@
  *
  * Types and the `SessionEventMap` merge live in `event-types.ts` (zero
  * imports) so the browser program can load them without host augmentations.
- * @module dsh-agent-teams/events
+ * @module dsh-ctf-teams/events
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import * as dshSession from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionEventMap, SessionId } from '@deepseek-ai/dsh-session/types'
-import type { AgentTeamsEventType } from './event-types.ts'
+import type { CTFTeamsEventType } from './event-types.ts'
 
 /** Event types already reported as unsupported, to avoid repetitive logs. */
-const skippedEventTypes = new Set<AgentTeamsEventType>()
+const skippedEventTypes = new Set<CTFTeamsEventType>()
 
 /**
- * Append one AgentTeams event to a Session, containing failures (a broken
+ * Append one CTFTeams event to a Session, containing failures (a broken
  * durable record must never break team tool execution).
  * @param ctx - the plugin context (for logging).
  * @param session - the session to record into (the captain's, normally).
@@ -33,8 +33,8 @@ const skippedEventTypes = new Set<AgentTeamsEventType>()
 export function appendTeamEvent(
   ctx: Context,
   session: Session,
-  type: AgentTeamsEventType,
-  data: SessionEventMap[AgentTeamsEventType],
+  type: CTFTeamsEventType,
+  data: SessionEventMap[CTFTeamsEventType],
 ): void {
   // Out-of-repo events are not in the harness's generated vocabulary today.
   // Mutating that ReadonlySet would make readability depend on which plugins
@@ -48,14 +48,14 @@ export function appendTeamEvent(
   if (known?.has(type) !== true) {
     if (!skippedEventTypes.has(type)) {
       skippedEventTypes.add(type)
-      ctx.logger.debug(`agent-teams: session event "${type}" omitted because this harness does not recognize it`)
+      ctx.logger.debug(`ctf-teams: session event "${type}" omitted because this harness does not recognize it`)
     }
     return
   }
   try {
     session.append(type, data)
   } catch (error: unknown) {
-    ctx.logger.warn(`agent-teams: session record failed after ${type}: ${String(error)}`)
+    ctx.logger.warn(`ctf-teams: session record failed after ${type}: ${String(error)}`)
   }
 }
 

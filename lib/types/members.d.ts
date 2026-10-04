@@ -5,11 +5,11 @@
  * Members are durable continuable subagents of the captain, so a member keeps
  * its conversation across turns and across harness restarts: the captain
  * queues its next turn through {@link deliverToMember}, it works through its turn
- * (updating team state through the `agent_teams_*` tools), and becomes idle
+ * (updating team state through the `ctf_teams_*` tools), and becomes idle
  * again. Its final assistant message is not readable programmatically, so the
  * member persists its report into the captain's mailbox and the task records,
- * which the captain reads through `agent_teams_status`.
- * @module dsh-agent-teams/members
+ * which the captain reads through `ctf_teams_status`.
+ * @module dsh-ctf-teams/members
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { type Agent } from '@deepseek-ai/dsh-agent';
@@ -183,7 +183,7 @@ export declare function interruptMember(ctx: Context, captain: Agent, childId: s
  *
  * Upstream `interrupt()` deliberately preserves continuable sessions and the
  * upstream seam exposes no targeted forget/retire method. The durable
- * AgentTeams index therefore rejects every inbox delivery before it can cold-resume a
+ * CTFTeams index therefore rejects every inbox delivery before it can cold-resume a
  * retired member. Catalog rows deliberately remain discoverable: Harness rc.8
  * uses the direct-child catalog to authorize historical transcript reads and
  * `openSubagent()`, so filtering those rows would make an archived member's

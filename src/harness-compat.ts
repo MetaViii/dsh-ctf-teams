@@ -47,12 +47,12 @@ function boundary(runtime: Context['subagents']): RuntimeBoundary {
 }
 
 function unsupported(detail: string): never {
-  throw new Error(`agent-teams: unsupported Harness subagent contract (${detail}); use an explicitly tested Harness version and a coherent dependency installation`)
+  throw new Error(`ctf-teams: unsupported Harness subagent contract (${detail}); use an explicitly tested Harness version and a coherent dependency installation`)
 }
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'agent-teams': { readonly kind: 'agent-teams' }
+    'ctf-teams': { readonly kind: 'ctf-teams' }
   }
 }
 
@@ -112,7 +112,7 @@ export function installContinuableMemberSetup(ctx: Context, setup: Setup): void 
         // session-start is a notification: Harness logs a thrown listener and
         // still admits the first prompt. Reject request assembly explicitly so
         // a malformed saved route cannot silently execute on a default model.
-        const failure = new Error(`agent-teams: member initialization failed: ${String(error)}`, { cause: error })
+        const failure = new Error(`ctf-teams: member initialization failed: ${String(error)}`, { cause: error })
         ctx.logger.warn(failure.message)
         teardown = agent.ctx.on('agent/request', () => { throw failure })
       }
@@ -129,7 +129,7 @@ export function installContinuableMemberSetup(ctx: Context, setup: Setup): void 
       // Listeners contributed to agent.ctx already follow its lifetime. Also
       // release our bookkeeping and remove them if this plugin is reloaded.
       try {
-        agent.ctx.effect(() => dispose, 'agent-teams: child compatibility setup')
+        agent.ctx.effect(() => dispose, 'ctf-teams: child compatibility setup')
       } catch (error) {
         dispose()
         throw error
@@ -139,7 +139,7 @@ export function installContinuableMemberSetup(ctx: Context, setup: Setup): void 
       stop()
       for (const dispose of [...active]) dispose()
     }
-  }, 'agent-teams: member lifecycle compatibility')
+  }, 'ctf-teams: member lifecycle compatibility')
 }
 
 /** Queue a distinct host-authored turn; never substitute model-message steer. */
@@ -148,7 +148,7 @@ export async function queueMemberPrompt(
   content: ContentBlock[], signal: AbortSignal,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'agent-teams' }
+  const source: MessageSource = { kind: 'ctf-teams' }
   if (typeof host.followup === 'function') {
     return host.followup.call(runtime, parent, childId, content, { source, signal })
   }
@@ -165,7 +165,7 @@ export async function steerMemberPrompt(
   content: ContentBlock[], signal: AbortSignal, live?: Agent,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'agent-teams' }
+  const source: MessageSource = { kind: 'ctf-teams' }
   const deliver = host[hostPromptDeliver]
   if (typeof deliver === 'function') return deliver.call(runtime, parent, childId, content, source, signal, 'steer')
   if (typeof host.sendMessage === 'function') return host.sendMessage.call(runtime, parent, childId, content, { signal })
@@ -203,7 +203,7 @@ export function guardSubagentDelivery(
     let active = true
     const check = async (sender: Agent, targetId: SessionId): Promise<void> => {
       if (active && await isRetired(sender, targetId)) {
-        throw new SubagentError(`AgentTeams member "${targetId}" was retired and cannot be resumed`, 'NOT_RESUMABLE')
+        throw new SubagentError(`CTFTeams member "${targetId}" was retired and cannot be resumed`, 'NOT_RESUMABLE')
       }
     }
     const guardedLegacy: Followup = async (parent, childId, content, options) => {
@@ -241,7 +241,7 @@ export function guardSubagentDelivery(
       if (typeof deliver === 'function') restore(hostPromptDeliver, guardedDeliver)
       if (typeof send === 'function') restore('sendMessage', guardedSend)
     }
-  }, 'agent-teams: retired member guard')
+  }, 'ctf-teams: retired member guard')
 }
 
 /** Structural shape of the host tool registry view (dsh-tools `view()`). */

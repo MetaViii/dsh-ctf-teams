@@ -4,13 +4,13 @@
  * State lives on disk under `<workspace>/<stateDir>/<teamId>/`:
  * - `team.json` — the durable {@link TeamState} record
  * - `inbox/<agentKey>.jsonl` — one JSONL mailbox per agent (`captain` or a
- *   member name), mirroring the Claude Code AgentTeams mailbox layout
+ *   member name), mirroring the Claude Code CTFTeams mailbox layout
  *
  * All mutations run through an in-process per-team queue so read-modify-write
  * stays serial; `fs/promises` is used directly because the plugin owns this
  * bookkeeping (host-plane state, like session persistence) and the abstract
  * `fs` service offers no directory deletion.
- * @module dsh-agent-teams/state
+ * @module dsh-ctf-teams/state
  */
 
 import { createHash, randomUUID } from 'node:crypto'
@@ -48,7 +48,7 @@ export type { ContractAmendmentInput } from './quality-gates.ts'
 export const CAPTAIN_KEY = 'captain'
 /** A crashed live-delivery attempt becomes retryable after this interval. */
 const MAILBOX_DELIVERY_LEASE_MS = 60_000
-/** Durable deny-list for AgentTeams members that must never be resumed. */
+/** Durable deny-list for CTFTeams members that must never be resumed. */
 const RETIRED_MEMBERS_FILE = 'retired-members.json'
 
 /** In-process per-team mutation queues (promise chains). */
@@ -244,7 +244,7 @@ export async function readTeam(stateRoot: string, teamId: string): Promise<TeamS
     const value: unknown = JSON.parse(stripLeadingBom(raw))
     const team = coerceTeamState(value, teamId)
     if (team === undefined) {
-      throw new Error(`invalid AgentTeams state in team "${teamId}"`)
+      throw new Error(`invalid CTFTeams state in team "${teamId}"`)
     }
     return team
   } catch (error: unknown) {
@@ -270,7 +270,7 @@ export function readTeamSync(stateRoot: string, teamId: string): TeamState | und
     const value: unknown = JSON.parse(stripLeadingBom(raw))
     const team = coerceTeamState(value, teamId)
     if (team === undefined) {
-      throw new Error(`invalid AgentTeams state in team "${teamId}"`)
+      throw new Error(`invalid CTFTeams state in team "${teamId}"`)
     }
     return team
   } catch (error: unknown) {
@@ -294,7 +294,7 @@ export async function writeTeam(stateRoot: string, state: TeamState): Promise<vo
 function parseRetiredMemberIds(raw: string): Set<string> {
   const parsed: unknown = JSON.parse(stripLeadingBom(raw))
   if (!Array.isArray(parsed) || parsed.some(value => typeof value !== 'string' || value === '')) {
-    throw new Error('invalid AgentTeams retired member index')
+    throw new Error('invalid CTFTeams retired member index')
   }
   return new Set(parsed)
 }

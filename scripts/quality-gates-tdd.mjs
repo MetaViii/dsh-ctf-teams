@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Forced TDD checklist for AgentTeams quality gates (docs/quality-gates.md §9.3).
+ * Forced TDD checklist for CTFTeams quality gates (docs/quality-gates.md §9.3).
  *
  * Imports compiled `lib/` exports. Missing functions or old tool behavior
  * must fail the matching label — do not delete or rename these prefixes.
@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { assignmentPrompt } from '../lib/scheduler.js'
-import { applyQualityFollowUp, haltTeamWork, registerAgentTeamsTools } from '../lib/tools.js'
+import { applyQualityFollowUp, haltTeamWork, registerCTFTeamsTools } from '../lib/tools.js'
 import { createTeamDir, readTeam } from '../lib/state.js'
 
 const require = createRequire(import.meta.url)
@@ -931,7 +931,7 @@ console.log('quality-gates TDD — G. persistence / prompts')
     acceptance: ['empty input returns []'],
     verify: ['pnpm test'],
     round: 1,
-  }, '.agent-teams', 'quality')
+  }, '.ctf-teams', 'quality')
   check(
     'tdd.prompt.assignment-includes-kind-scope-acceptance',
     prompt.includes('implementation')
@@ -945,7 +945,7 @@ console.log('quality-gates TDD — G. persistence / prompts')
   try {
     const index = require('../lib/index.js')
     if (typeof index.usageSectionText === 'function') {
-      usage = index.usageSectionText('agent_teams_resume, agent_teams_update_task')
+      usage = index.usageSectionText('ctf_teams_resume, ctf_teams_update_task')
     }
   } catch {
     usage = ''
@@ -1030,8 +1030,8 @@ console.log('quality-gates TDD — tool-level closed loop')
     },
     logger: { debug() {}, warn() {} },
   }
-  registerAgentTeamsTools(ctx, {
-    stateDir: '.agent-teams',
+  registerCTFTeamsTools(ctx, {
+    stateDir: '.ctf-teams',
     memberProvider: 'spawn',
     memberMaxDepth: 1,
     maxMembers: 8,
@@ -1045,12 +1045,12 @@ console.log('quality-gates TDD — tool-level closed loop')
   }
 
   try {
-    await call('agent_teams_create', { name: 'Gates', description: 'tool loop' })
-    await call('agent_teams_add_member', { name: 'implementer', role: 'implementer' })
-    await call('agent_teams_add_member', { name: 'reviewer', role: 'correctness-reviewer' })
+    await call('ctf_teams_create', { name: 'Gates', description: 'tool loop' })
+    await call('ctf_teams_add_member', { name: 'implementer', role: 'implementer' })
+    await call('ctf_teams_add_member', { name: 'reviewer', role: 'correctness-reviewer' })
 
-    const work = await call('agent_teams_create_task', { subject: 'legacy work' })
-    const persistedWork = (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.tasks.find((item) => item.id === work.task_id)
+    const work = await call('ctf_teams_create_task', { subject: 'legacy work' })
+    const persistedWork = (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.tasks.find((item) => item.id === work.task_id)
     check(
       'tdd.create.work-kind-remains-compatible.tool',
       persistedWork?.kind === 'work' || persistedWork?.kind === undefined,
@@ -1060,7 +1060,7 @@ console.log('quality-gates TDD — tool-level closed loop')
     // blank optionals) on a repair task must be normalized to omitted instead
     // of persisted into team.json, where durable-state validation would brick
     // the whole team on reload.
-    const repair = await call('agent_teams_create_task', {
+    const repair = await call('ctf_teams_create_task', {
       subject: 'repair with blank optional',
       kind: 'repair',
       sourceTaskId: work.task_id,
@@ -1071,7 +1071,7 @@ console.log('quality-gates TDD — tool-level closed loop')
       inScope: ['', 'src/repair.ts'],
       verify: ['', 'pnpm verify'],
     })
-    const persistedRepair = (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.tasks.find((item) => item.id === repair.task_id)
+    const persistedRepair = (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.tasks.find((item) => item.id === repair.task_id)
     check(
       'tdd.create.blank-optional-fields-normalized.tool',
       persistedRepair?.reviewedTaskId === undefined
@@ -1081,9 +1081,9 @@ console.log('quality-gates TDD — tool-level closed loop')
     )
     check(
       'tdd.create.team-still-loadable-after-blank-optional.tool',
-      (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.id === 'gates',
+      (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.id === 'gates',
     )
-    await throwsAsync('tdd.create.review-blank-reviewedTaskId-rejected.tool', () => call('agent_teams_create_task', {
+    await throwsAsync('tdd.create.review-blank-reviewedTaskId-rejected.tool', () => call('ctf_teams_create_task', {
       subject: 'review blank id',
       kind: 'review',
       objective: 'Review it',
@@ -1112,7 +1112,7 @@ console.log('quality-gates TDD — tool-level closed loop')
     }
     liveAgents.set(blankProfileCaptain.id, blankProfileCaptain)
     const blankProfileTeam = await call(
-      'agent_teams_create',
+      'ctf_teams_create',
       { name: 'Blank Profile', profile: '' },
       blankProfileCaptain,
     )
@@ -1121,7 +1121,7 @@ console.log('quality-gates TDD — tool-level closed loop')
       typeof blankProfileTeam?.team_id === 'string' && blankProfileTeam?.profile === undefined,
     )
 
-    await throwsAsync('tdd.create.implementation-requires-objective.tool', () => call('agent_teams_create_task', {
+    await throwsAsync('tdd.create.implementation-requires-objective.tool', () => call('ctf_teams_create_task', {
       subject: 'impl',
       kind: 'implementation',
       acceptance: ['done'],
@@ -1131,31 +1131,31 @@ console.log('quality-gates TDD — tool-level closed loop')
 
     await haltTeamWork({
       ctx,
-      stateRoot: join(workspace, '.agent-teams'),
+      stateRoot: join(workspace, '.ctf-teams'),
       teamId: 'gates',
       captain,
       signal: exec.signal,
     })
-    const before = await readTeam(join(workspace, '.agent-teams'), 'gates')
+    const before = await readTeam(join(workspace, '.ctf-teams'), 'gates')
     let createUnhalted = false
     try {
-      await call('agent_teams_create_task', { subject: 'should stay halted' })
-      createUnhalted = (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.halted !== true
+      await call('ctf_teams_create_task', { subject: 'should stay halted' })
+      createUnhalted = (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.halted !== true
     } catch {
-      createUnhalted = (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.halted !== true
+      createUnhalted = (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.halted !== true
     }
     check(
       'tdd.resume.create-task-does-not-unhalt.tool',
       before?.halted === true && createUnhalted === false,
     )
 
-    const resumeTool = definitions.get('agent_teams_resume')
+    const resumeTool = definitions.get('ctf_teams_resume')
     check('tdd.resume.explicit-resume-clears-halt.tool-exists', resumeTool !== undefined)
     if (resumeTool) {
       await resumeTool.execute({ reason: 'user asked to continue' }, exec)
       check(
         'tdd.resume.explicit-resume-clears-halt.tool',
-        (await readTeam(join(workspace, '.agent-teams'), 'gates'))?.halted !== true,
+        (await readTeam(join(workspace, '.ctf-teams'), 'gates'))?.halted !== true,
       )
     }
   } finally {

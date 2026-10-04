@@ -9,7 +9,7 @@
  * still owns an open attempt is parked: only an explicit captain reassignment
  * may rotate that capability. Automatic retry is reserved for cold recovery,
  * when this process has not observed the durable owner settle its open attempt.
- * @module dsh-agent-teams/scheduler
+ * @module dsh-ctf-teams/scheduler
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
@@ -65,6 +65,13 @@ export interface DispatchTicket {
     readonly acceptance?: readonly string[];
     readonly verify?: readonly string[];
     readonly reviewedTaskId?: string;
+    /** Round-sync digest carried alongside this assignment; empty board → undefined. */
+    readonly digest?: string;
+    /** Board seq bounds the digest actually covered; the cursor must not pass these. */
+    readonly digestUpTo?: {
+        findingSeq: number;
+        flagSeq: number;
+    };
 }
 /**
  * Recursively collect `status=completed` ancestors of `taskId` in topological
@@ -74,5 +81,7 @@ export declare function collectCompletedDependencyOutputs(tasks: readonly TeamTa
 /** Format completed-dependency outputs with per-item and total truncation. */
 export declare function formatDependencyOutputs(items: readonly DependencyOutput[]): string;
 export declare function assignmentPrompt(ticket: DispatchTicket, stateDir: string, teamId: string): string;
+/** Prompt for an idle member whose only pending work is the round-sync digest. */
+export declare function digestPrompt(teamId: string, memberName: string, digest: string): string;
 /** Install one scheduler and its member activity observer. */
 export declare function installTeamScheduler(ctx: Context, config: SchedulerConfig): TeamScheduler;

@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const STAMP = 'lib/git-artifact-stamp.json'
-const REQUIRED = ['lib/index.js', 'lib/client.js', 'lib/types/index.d.ts', 'lib/types/client/index.d.ts']
-const CONFIG = ['tsconfig.json', 'tsconfig.client.json', 'tsdown.config.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'scripts/clean-build.mjs', 'scripts/git-artifacts.mjs']
+const REQUIRED = ['lib/index.js', 'lib/types/index.d.ts']
+const CONFIG = ['tsconfig.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'scripts/clean-build.mjs', 'scripts/git-artifacts.mjs']
 function files(root, directory) {
   return readdirSync(join(root, directory), { withFileTypes: true }).flatMap(entry => {
     const path = `${directory}/${entry.name}`

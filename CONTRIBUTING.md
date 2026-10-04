@@ -1,4 +1,4 @@
-# Contributing to AgentTeams
+# Contributing to CTFTeams
 
 Contributions are welcome: a precise reproduction, a focused fix, documentation, or a runnable host test all help. Please keep unrelated UI, installation, scheduler, and host migrations in separate PRs so each contribution can be reviewed and retained.
 
@@ -28,7 +28,7 @@ Then consume that exact file through the real Harness entry point:
 node scripts/harness-runtime-verify.mjs \
   --host-version 0.1.2-rc.1 \
   --artifact candidate.tgz \
-  --report-dir /tmp/agent-teams-rc1-check
+  --report-dir /tmp/ctf-teams-rc1-check
 ```
 
 Repeat for every exact target returned by `node scripts/compatibility.mjs --github-output`, using the **same tarball** and a separate report directory. The runner pins and checks the entire DSH dependency cohort, creates isolated profiles, and replaces only the model adapter with a deterministic fixture. It needs no real API key. Its six required scenarios cover normal lifecycle, lifecycle cold recovery, fallback, fallback cold recovery, final failure, and waking a captain through a member notification after the captain has actually become idle. Each checks real plugin loading, tools, continuable members, persisted state, and the relevant messaging behavior.

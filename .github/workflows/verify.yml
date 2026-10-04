@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       hosts: ${{ steps.policy.outputs.hosts }}
-      artifact_name: agent-teams-candidate
+      artifact_name: ctf-teams-candidate
       artifact_sha256: ${{ steps.artifact.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v6
@@ -67,7 +67,7 @@ jobs:
       - name: Preserve the candidate for all consumers
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2; reviewed upload source
         with:
-          name: agent-teams-candidate
+          name: ctf-teams-candidate
           path: ${{ runner.temp }}/candidate.tgz
           if-no-files-found: error
           compression-level: 0
@@ -121,7 +121,7 @@ jobs:
       - name: Download the candidate from this run
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0; reviewed download source
         with:
-          name: agent-teams-candidate
+          name: ctf-teams-candidate
           path: ${{ runner.temp }}/candidate
       - name: Require the exact candidate digest
         env:

@@ -16,8 +16,8 @@ for (const scenario of selectedScenarios) {
     mkdirSync(workspace, { recursive: true });
     mkdirSync(join(profile, 'node_modules/@nanmicoder'), { recursive: true });
     if (linkWorkspacePackages) symlinkSync(join(runtime, 'node_modules/@deepseek-ai'), join(profile, 'node_modules/@deepseek-ai'), 'dir');
-    symlinkSync(join(runtime, 'node_modules/@nanmicoder/dsh-agent-teams'), join(profile, 'node_modules/@nanmicoder/dsh-agent-teams'), 'dir');
-    json(join(profile, 'package.json'), { name: 'runtime-test-profile', version: '0.0.0', private: true, type: 'module', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@nanmicoder/dsh-agent-teams'], patchReload: 'startup' } } });
+    symlinkSync(join(runtime, 'node_modules/@nanmicoder/dsh-ctf-teams'), join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), 'dir');
+    json(join(profile, 'package.json'), { name: 'runtime-test-profile', version: '0.0.0', private: true, type: 'module', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@nanmicoder/dsh-ctf-teams'], patchReload: 'startup' } } });
     copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-llm.mjs'), join(profile, 'fixture-llm.mjs'));
     writeFileSync(join(profile, 'cordis.patch.yml'), `- id: llm-deepseek\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: agent-default-model\n  config:\n    provider: runtime-lab\n    model: fixture-model\n- insert:\n    - id: runtime-lab-fixture\n      name: './fixture-llm.mjs'\n`);
     if (scenario === 'lifecycle')
@@ -29,7 +29,7 @@ for (const scenario of selectedScenarios) {
         // full dsh-base configuration and change only the tool name.
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: tool-subagent\n  name: \'@deepseek-ai/dsh-tool-subagent\'\n  config:\n    provider: spawn\n    toolName: subagent_legacy\n    backgroundMode: continuable\n');
     if (scenario === 'fallback')
-        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: agent-teams\n  config:\n    stateDir: .agent-teams\n    memberProvider: spawn\n    fallback:\n      provider: runtime-lab\n      model: fixture-fallback\n');
+        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: ctf-teams\n  config:\n    stateDir: .ctf-teams\n    memberProvider: spawn\n    fallback:\n      provider: runtime-lab\n      model: fixture-fallback\n');
     if (scenario === 'captain-idle-wakeup') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-idle.mjs'), join(profile, 'fixture-idle.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: headless-startup\n  disabled: true\n- id: headless-runner\n  disabled: true\n- insert:\n    - id: runtime-lab-idle-captain\n      name: ./fixture-idle.mjs\n');
@@ -40,7 +40,7 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: headless-runner
   disabled: true
-- id: agent-teams
+- id: ctf-teams
   config:
     profiles:
       demo-profile:
@@ -86,7 +86,7 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: headless-runner
   disabled: true
-- id: agent-teams
+- id: ctf-teams
   config:
     profiles:
       north:
@@ -118,7 +118,7 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: headless-runner
   disabled: true
-- id: agent-teams
+- id: ctf-teams
   config:
     memberMaxDepth: 1
 - insert:
@@ -127,7 +127,7 @@ for (const scenario of selectedScenarios) {
 `);
     }
     const tracePath = join(report, scenario, 'trace.jsonl');
-    const result = await command([process.execPath, join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'headless', 'Run the authorized deterministic AgentTeams fixture immediately.'], workspace, environment({ DSH_HOME: home, DSH_PERMISSION_MODE: 'danger-full-access', DSH_TELEMETRY_DISABLED: '1', LAB_TRACE: tracePath, LAB_TEAMS: '1', LAB_SCENARIO: scenario }), scenario, 90000);
+    const result = await command([process.execPath, join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'headless', 'Run the authorized deterministic CTFTeams fixture immediately.'], workspace, environment({ DSH_HOME: home, DSH_PERMISSION_MODE: 'danger-full-access', DSH_TELEMETRY_DISABLED: '1', LAB_TRACE: tracePath, LAB_TEAMS: '1', LAB_SCENARIO: scenario }), scenario, 90000);
     const trace = existsSync(tracePath) ? readFileSync(tracePath, 'utf8').trim().split('\n').filter(Boolean).map(s => JSON.parse(s)) : [];
     if (scenario === 'stability') {
         const checks = ['lazy-start', 'running-plan-correction', 'steering', 'read-receipt-continuation', 'reassign', 'archive', 'batch-plan', 'terminal-evidence', 'report-retry', 'settlement-dedup'];
@@ -137,7 +137,7 @@ for (const scenario of selectedScenarios) {
     }
     if (scenario === 'protocol-compatibility') {
         const cases = trace.filter(x => x.event === 'protocol-case-passed');
-        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('PROTOCOL_COMPATIBILITY_OK'), legacyAllowlistAndColdRestore: cases.some(x => x.label === 'legacy-allowlist-cold-compact') && trace.some(x => x.event === 'protocol-cold-restored'), legacyProfileDirectory: trace.some(x => x.event === 'protocol-legacy-profile-directory' && x.onlyOriginalTools === true && x.northPurposeVisible && x.southPurposeVisible) && cases.some(x => x.label === 'legacy-allowlist-cold-compact' && x.profile === 'north'), actualPtcDiscard: cases.some(x => x.label === 'ptc-discard-and-compact') && trace.some(x => x.event === 'protocol-ptc-output-discarded' && x.tool === 'agent_teams_status'), actualPruning: trace.some(x => x.event === 'protocol-pruned'), actualCompaction: trace.filter(x => x.event === 'protocol-compacted').length === 2, existingPlanRevised: cases.length === 2 && cases.every(x => x.persistedSubject === 'Recovered task'), lifecycleArchived: cases.length === 2 && cases.every(x => x.archived === true) };
+        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('PROTOCOL_COMPATIBILITY_OK'), legacyAllowlistAndColdRestore: cases.some(x => x.label === 'legacy-allowlist-cold-compact') && trace.some(x => x.event === 'protocol-cold-restored'), legacyProfileDirectory: trace.some(x => x.event === 'protocol-legacy-profile-directory' && x.onlyOriginalTools === true && x.northPurposeVisible && x.southPurposeVisible) && cases.some(x => x.label === 'legacy-allowlist-cold-compact' && x.profile === 'north'), actualPtcDiscard: cases.some(x => x.label === 'ptc-discard-and-compact') && trace.some(x => x.event === 'protocol-ptc-output-discarded' && x.tool === 'ctf_teams_status'), actualPruning: trace.some(x => x.event === 'protocol-pruned'), actualCompaction: trace.filter(x => x.event === 'protocol-compacted').length === 2, existingPlanRevised: cases.length === 2 && cases.every(x => x.persistedSubject === 'Recovered task'), lifecycleArchived: cases.length === 2 && cases.every(x => x.archived === true) };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, cases, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
         continue;
     }
@@ -156,14 +156,14 @@ for (const scenario of selectedScenarios) {
         const evidence = trace.find(x => x.event === 'web-approval-passed');
         const invalid = trace.find(x => x.event === 'web-http-invalid-team-rejected'), repeated = trace.find(x => x.event === 'web-http-repeat-rejected');
         const stable = trace.find(x => x.event === 'web-headers-stable');
-        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('WEB_APPROVAL_OK'), driverCompleted: Boolean(evidence), stagedBeforeApproval: Boolean(staged?.status === 'idle' && approved?.status === 200 && staged.order < approved.order), independentApprovalWake: Boolean(approvalWake && yielded?.status === 'idle' && released && approvalWake.order < yielded.order && yielded.order < released.order), reportWakeAfterYield: Boolean(released && reportWake && released.order < reportWake.order && reportWake.sessionId === staged?.sessionId), noPollingOrDuplicateApproval: !trace.some(x => x.event === 'web-model-tool-call' && ['agent_teams_approve', 'agent_teams_status'].includes(x.name)), oneUserMessageAndHttpApproval: trace.filter(x => x.event === 'web-driver-user-message').length === 1 && trace.filter(x => x.event === 'web-http-approval-start').length === 1, invalidTeamRejected: Boolean(invalid?.status === 404 && approved && invalid.order < approved.order), repeatApprovalRejected: Boolean(repeated?.status === 409 && yielded && released && yielded.order < repeated.order && repeated.order < released.order), stableCaptainHeaders: Boolean(stable?.systemSha256 && stable?.toolsSha256), memberFourTools: stable?.memberTeamToolCount === 4 && stable.memberRequests > 0, taskCompleted: evidence?.taskStatus === 'completed' };
+        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('WEB_APPROVAL_OK'), driverCompleted: Boolean(evidence), stagedBeforeApproval: Boolean(staged?.status === 'idle' && approved?.status === 200 && staged.order < approved.order), independentApprovalWake: Boolean(approvalWake && yielded?.status === 'idle' && released && approvalWake.order < yielded.order && yielded.order < released.order), reportWakeAfterYield: Boolean(released && reportWake && released.order < reportWake.order && reportWake.sessionId === staged?.sessionId), noPollingOrDuplicateApproval: !trace.some(x => x.event === 'web-model-tool-call' && ['ctf_teams_approve', 'ctf_teams_status'].includes(x.name)), oneUserMessageAndHttpApproval: trace.filter(x => x.event === 'web-driver-user-message').length === 1 && trace.filter(x => x.event === 'web-http-approval-start').length === 1, invalidTeamRejected: Boolean(invalid?.status === 404 && approved && invalid.order < approved.order), repeatApprovalRejected: Boolean(repeated?.status === 409 && yielded && released && yielded.order < repeated.order && repeated.order < released.order), stableCaptainHeaders: Boolean(stable?.systemSha256 && stable?.toolsSha256), memberFourTools: stable?.memberTeamToolCount === 4 && stable.memberRequests > 0, taskCompleted: evidence?.taskStatus === 'completed' };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, evidence, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
         continue;
     }
-    const statePath = join(workspace, '.agent-teams/runtime-lab/team.json'), state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : undefined;
+    const statePath = join(workspace, '.ctf-teams/runtime-lab/team.json'), state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : undefined;
     const requests = trace.filter(x => x.event === 'request' && x.purpose === undefined), memberRequests = requests.filter(x => x.isMember);
     const isFailure = scenario === 'failure';
-    const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes(isFailure ? 'AGENTTEAMS_EXPECTED_FAILURE_OK' : scenario === 'captain-idle-wakeup' ? 'CAPTAIN_IDLE_WAKEUP_OK' : 'AGENTTEAMS_PRODUCT_TURN_OK'), pluginToolsVisible: requests.some(x => x.toolNames.includes('agent_teams_create')), memberExecuted: memberRequests.length > 0, explicitReasoning: memberRequests.length > 0 && memberRequests.some(x => x.model !== 'fixture-fallback') && memberRequests.filter(x => x.model !== 'fixture-fallback').every(x => x.reasoningEffort === 'high'), taskTerminal: state?.tasks?.find(t => t.id === 't1')?.status === (isFailure ? 'failed' : 'completed') };
+    const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes(isFailure ? 'AGENTTEAMS_EXPECTED_FAILURE_OK' : scenario === 'captain-idle-wakeup' ? 'CAPTAIN_IDLE_WAKEUP_OK' : 'AGENTTEAMS_PRODUCT_TURN_OK'), pluginToolsVisible: requests.some(x => x.toolNames.includes('ctf_teams_create')), memberExecuted: memberRequests.length > 0, explicitReasoning: memberRequests.length > 0 && memberRequests.some(x => x.model !== 'fixture-fallback') && memberRequests.filter(x => x.model !== 'fixture-fallback').every(x => x.reasoningEffort === 'high'), taskTerminal: state?.tasks?.find(t => t.id === 't1')?.status === (isFailure ? 'failed' : 'completed') };
     if (!isFailure && scenario !== 'captain-idle-wakeup')
         assertions.secondWake = memberRequests.some(x => x.userText.includes('SECOND_WAKE_FIXTURE'));
     if (scenario === 'captain-idle-wakeup') {
@@ -176,7 +176,7 @@ for (const scenario of selectedScenarios) {
         const withBoth = memberRequests.find(x => x.userText.includes('FIFO_FIRST') && x.userText.includes('FIFO_SECOND'));
         assertions.fifoMessageOrder = Boolean(withBoth && withBoth.userText.indexOf('FIFO_FIRST') < withBoth.userText.indexOf('FIFO_SECOND'));
         const firstMember = memberRequests[0], firstResponse = trace.find(x => x.event === 'response' && x.isMember);
-        const busySend = trace.find(x => x.event === 'request' && !x.isMember && x.called.includes('agent_teams_send_message'));
+        const busySend = trace.find(x => x.event === 'request' && !x.isMember && x.called.includes('ctf_teams_send_message'));
         assertions.messagesSentWhileBusy = Boolean(firstMember && firstResponse && busySend && firstMember.time <= busySend.time && busySend.time < firstResponse.time);
     }
     if (scenario === 'fallback') {

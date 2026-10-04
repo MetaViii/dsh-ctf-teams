@@ -5,11 +5,11 @@
  * Members are durable continuable subagents of the captain, so a member keeps
  * its conversation across turns and across harness restarts: the captain
  * queues its next turn through {@link deliverToMember}, it works through its turn
- * (updating team state through the `agent_teams_*` tools), and becomes idle
+ * (updating team state through the `ctf_teams_*` tools), and becomes idle
  * again. Its final assistant message is not readable programmatically, so the
  * member persists its report into the captain's mailbox and the task records,
- * which the captain reads through `agent_teams_status`.
- * @module dsh-agent-teams/members
+ * which the captain reads through `ctf_teams_status`.
+ * @module dsh-ctf-teams/members
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -117,7 +117,7 @@ export async function validateMemberLlmSelections(
   }
 }
 
-const MEMBER_LABEL_PREFIX = 'agent-teams:'
+const MEMBER_LABEL_PREFIX = 'ctf-teams:'
 const FALLBACK_FAILURE_CODES = new Set(['QUOTA', 'RATE_LIMIT', 'AUTH', 'MISSING_CREDENTIAL', 'NO_ADAPTER'])
 
 export function isFallbackFailureCode(code: string): boolean {
@@ -141,8 +141,8 @@ export function selectFallbackRoute(
 export function steerCaptainReport(captain: Pick<Agent, 'steer'>, from: string, content: string, receipt?: string): boolean {
   try {
     captain.steer(createUserMessage({
-      content: [{ type: 'text', text: receipt ?? `AgentTeams message from member ${from}:\n\n${content}` }],
-      source: { kind: 'agent-teams' },
+      content: [{ type: 'text', text: receipt ?? `CTFTeams message from member ${from}:\n\n${content}` }],
+      source: { kind: 'ctf-teams' },
     }))
     return true
   } catch {
@@ -196,11 +196,11 @@ export async function failMemberOpenAttempt(
     await writeTeam(stateRoot, team)
     await appendMailbox(stateRoot, team.id, CAPTAIN_KEY, message)
     if (task !== undefined) {
-      appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, fallbackSession), 'agent-teams/task-updated', {
+      appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, fallbackSession), 'ctf-teams/task-updated', {
         teamId, taskId: task.id, status: task.status, assignee: memberName, output: task.output,
       })
     }
-    appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, fallbackSession), 'agent-teams/message-sent', {
+    appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, fallbackSession), 'ctf-teams/message-sent', {
       teamId: team.id,
       messageId: message.id,
       from: memberName,
@@ -395,7 +395,7 @@ export function installMemberSelectionRuntime(
       selection = selectionFromMember(durableMember)
       if (selection !== undefined && (descriptor.agentProvider !== durableMember?.provider || descriptor.agentModel !== durableMember?.model)) {
         throw new Error(
-          `agent-teams: saved model route for member "${memberName}" does not match its subagent descriptor`,
+          `ctf-teams: saved model route for member "${memberName}" does not match its subagent descriptor`,
         )
       }
     }
@@ -439,7 +439,7 @@ export function installMemberSelectionRuntime(
         })
         await onFailureSettled?.(workspace, teamId, memberName)
       } catch (error: unknown) {
-        ctx.logger.warn(`agent-teams: failed to record member turn failure: ${String(error)}`)
+        ctx.logger.warn(`ctf-teams: failed to record member turn failure: ${String(error)}`)
       }
     })
     // Legacy teams still need failure reporting even without a saved route.
@@ -461,9 +461,9 @@ export function installMemberSelectionRuntime(
         // otherwise the authorized retry would hit the failed primary again.
         selectionRef.assembled = transition.selection
         await updateFallbackState(stateRoot, teamId, memberName, fallback, ctx).catch((error: unknown) => {
-          ctx.logger.warn(`agent-teams: failed to persist fallback route: ${String(error)}`)
+          ctx.logger.warn(`ctf-teams: failed to persist fallback route: ${String(error)}`)
         })
-        ctx.logger.warn(`agent-teams: member ${child.id} switching to fallback ${fallback.provider}/${fallback.model} after ${payload.failure.code}`)
+        ctx.logger.warn(`ctf-teams: member ${child.id} switching to fallback ${fallback.provider}/${fallback.model} after ${payload.failure.code}`)
         return { kind: 'retry' as const }
       }
       return next()
@@ -533,21 +533,32 @@ export function memberPersona(team: TeamState, member: TeamMember, stateDir: str
   const goal = team.description?.trim() || '(not provided)'
   const injectedPrompt = member.executionPrompt?.trim() || executionPrompt?.trim()
   const protocol = truncatedPersonaProtocol(team.profile?.protocol)
-  return `You are ${member.name}, a member of the multi-agent team "${team.name}" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member${member.role ? ` with the role: ${member.role}` : ''}.
+  const challenge = team.challenge
+  return `You are ${member.name}, a member of the CTFTeams squad "${team.name}" solving one CTF challenge together, running inside DeepSeek Harness. The captain leads the team; you are a worker member${member.role ? ` with the role: ${member.role}` : ''}.
 
 Team context:
 - Team id: ${team.id}
 - Your name inside the team (use it as \`from\`/identity): ${member.name}
-- Team goal: ${goal}
+- Challenge / goal: ${goal}${challenge === undefined ? '' : `
+- Challenge category: ${challenge.category ?? '(unknown)'}${challenge.remote === undefined ? '' : `, remote: ${challenge.remote}`}${challenge.attachments === undefined ? '' : `, attachments: ${challenge.attachments.join(', ')}`}`}
 - Profile protocol: ${protocol}
 ${injectedPrompt === undefined || injectedPrompt === '' ? '' : `- Execution guidance:
 ${injectedPrompt}
-`}- The team state lives under ${stateDir}/${team.id}/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.
+`}- The team state lives under ${stateDir}/${team.id}/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the ctf_teams_* tools so JSON escaping and concurrent updates stay safe.
 - The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.
 When you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.
 
+CTF collaboration rules (the round-sync protocol):
+- The whole squad attacks the same challenge from parallel angles. Publish every meaningful intermediate result the round you get it: ctf_teams_report_finding with exact commands, paths, offsets, versions, and what it means for the others. Dead ends too (category "dead-end") — they save teammates a full round. Before committing to an angle, sync: if a teammate already claimed one, take a different angle or go strictly deeper, and announce the takeover with a finding.
+- Before heavy work and whenever you go idle, call ctf_teams_sync. An empty sync means nobody has new progress: continue or yield, do not invent work.
+- Submit every flag-shaped string the moment it appears: ctf_teams_submit_flag with evidence. Never sit on a candidate; never mark one verified yourself — only the captain records platform confirmation.
+- Read your knowledge topics with ctf_teams_knowledge (no argument lists them) before choosing an attack path, and prefer listed tools over installing replacements.
+- Missing tooling: check ctf_teams_env (action=check, or list the catalog) before telling anyone to install something, and let action=install do the install when a tool is genuinely missing. Heavy tools (sage, ghidra, pwndbg) follow their reported manual path instead.
+- Local references first: after the captain provisions the library (ctf_teams_references), rg the PoC/CVE collections under <stateDir>/references/ (e.g. rg -l "CVE-2025-xxxx") and cite the repo you used before hunting online.
+- Keep one replayable solve script per angle in the workspace (solve-<angle>.py) — the writeup and your teammates depend on it.
+
 Working rules:
-1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.
+1. When you receive a task assignment, call ctf_teams_claim_task with the task id. Keep the returned attempt_id: include it in every ctf_teams_update_task call for that execution attempt. Then mark the task in_progress.
 2. Work thoroughly with your available tools; do not cut corners.
 3. When finishing a task:
    - use status=completed only when the task's success criteria are satisfied;
@@ -556,12 +567,12 @@ Working rules:
    - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.
    claimed cannot jump to completed. Mark in_progress first, then completed or failed.
    Include attempt_id on every update. Then report once as described below and become idle.
-4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.
-5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).
-6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.
+4. Send one short report with ctf_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.
+5. To ask a teammate something, use ctf_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).
+6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically, and it attaches the latest teammate findings to the assignment. Never claim a second task while you still own unfinished work.
 7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.
 8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.
-9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.
+9. You are a worker: do not create or delete teams, reassign tasks, add/remove members, or mark flags verified — that is the captain's job.
 10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.`
 }
 
@@ -609,18 +620,18 @@ export async function spawnMember(
   const provider = ctx.subagents.getProvider(config.provider)
   if (provider === undefined) {
     throw new Error(
-      `agent-teams: no subagent provider "${config.provider}" is registered (available: ${ctx.subagents.list().join(', ') || 'none'}) — `
+      `ctf-teams: no subagent provider "${config.provider}" is registered (available: ${ctx.subagents.list().join(', ') || 'none'}) — `
       + 'check that the subagent provider row (e.g. subagent-spawn) is mounted in the composition',
     )
   }
   if (provider.prepareContinuable === undefined) {
-    throw new Error(`agent-teams: provider "${config.provider}" does not support continuable members`)
+    throw new Error(`ctf-teams: provider "${config.provider}" does not support continuable members`)
   }
   if (!provider.capabilities.persona) {
-    throw new Error(`agent-teams: provider "${config.provider}" cannot apply a member persona`)
+    throw new Error(`ctf-teams: provider "${config.provider}" cannot apply a member persona`)
   }
   if (!provider.capabilities.toolFilter) {
-    throw new Error(`agent-teams: provider "${config.provider}" cannot restrict captain-only tools for members`)
+    throw new Error(`ctf-teams: provider "${config.provider}" cannot restrict captain-only tools for members`)
   }
   const label = `${MEMBER_LABEL_PREFIX}${team.id}:${member.name}`
   const start = await selections.withPending(captain.id, label, llmSelection, () => (
@@ -688,7 +699,7 @@ export async function deliverToMember(
     else await queueMemberPrompt(ctx.subagents, captain, brandedSessionId(childId), content, signal)
     return true
   } catch (error: unknown) {
-    ctx.logger.warn(`agent-teams: prompt delivery to member ${childId} failed: ${String(error)}`)
+    ctx.logger.warn(`ctf-teams: prompt delivery to member ${childId} failed: ${String(error)}`)
     return false
   }
 }
@@ -704,7 +715,7 @@ export function interruptMember(ctx: Context, captain: Agent, childId: string): 
   try {
     ctx.subagents.interrupt(brandedSessionId(childId), { kind: 'ancestor', agent: captain })
   } catch (error: unknown) {
-    ctx.logger.warn(`agent-teams: interrupt of member ${childId} failed: ${String(error)}`)
+    ctx.logger.warn(`ctf-teams: interrupt of member ${childId} failed: ${String(error)}`)
   }
 }
 
@@ -713,7 +724,7 @@ export function interruptMember(ctx: Context, captain: Agent, childId: string): 
  *
  * Upstream `interrupt()` deliberately preserves continuable sessions and the
  * upstream seam exposes no targeted forget/retire method. The durable
- * AgentTeams index therefore rejects every inbox delivery before it can cold-resume a
+ * CTFTeams index therefore rejects every inbox delivery before it can cold-resume a
  * retired member. Catalog rows deliberately remain discoverable: Harness rc.8
  * uses the direct-child catalog to authorize historical transcript reads and
  * `openSubagent()`, so filtering those rows would make an archived member's
@@ -742,8 +753,8 @@ export function installMemberDelegationGuard(ctx: Context, stateDir: string, max
         const separator = identity.indexOf(':')
         const team = readTeamSync(join(ancestor.session.header.cwd ?? process.cwd(), stateDir), identity.slice(0, separator))
         const member = team?.members.find(item => item.id === ancestor!.id && item.name === identity.slice(separator + 1))
-        if (member === undefined || member.status === 'removed' || member.stopping === true || team?.halted === true) throw new Error('AgentTeams member is no longer admitting delegated work')
-        if (depth > maxDepth) throw new Error(`AgentTeams member delegation limit (${maxDepth}) reached; report to the captain instead of spawning another agent`)
+        if (member === undefined || member.status === 'removed' || member.stopping === true || team?.halted === true) throw new Error('CTFTeams member is no longer admitting delegated work')
+        if (depth > maxDepth) throw new Error(`CTFTeams member delegation limit (${maxDepth}) reached; report to the captain instead of spawning another agent`)
         return
       }
       const parentId: SessionId | undefined = ancestor.session.header.parentSession
@@ -768,7 +779,7 @@ export function installMemberDelegationGuard(ctx: Context, stateDir: string, max
         else Object.defineProperty(runtime, key, descriptor)
       }
     }
-  }, 'agent-teams: member delegation budget')
+  }, 'ctf-teams: member delegation budget')
 }
 
 /**

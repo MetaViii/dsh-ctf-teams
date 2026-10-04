@@ -6,7 +6,7 @@
  * `tools.ts`; this module only turns a config map + a profile name into a
  * validated, topologically ordered template (or parses `--profile` flags).
  *
- * @module dsh-agent-teams/profiles
+ * @module dsh-ctf-teams/profiles
  */
 
 import { CAPTAIN_KEY, sanitizeKey } from './state.ts'
@@ -101,7 +101,7 @@ export interface NormalizedTeamProfile {
 }
 
 /** The goal + optional named profile extracted from a slash / gesture line. */
-export interface AgentTeamsInvocation {
+export interface CTFTeamsInvocation {
   goal: string
   profile?: string
 }
@@ -123,18 +123,18 @@ export function listConfiguredProfiles(
   const record = asProfilesRecord(profiles)
   const keys = Object.keys(record)
   if (keys.length > MAX_TEAM_PROFILES) {
-    throw new Error(`too many AgentTeams profiles (${keys.length}); the limit is ${MAX_TEAM_PROFILES}`)
+    throw new Error(`too many CTFTeams profiles (${keys.length}); the limit is ${MAX_TEAM_PROFILES}`)
   }
   const seen = new Map<string, string>()
   const listed: ListedTeamProfile[] = []
   for (const rawKey of keys) {
     const name = rawKey.trim()
     if (name === '') {
-      throw new Error('configured AgentTeams profiles include an empty key')
+      throw new Error('configured CTFTeams profiles include an empty key')
     }
     const previous = seen.get(name)
     if (previous !== undefined) {
-      throw new Error(`configured AgentTeams profiles have duplicate key "${name}"`)
+      throw new Error(`configured CTFTeams profiles have duplicate key "${name}"`)
     }
     seen.set(name, rawKey)
     listed.push({ name, config: record[rawKey] as TeamProfileConfig })
@@ -153,7 +153,7 @@ export function formatProfilesForPrompt(
   const listed = listConfiguredProfiles(profiles)
   if (listed.length === 0) return ''
   const lines = [
-    'Configured team profiles (pass profile= to agent_teams_create):',
+    'Configured team profiles (pass profile= to ctf_teams_create):',
     ...listed.map((entry) => formatProfileListingLine(entry)),
   ]
   return lines.join('\n')
@@ -168,7 +168,7 @@ export function formatProfilesForPrompt(
  * `--profile "name"` strips one matching pair of quotes. Repeat flags and a
  * `--profile` with no name throw.
  */
-export function parseProfileInvocation(rawInput: string): AgentTeamsInvocation {
+export function parseProfileInvocation(rawInput: string): CTFTeamsInvocation {
   const tokens = tokenize(rawInput)
   let index = 0
   let profile: string | undefined
@@ -178,7 +178,7 @@ export function parseProfileInvocation(rawInput: string): AgentTeamsInvocation {
     const parsed = parseLeadingProfileFlag(token, tokens[index + 1])
     if (parsed === undefined) break
     if (profile !== undefined) {
-      throw new Error('duplicate AgentTeams profile flag')
+      throw new Error('duplicate CTFTeams profile flag')
     }
     profile = parsed.name
     index += parsed.consumed
@@ -199,13 +199,13 @@ export function resolveTeamProfile(
   const listed = listConfiguredProfiles(profiles)
   const name = profileName.trim()
   if (name === '') {
-    throw new Error('AgentTeams profile name must be a non-empty string')
+    throw new Error('CTFTeams profile name must be a non-empty string')
   }
   const match = listed.find((entry) => entry.name === name)
   if (match === undefined) {
     const available = listed.map((entry) => entry.name)
     const shown = available.length === 0 ? '(none)' : available.join(', ')
-    throw new Error(`unknown AgentTeams profile "${name}" — configured profiles: ${shown}`)
+    throw new Error(`unknown CTFTeams profile "${name}" — configured profiles: ${shown}`)
   }
   return normalizeListedProfile(match, maxMembers)
 }
@@ -301,7 +301,7 @@ function normalizeListedProfile(
   const reviewPolicy = normalizeReviewPolicy(raw['reviewPolicy'], `${path}.reviewPolicy`)
   const membersRaw = raw['members']
   if (!Array.isArray(membersRaw) || membersRaw.length === 0) {
-    throw new Error(`AgentTeams profile "${listed.name}" has no members`)
+    throw new Error(`CTFTeams profile "${listed.name}" has no members`)
   }
   if (membersRaw.length > maxMembers) {
     throw new Error(
@@ -648,7 +648,7 @@ function asProfilesRecord(
 ): Record<string, unknown> {
   if (profiles === undefined || profiles === null) return {}
   if (typeof profiles !== 'object' || Array.isArray(profiles)) {
-    throw new Error('AgentTeams profiles must be an object map of named templates')
+    throw new Error('CTFTeams profiles must be an object map of named templates')
   }
   return profiles as Record<string, unknown>
 }

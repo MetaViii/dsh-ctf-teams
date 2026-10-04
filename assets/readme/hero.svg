@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
-  <title id="title">dsh-agent-teams</title>
+  <title id="title">dsh-ctf-teams</title>
   <desc id="desc">A DeepSeek Harness plugin that turns one captain session into a coordinated team of durable members working through dependent tasks and direct messages.</desc>
 
   <defs>
@@ -13,7 +13,7 @@
 
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
     <text x="58" y="64" fill="#7F98BB" font-size="17" font-weight="650" letter-spacing="2.2">DEEPSEEK HARNESS · MULTI-AGENT ORCHESTRATION</text>
-    <text x="58" y="142" fill="#F4F8FF" font-size="58" font-weight="760" letter-spacing="-2.1">dsh-agent-teams</text>
+    <text x="58" y="142" fill="#F4F8FF" font-size="58" font-weight="760" letter-spacing="-2.1">dsh-ctf-teams</text>
     <text x="58" y="197" fill="#C4D1E3" font-size="27" font-weight="520">One session becomes a coordinated team.</text>
 
     <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">

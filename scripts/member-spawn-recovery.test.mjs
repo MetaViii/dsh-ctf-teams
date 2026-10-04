@@ -4,7 +4,7 @@ import { startMemberWithLenientFilter } from '../lib/harness-compat.js'
 import { CAPTAIN_TOOL_NAMES } from '../lib/tool-names.js'
 
 /**
- * `dsh-web-app` and the Agent Teams profile layer ship `tool-subagent` and
+ * `dsh-web-app` and the CTF Teams profile layer ship `tool-subagent` and
  * `tool-subagent-control` disabled, so `subagent` and `send_message` are absent from the
  * registry. The host applies a member's `toolFilter` through a strict `tools.restrict()`
  * that rejects an unregistered name instead of ignoring it. That rejection used to abort

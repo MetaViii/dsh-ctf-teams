@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { SUBAGENT_DESCRIPTOR_VERSION } from '@deepseek-ai/dsh-subagent'
 /**
- * Offline smoke verification for dsh-agent-teams.
+ * Offline smoke verification for dsh-ctf-teams.
  *
- * Runs the pure team-logic rules, the on-disk persistence flow, and the
- * browser workbench fold (events -> workbench projection) against throwaway
- * temp state. Requires a prior `pnpm build` (lib/ present). Does not touch
+ * Runs the pure team-logic rules, the CTF packaging contract, the round-sync
+ * board, and the on-disk persistence flow against throwaway temp state. Requires a prior `pnpm build` (lib/ present). Does not touch
  * any running DSH instance or profile.
  *
  * Usage: node scripts/verify.mjs
@@ -31,56 +30,10 @@ import {
   unsatisfiedDependencies,
   withTeamLock,
 } from '../lib/state.js'
-import {
-  activityPanelExpandedForSession,
-  activityPanelShouldAutoExpand,
-  compactDagLayout,
-  compactModelLabel,
-  COMPACT_DAG_NODE_HEIGHT,
-  COMPACT_DAG_NODE_WIDTH,
-  dependencyFocusTaskId,
-  memberFinishedAt,
-  memberRouteLabel,
-  orderDelegationMembers,
-  relatedTaskIds,
-  taskModelLabel,
-  taskStages,
-  liveCaptainTeam,
-  teamIsActive,
-  teamProgressSummary,
-  usesParallelTaskGrid,
-} from '../lib/client/activity-model.js'
-import {
-  ACTIVITY_POLL_MS,
-  ACTIVITY_PROBE_MS,
-  getActivityMonitorTargetsSnapshot,
-  monitorAgentTeam,
-  settleActivityMonitorTargets,
-  startActivityPolling,
-  subscribeActivityMonitorTargets,
-} from '../lib/client/activity-monitor.js'
-import {
-  DEFAULT_PANEL_LAYOUT,
-  compactPanelForBounds,
-  dockPanelLayout,
-  floatPanelLayout,
-  movePanelLayout,
-  panelMaximumHeight,
-  panelUsesAutoHeight,
-  parsePanelLayout,
-  resizePanelLayout,
-  resolvePanelGeometry,
-} from '../lib/client/panel-geometry.js'
-import { memberArtUrl } from '../lib/client/artwork.js'
-import { parseAgentTeamsCreateArgs } from '../lib/client/agent-teams-card-definition.js'
-import {
-  AGENT_TEAMS_LOCALE_NAMESPACE,
-  en as agentTeamsEn,
-  zh as agentTeamsZh,
-} from '../lib/client/locales.js'
-import { openAgentTeamMember } from '../lib/client/session-navigation.js'
 import { steerCaptainReport } from '../lib/tools.js'
 import { parseProfileInvocation, resolveTeamProfile, formatProfilesForPrompt } from '../lib/profiles.js'
+import { TEAM_TOOL_NAMES } from '../lib/tool-names.js'
+import { usageSectionText } from '../lib/index.js'
 import { memberPersona, memberWelcome } from '../lib/members.js'
 import { collectCompletedDependencyOutputs, formatDependencyOutputs, assignmentPrompt } from '../lib/scheduler.js'
 import {
@@ -100,7 +53,7 @@ function check(label, condition, detail = '') {
   }
 }
 
-console.log('dsh-agent-teams offline verification')
+console.log('dsh-ctf-teams offline verification')
 
 // Named multi-role profile rules
 const demoProfiles = { ' demo ': { protocol: 'a'.repeat(300), members: [{ name: ' Implementer ', role: 'builder', model: 'm' }, { name: 'Reviewer', model: 'r' }], tasks: [{ id: 'design', subject: 'Design', assignee: 'implementer' }, { id: 'review', subject: 'Review', assignee: ' reviewer ', dependencies: ['design'] }] } }
@@ -124,7 +77,7 @@ const captainPlanned = resolveTeamProfile({
 }, 'dynamic', 8)
 check('captain planning keeps the roster and drops seed tasks', captainPlanned.taskPlanning === 'captain' && captainPlanned.members.length === 2 && captainPlanned.tasks.length === 0)
 check('profile prompt marks captain planning instead of unused seed counts', formatProfilesForPrompt({ dynamic: { taskPlanning: 'captain', members: [{ name: 'solo', model: 'm' }], tasks: [{ id: 'work', subject: 'Work', assignee: 'solo' }] } }).includes('captain planning'))
-const profilePersona = memberPersona({ name: 'Demo', id: 'demo', description: 'goal', profile: { name: 'demo', protocol: 'p'.repeat(600) }, captainSessionId: 'c', createdAt: 0, members: [], tasks: [], taskSeq: 0 }, { name: 'Implementer', id: 'm', role: 'builder', joinedAt: 0, status: 'idle' }, '.agent-teams')
+const profilePersona = memberPersona({ name: 'Demo', id: 'demo', description: 'goal', profile: { name: 'demo', protocol: 'p'.repeat(600) }, captainSessionId: 'c', createdAt: 0, members: [], tasks: [], taskSeq: 0 }, { name: 'Implementer', id: 'm', role: 'builder', joinedAt: 0, status: 'idle' }, '.ctf-teams')
 check('member persona includes completed/failed and claimed transition rules', profilePersona.includes('status=completed') && profilePersona.includes('status=failed') && profilePersona.includes('claimed') && profilePersona.includes('in_progress'))
 const welcome = memberWelcome({ name: 'Demo', id: 'demo', captainSessionId: 'c', createdAt: 0, members: [], tasks: [{ id: 't1', subject: 'x', status: 'pending', assignee: 'Implementer', dependencies: [], createdAt: 0, updatedAt: 0 }], taskSeq: 1 }, 'Implementer')
 check('member welcome reports assigned pending count', welcome.includes('1 pending task(s) assigned to you') && !welcome.includes('none assigned to you yet'))
@@ -142,15 +95,15 @@ const cycled = collectCompletedDependencyOutputs([
 check('recursive dependency collection stops on cycles', cycleWarned && Array.isArray(cycled))
 check('persona protocol is truncated', profilePersona.includes('p'.repeat(400)) && !profilePersona.includes('p'.repeat(401)))
 const injected = 'The product interface should present the intended outcome, not reveal the reasoning process.'
-const assignment = assignmentPrompt({ taskId: 't1', memberName: 'Implementer', memberId: 'm', attempt: 1, attemptId: 'a', subject: 'x', dependencyOutputs: [], executionPrompt: injected }, '.agent-teams', 'demo')
-check('execution prompt is injected into persona and assignment', assignment.includes(injected) && memberPersona({ name: 'Demo', id: 'demo', description: 'goal', captainSessionId: 'c', createdAt: 0, members: [], tasks: [], taskSeq: 0 }, { name: 'Implementer', id: 'm', role: 'builder', joinedAt: 0, status: 'idle', executionPrompt: injected }, '.agent-teams').includes(injected))
+const assignment = assignmentPrompt({ taskId: 't1', memberName: 'Implementer', memberId: 'm', attempt: 1, attemptId: 'a', subject: 'x', dependencyOutputs: [], executionPrompt: injected }, '.ctf-teams', 'demo')
+check('execution prompt is injected into persona and assignment', assignment.includes(injected) && memberPersona({ name: 'Demo', id: 'demo', description: 'goal', captainSessionId: 'c', createdAt: 0, members: [], tasks: [], taskSeq: 0 }, { name: 'Implementer', id: 'm', role: 'builder', joinedAt: 0, status: 'idle', executionPrompt: injected }, '.ctf-teams').includes(injected))
 
 
 // The bundle patch's `name` is the specifier Node resolves when a profile
 // loads this plugin, so it must equal the published package name. A mismatch
 // only surfaces after someone installs the package (the row fails to load),
 // never in local link-installed development — hence this pre-publish gate.
-console.log('1/8 packaging contract')
+console.log('1/6 packaging contract')
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const patchText = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 const patchName = patchText
@@ -164,345 +117,96 @@ check(
   patchName === pkg.name,
   `patch has ${JSON.stringify(patchName)}, package.json has ${JSON.stringify(pkg.name)}`,
 )
+check('package name is the CTF plugin', pkg.name === '@nanmicoder/dsh-ctf-teams', pkg.name)
+// The bundle ships two ordered layers: the host-plane plugin row and the
+// selectable `ctf-teams` AGENT PRESET the Harness mode picker lists. A host
+// only shows a mode when the declaration row reaches the composition, so the
+// preset file must stay declared in `dsh.bundle.patch` — a string-only patch
+// field silently drops it.
+const bundlePatch = pkg.dsh?.bundle?.patch
+const bundlePatchFiles = typeof bundlePatch === 'string' ? [bundlePatch] : bundlePatch
 check(
-  'files[] ships the bundle patch and lib',
-  ['lib', 'cordis.patch.yml'].every(entry => pkg.files?.includes(entry)),
+  'dsh.bundle.patch lists the host layer and the preset layer in order',
+  Array.isArray(bundlePatchFiles)
+    && bundlePatchFiles[0] === './cordis.patch.yml'
+    && bundlePatchFiles.includes('./presets/ctf-teams.patch.yml'),
+  `patch = ${JSON.stringify(bundlePatch)}`,
+)
+check(
+  'files[] ships the preset layer',
+  pkg.files?.includes('presets'),
   `files = ${JSON.stringify(pkg.files)}`,
 )
+const presetText = await readFile(new URL('../presets/ctf-teams.patch.yml', import.meta.url), 'utf8')
+const presetLine = pattern => pattern.test(presetText)
 check(
-  'scoped package publishes publicly',
-  !pkg.name.startsWith('@') || pkg.publishConfig?.access === 'public',
-  'scoped packages default to restricted without publishConfig.access = "public"',
+  'preset layer declares the agent-preset row',
+  presetLine(/^\s*name:\s*'@deepseek-ai\/dsh-agent-preset'\s*$/m),
+  'presets/ctf-teams.patch.yml does not mount @deepseek-ai/dsh-agent-preset',
 )
-const requiredPeers = Object.keys(pkg.peerDependencies ?? {})
-  .filter(name => pkg.peerDependenciesMeta?.[name]?.optional !== true)
 check(
-  'shared runtime peers are optional for standalone profile installs',
-  requiredPeers.length === 0,
-  `required peers trigger pnpm warnings: ${JSON.stringify(requiredPeers)}`,
+  'preset id and display metadata are present',
+  presetLine(/^\s*id:\s*ctf-teams\s*$/m)
+    && presetLine(/^\s*name:\s*\S.*$/m)
+    && presetLine(/^\s*order:\s*\d+\s*$/m),
+  'the preset needs config.id ctf-teams plus name and order for the roster',
 )
-// The browser half registers itself with __ModuleLoader__ under an id the host
-// resolves by package name. A stale id here fails only in the browser — the
-// host half loads fine, so every server-side check still passes.
+check(
+  'preset composes a full agent plane',
+  presetLine(/^\s*plugins:\s*$/m)
+    // Without a delegation provider the captain cannot spawn the squad at all.
+    && presetLine(/^\s*name:\s*'@deepseek-ai\/dsh-tool-subagent'\s*$/m)
+    && presetLine(/^\s*name:\s*'@deepseek-ai\/dsh-persona'\s*$/m)
+    && presetLine(/^\s*name:\s*'@deepseek-ai\/dsh-tool-skill'\s*$/m),
+  'the preset must carry a persona and the delegation/skill rows a CTF session needs',
+)
+// The dashboard tab is a real client half: a `conversation.view` contributor
+// served as a harness ModuleLoader bundle. A missing export, a non-web
+// platform, or a stale bundle all show up as "no tab" in the running app.
+const clientPath = pkg.exports?.['./client']?.default
+check(
+  'exports declares the client bundle',
+  clientPath === './lib/client.js',
+  `exports["./client"] = ${JSON.stringify(pkg.exports?.['./client'])}`,
+)
+check(
+  'dsh.client declares the web platform',
+  pkg.dsh?.client?.platform === 'web',
+  `dsh.client = ${JSON.stringify(pkg.dsh?.client)}`,
+)
 const clientBundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
-const registeredId = clientBundle.match(/__ModuleLoader__\.load\(\{\s*id:\s*"([^"]*)"/)?.[1]
 check(
-  'client bundle registers under the package name',
-  registeredId === pkg.name,
-  `bundle registers ${JSON.stringify(registeredId)}, package.json has ${JSON.stringify(pkg.name)}`,
-)
-const activityPanelCss = await readFile(new URL('../src/client/ActivityPanel.module.css', import.meta.url), 'utf8')
-const activityPanelSource = await readFile(new URL('../src/client/ActivityPanel.tsx', import.meta.url), 'utf8')
-const stagingPlanSource = await readFile(new URL('../src/client/StagingPlanEditor.tsx', import.meta.url), 'utf8')
-const clientIndexSource = await readFile(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
-const agentTeamsCardCss = await readFile(new URL('../src/client/AgentTeamsCard.module.css', import.meta.url), 'utf8')
-const agentTeamsCardSource = await readFile(new URL('../src/client/AgentTeamsCard.tsx', import.meta.url), 'utf8')
-const artworkSource = await readFile(new URL('../src/client/artwork.ts', import.meta.url), 'utf8')
-const hostSource = await readFile(new URL('../src/index.ts', import.meta.url), 'utf8')
-const toolsSource = await readFile(new URL('../src/tools.ts', import.meta.url), 'utf8')
-const localesSource = await readFile(new URL('../src/client/locales.ts', import.meta.url), 'utf8')
-const localeKeys = Object.keys(agentTeamsZh).sort()
-const englishLocaleKeys = Object.keys(agentTeamsEn).sort()
-const placeholders = value => [...value.matchAll(/\{(\w+)\}/gu)].map(match => match[1]).sort()
-check(
-  'AgentTeams locale dictionaries have identical keys and template placeholders',
-  localeKeys.length > 0
-    && JSON.stringify(localeKeys) === JSON.stringify(englishLocaleKeys)
-    && localeKeys.every(key => JSON.stringify(placeholders(agentTeamsZh[key]))
-      === JSON.stringify(placeholders(agentTeamsEn[key]))),
+  'client bundle is a harness ModuleLoader unit for this package',
+  clientBundle.includes('window.__ModuleLoader__.load({')
+    && clientBundle.includes(`id: ${JSON.stringify(pkg.name)}`)
+    && clientBundle.includes('return module.exports;'),
+  'lib/client.js is not a ModuleLoader bundle for this package',
 )
 check(
-  'client uses the uiConversation event registry and registers the official locale namespace',
-  AGENT_TEAMS_LOCALE_NAMESPACE === 'agentTeams'
-    && clientIndexSource.includes("'uiConversation', 'slots', 'sessions', 'locale', 'modelDirectories'")
-    && clientIndexSource.includes('ctx.uiConversation.events.register(agentTeamsCardDefinition)')
-    && clientIndexSource.includes('ctx.locale.register(AGENT_TEAMS_LOCALE_NAMESPACE, { zh, en })')
-    && clientIndexSource.match(/locale:\s*AGENT_TEAMS_LOCALE_NAMESPACE/gu)?.length === 5,
+  'client bundle registers the conversation dashboard view',
+  clientBundle.includes("'conversation.view'")
+    && clientBundle.includes('ctf-teams-dashboard')
+    && clientBundle.includes('/plugins/dsh-ctf-teams/state'),
+  'the client half must contribute the dashboard view and poll the state route',
+)
+check('client devDependencies removed', pkg.devDependencies?.['react'] === undefined && pkg.devDependencies?.['tsdown'] === undefined)
+check('files[] ships the knowledge assets', pkg.files?.includes('assets/ctf'), JSON.stringify(pkg.files))
+const knowledgeDir = new URL('../assets/ctf/knowledge/', import.meta.url)
+const knowledgeFiles = (await readdir(knowledgeDir)).sort()
+check(
+  'knowledge base ships the required topics',
+  ['cve-poc.md', 'crypto.md', 'forensics.md', 'kali-tools.md', 'misc.md', 'pwntools.md', 'pwn.md', 'reverse.md', 'sage-math.md', 'volatility3.md', 'web.md'].every(name => knowledgeFiles.includes(name)),
+  JSON.stringify(knowledgeFiles),
 )
 check(
-  'slash command transcript hides the duplicate pre-message result row',
-  clientIndexSource.includes('HiddenAgentTeamsCommand')
-    && /name:\s*'conversation\.chat\.commandview',\s*key:\s*'agent-teams'/u.test(clientIndexSource),
+  'tool registry names are the ctf_teams_* API surface',
+  ['ctf_teams_create', 'ctf_teams_submit_flag', 'ctf_teams_report_finding', 'ctf_teams_sync', 'ctf_teams_knowledge', 'ctf_teams_mark_flag', 'ctf_teams_set_challenge', 'ctf_teams_env', 'ctf_teams_references', 'ctf_teams_status']
+    .every(name => TEAM_TOOL_NAMES.includes(name)),
 )
-check(
-  'stop-team control lives in the team panel and requires confirmation',
-  !clientIndexSource.includes("conversation.input.dock")
-    && activityPanelSource.includes('className={css.teamStopButton}')
-    && activityPanelSource.includes('<Modal')
-    && activityPanelSource.includes('ACTIVITY_HALT_URL'),
-)
-check(
-  'clean builds do not package the removed composer stop banner',
-  !existsSync(new URL('../lib/client/TeamProgressBanner.js', import.meta.url))
-    && !existsSync(new URL('../lib/types/client/TeamProgressBanner.d.ts', import.meta.url)),
-)
-check(
-  'staged member routes use the official directory and primitive Menu instead of native route selects',
-  clientIndexSource.includes('@deepseek-ai/dsh-client-ui-model-selection/client')
-    && stagingPlanSource.includes('directory.store.subscribe')
-    && stagingPlanSource.includes("from '@deepseek-ai/dsh-client-ui-primitives'")
-    && stagingPlanSource.includes('<Menu')
-    && stagingPlanSource.includes('data-plan-model-trigger')
-    && !stagingPlanSource.includes('name="provider"')
-    && !stagingPlanSource.includes('name="model"')
-    && !stagingPlanSource.includes('name="modelRoute"')
-    && !stagingPlanSource.includes('name="reasoningEffort"'),
-)
-check(
-  'staged plan review offers continue, discard, and approve outcomes',
-  stagingPlanSource.includes('data-plan-continue')
-    && stagingPlanSource.includes('data-plan-discard')
-    && stagingPlanSource.includes("action: 'continue'")
-    && stagingPlanSource.includes("action: 'discard'")
-    && hostSource.includes("if (action === 'continue')")
-    && hostSource.includes("if (action === 'discard')"),
-)
-check(
-  'review decisions control the Captain turn instead of relying on front-end state alone',
-  toolsSource.includes('stagedPlanFeedbackContext')
-    && toolsSource.includes('stagedPlanDiscardContext')
-    && toolsSource.includes("fresh.planReviewState = 'awaiting_feedback'")
-    && toolsSource.includes("captain.cancel({ kind: 'user' }, { keepInbox: true })")
-    && toolsSource.includes('captain.followup(createUserMessage')
-    && toolsSource.includes('captain.inject(createUserMessage')
-    && toolsSource.includes('Do not create a replacement team')
-    && toolsSource.includes('Do not call agent_teams_create'),
-)
-check(
-  'continued planning uses a model-facing atomic staged-plan tool instead of state-file edits',
-  toolsSource.includes("name: 'agent_teams_edit_plan'")
-    && toolsSource.includes('updateStagedPlanBatch')
-    && toolsSource.includes("action: 'remove_member'")
-    && toolsSource.includes('none of the edits are saved')
-    && hostSource.includes('agent_teams_edit_plan')
-    && hostSource.includes('Never inspect or edit .agent-teams state files or plugin source code'),
-)
-check(
-  'discarded and stopped teams render terminal semantics instead of pending execution copy',
-  activityPanelSource.includes("const discarded = historic && team.phase === 'staged'")
-    && activityPanelSource.includes("t('member.status.discarded')")
-    && activityPanelSource.includes("t('member.status.stopped')")
-    && activityPanelSource.includes("'archive.discardedLabel'")
-    && localesSource.includes("'task.status.notRun': '未执行'")
-    && localesSource.includes("'member.state.notCreated': '未创建'"),
-)
-const expectedArtwork = [
-  'team-lead-v2.png',
-  'member-researcher-v2.png', 'member-engineer-v2.png',
-  'member-qa-v2.png', 'member-designer-v2.png',
-  'member-security-v2.png', 'member-docs-v2.png',
-  'member-data-v2.png', 'member-operator-v2.png',
-  'action-working-v2.png', 'action-thinking-v2.png',
-  'action-reporting-v2.png', 'action-celebrating-v2.png',
-  'action-sleeping-v2.png', 'action-sending-v2.png',
-].sort()
-const artworkDir = new URL('../assets/agent-teams/', import.meta.url)
-const packagedArtwork = (await readdir(artworkDir)).sort()
-check(
-  'artwork directory contains exactly the V2 captain, eight members, and six actions',
-  JSON.stringify(packagedArtwork) === JSON.stringify(expectedArtwork),
-  `artwork = ${JSON.stringify(packagedArtwork)}`,
-)
-const artworkHeaders = await Promise.all(expectedArtwork.map(async (name) => {
-  const data = await readFile(new URL(name, artworkDir))
-  return {
-    name,
-    png: data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
-    width: data.readUInt32BE(16),
-    height: data.readUInt32BE(20),
-    bitDepth: data[24],
-    colorType: data[25],
-  }
-}))
-check(
-  'all V2 artwork is 256x256 8-bit RGBA PNG',
-  artworkHeaders.every(image => image.png
-    && image.width === 256
-    && image.height === 256
-    && image.bitDepth === 8
-    && image.colorType === 6),
-  `invalid headers = ${JSON.stringify(artworkHeaders.filter(image => !image.png
-    || image.width !== 256
-    || image.height !== 256
-    || image.bitDepth !== 8
-    || image.colorType !== 6))}`,
-)
-check(
-  'client mapping and host allowlist reference every V2 artwork asset',
-  expectedArtwork.every(name => artworkSource.includes(name) || hostSource.includes(name))
-    && artworkSource.includes('member-data-v2.png')
-    && artworkSource.includes('member-operator-v2.png'),
-  'a packaged image is unreachable or one of the eighth-member mappings is missing',
-)
-const eightRoleArtwork = [
-  ['Researcher', 'Researcher'],
-  ['Engineer', 'Backend Engineer'],
-  ['QA', 'QA Engineer'],
-  ['Designer', 'UI UX Designer'],
-  ['Security', 'Security Reviewer'],
-  ['Docs', 'Docs Writer'],
-  ['Data', 'Data Analyst'],
-  ['Operator', 'Release Operator'],
-].map(([name, role]) => memberArtUrl(name, role))
-check(
-  'canonical eight-member roster resolves to eight distinct role images',
-  eightRoleArtwork.every(Boolean) && new Set(eightRoleArtwork).size === 8,
-  `resolved artwork = ${JSON.stringify(eightRoleArtwork)}`,
-)
-check(
-  'whale portraits use transparent cutouts instead of dark circular plates',
-  !/#0b1d33/iu.test(`${activityPanelCss}\n${agentTeamsCardCss}`)
-    && activityPanelCss.includes('object-fit: contain')
-    && activityPanelCss.includes('agentTeamsUnreadPulse')
-    && agentTeamsCardCss.includes('object-fit: contain'),
-  'portrait CSS should preserve each transparent role silhouette and use a compact unread dot',
-)
-check(
-  'all client surfaces consume host semantic colors without redefining the host palette',
-  [activityPanelCss, agentTeamsCardCss].every(css =>
-    !/--dsw-[a-z0-9-]+\s*:/.test(css)
-    && !/--dsw-static-/.test(css)
-    && !/--dsw-alias-(?:line-|bg-fill-|bg-module[),]|label-on-fill|state-(?:danger|warning)[),]|state-success[),])/.test(css)),
-  'light-only palette bridges or undefined legacy tokens break dark mode and portaled surfaces',
-)
-check(
-  'working member and captain states use the host semantic business color',
-  activityPanelSource.includes('data-activity={member.activity}')
-    && activityPanelCss.includes(".memberState[data-activity='working']")
-    && /\.memberState\[data-activity='working'\][^{]*\{[^}]*color:\s*var\(--dsw-alias-state-business-primary\)/su.test(activityPanelCss),
-  'the working label and glyph must follow the host business color',
-)
-check(
-  'activity panel uses the shell overlay instead of a page-breaking body portal',
-  clientIndexSource.includes("ctx.slots.inject('shell.overlay'")
-    && !clientIndexSource.includes('createRoot')
-    && activityPanelCss.includes('position: absolute')
-    && !activityPanelCss.includes('2147483000')
-    && !activityPanelCss.includes('position: fixed'),
-  'a body portal or unbounded z-index can cover host modal controls',
-)
-check(
-  'panel exposes drag, resize, dock, and fold interaction probes',
-  activityPanelSource.includes('data-drag-handle')
-    && activityPanelSource.includes('data-resize-edge="left"')
-    && activityPanelSource.includes('data-resize-edge="corner"')
-    && activityPanelSource.includes('data-control="dock"')
-    && activityPanelSource.includes('data-control="collapse"')
-    && activityPanelSource.includes('data-height-mode=')
-    && activityPanelSource.includes("height: autoHeight ? 'auto'")
-    && activityPanelCss.includes('.resizeHandle')
-    && activityPanelCss.includes(".resizeHandle[data-resize-edge='left']::after")
-    && activityPanelCss.includes(".resizeHandle[data-resize-edge='bottom']::after")
-    && activityPanelCss.includes('.resizeHandle:hover::after')
-    && activityPanelCss.includes('pointer-events: auto')
-    && activityPanelCss.includes('width: 28px')
-    && activityPanelCss.includes('height: 28px')
-    && activityPanelCss.includes('scrollbar-width: thin')
-    && !activityPanelCss.includes('scrollbar-width: none'),
-  'interactive panel controls must stay visible to browser verification',
-)
-check(
-  'staged plan editor keeps long plans compact and guards consequential actions',
-  stagingPlanSource.includes('aria-expanded={open}')
-    && stagingPlanSource.includes('aria-live=')
-    && stagingPlanSource.includes('confirmingRemove')
-    && !stagingPlanSource.includes('approvalArmed')
-    && stagingPlanSource.includes('data-plan-approve')
-    && stagingPlanSource.includes('data-confirming')
-    && activityPanelCss.includes('.planCardHeader')
-    && activityPanelCss.includes('.planFeedback')
-    && activityPanelCss.includes('.planApproveRow')
-    && activityPanelCss.includes('position: sticky')
-    && activityPanelCss.includes('container-type: inline-size')
-    && activityPanelCss.includes('@container agent-team')
-    && activityPanelCss.includes('.planSectionToggle:focus-visible'),
-  'plan review must expose disclosure, feedback, destructive confirmation, focus, sticky action, and container-based narrow-layout contracts',
-)
-check(
-  'running DAG tasks reuse the animated work glyph without losing focus context',
-  activityPanelSource.includes("task.state === 'running'")
-    && activityPanelSource.includes('className={css.dagRunningState}')
-    && activityPanelSource.includes('<WorkGlyph active />')
-    && activityPanelCss.includes(".dagNode[data-state='running'][data-dimmed='true']")
-    && activityPanelCss.includes('.dagRunningState {'),
-  'running work should stay visible in both normal and dependency-focus states',
-)
-check(
-  'running tasks surface the assignee model on the activity card',
-  activityPanelSource.includes('taskModelLabel(task, members)')
-    && activityPanelSource.includes('data-task-model={model || undefined}')
-    && activityPanelSource.includes('data-task-model={detailModel}')
-    && activityPanelSource.includes('member.status.executingModel')
-    && activityPanelSource.includes('css.taskDetailModel')
-    && activityPanelSource.includes('css.memberModel')
-    && activityPanelCss.includes('.taskDetailModel')
-    && activityPanelCss.includes('.memberModel'),
-  'the right-side card must show which model a running subtask is using',
-)
-// Member model badge contract (inline compact pill): the render path derives
-// one full member route and shows only its last segment visibly, while the
-// noninteractive span keeps the full route in title, aria-label, and the
-// data-member-model DOM probe. The badge must sit inside memberLine after the
-// role and before the member state; the old standalone third-line row is gone.
-const memberMapStart = activityPanelSource.indexOf('visibleMembers.map((member) => {')
-const memberBadgeSection = activityPanelSource.slice(
-  memberMapStart,
-  activityPanelSource.indexOf('css.assignmentLine', memberMapStart),
-)
-check(
-  'member model badge renders compact text inline with full-route metadata',
-  memberBadgeSection.includes('compactModelLabel(memberModel)')
-    && memberBadgeSection.includes('<span className={css.memberModel}')
-    && memberBadgeSection.includes('data-member-model={memberModel}')
-    && memberBadgeSection.includes('title={memberModel}')
-    && memberBadgeSection.includes('aria-label={memberModel}')
-    && memberBadgeSection.includes('role="img"')
-    && memberBadgeSection.indexOf('css.memberRole') < memberBadgeSection.indexOf('css.memberModel')
-    && memberBadgeSection.indexOf('css.memberModel') < memberBadgeSection.indexOf('css.memberState'),
-  'the badge must be a noninteractive role=img span inside memberLine after role and before member state, carrying the full route in title/aria-label/data-member-model',
-)
-check(
-  'the old separate third-line member model span and locale key are removed',
-  !activityPanelSource.includes("t('member.model'")
-    && !localesSource.includes("'member.model'"),
-  'the previous standalone model row and its orphaned locale key must not remain',
-)
-check(
-  'delegation list collapses finished members and sorts them by finish time (issue #192)',
-  activityPanelSource.includes('orderDelegationMembers(team.members, team.tasks)')
-    && activityPanelSource.includes("useState(false)")
-    && activityPanelSource.includes("'members.expandFinished'")
-    && localesSource.includes("'members.expandFinished'"),
-  'collapsed list must show running members only; expanding shows finished members newest-first',
-)
-const memberModelCssStart = activityPanelCss.indexOf('.memberModel {')
-const memberModelCssBlock = activityPanelCss.slice(
-  memberModelCssStart,
-  activityPanelCss.indexOf('}', memberModelCssStart) + 1,
-)
-check(
-  'member model badge is a compact neutral inline pill that truncates without overflowing',
-  memberModelCssBlock.includes('display: inline-flex')
-    && memberModelCssBlock.includes('border-radius: 999px')
-    && memberModelCssBlock.includes('background: var(--dsw-alias-button-ghost-active-fill)')
-    && memberModelCssBlock.includes('max-width: 132px')
-    && memberModelCssBlock.includes('min-width: 0')
-    && memberModelCssBlock.includes('overflow: hidden')
-    && memberModelCssBlock.includes('text-overflow: ellipsis')
-    && memberModelCssBlock.includes('white-space: nowrap'),
-  'the .memberModel pill needs bounded shrinkable width, ellipsis, and neutral fill so long routes never overflow the panel',
-)
-check(
-  'activity polling combines card demand with current-session cold discovery',
-  activityPanelSource.includes('if (current === undefined) return')
-    && activityPanelSource.includes('startActivityPolling(currentTargets, { discoverySessionId: current })')
-    && agentTeamsCardSource.includes('monitorAgentTeam(owner, data.teamId)')
-    && !agentTeamsCardSource.includes('setInterval(')
-    && !agentTeamsCardSource.includes('fetch('),
-  'the global panel must recover cardless sessions without duplicate card pollers',
-)
+check('usage section teaches the round-sync protocol', usageSectionText('x').includes('ctf_teams_report_finding') && usageSectionText('x').includes('ctf_teams_mark_flag'))
+check('usage section pins the writeup completion contract', usageSectionText('x').includes('WRITEUP.md'))
 
-console.log('2/8 pure rules')
+console.log('2/6 pure rules')
 check("sanitizeKey('My Team!') -> 'my-team'", sanitizeKey('My Team!') === 'my-team')
 // #15: an ASCII-only whitelist folded every non-Latin name onto one constant,
 // so distinct members shared a mailbox file and the second one was rejected as
@@ -536,7 +240,7 @@ check('in_progress -> completed allowed', transitionError('in_progress', 'comple
 check('completed -> in_progress denied', transitionError('completed', 'in_progress') !== undefined)
 check('same status is a no-op', transitionError('failed', 'failed') === undefined)
 
-console.log('3/8 dependency gating')
+console.log('3/6 dependency gating')
 const tasks = [
   { id: 't1', status: 'completed' },
   { id: 't2', status: 'pending' },
@@ -546,8 +250,8 @@ check('all-done deps satisfied', unsatisfiedDependencies(tasks, ['t1']).length =
 check('pending dep blocks', unsatisfiedDependencies(tasks, ['t2']).length === 1)
 check('failed dep blocks too', unsatisfiedDependencies(tasks, ['t3']).length === 1)
 
-console.log('4/8 on-disk team flow (temp dir)')
-const stateRoot = await mkdtemp(join(tmpdir(), 'dsh-agent-teams-verify-'))
+console.log('4/6 on-disk team flow (temp dir)')
+const stateRoot = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-verify-'))
 try {
   const team = {
     name: 'Verify Team',
@@ -656,7 +360,7 @@ try {
     await createTeamDir(stateRoot, malformed)
     let rejected = false
     try { await readTeam(stateRoot, malformed.id) }
-    catch (error) { rejected = /invalid AgentTeams state/.test(String(error)) }
+    catch (error) { rejected = /invalid CTFTeams state/.test(String(error)) }
     check(`cold-resume rejects non-string ${field} items`, rejected)
     await removeTeamDir(stateRoot, malformed.id)
   }
@@ -774,531 +478,7 @@ try {
   await rm(stateRoot, { recursive: true, force: true })
 }
 
-console.log('5/8 host visual-state functions (activity panel)')
-const { taskVisualState, taskDepthsById } = await import('../lib/state.js')
-const vtasks = [
-  { id: 't1', subject: 'a', status: 'completed', assignee: 'alice', dependencies: [], createdAt: 0, updatedAt: 0 },
-  { id: 't2', subject: 'b', status: 'pending', assignee: 'bob', dependencies: ['t1'], createdAt: 0, updatedAt: 0 },
-  { id: 't3', subject: 'c', status: 'in_progress', assignee: 'bob', dependencies: ['t2'], createdAt: 0, updatedAt: 0 },
-  { id: 't4', subject: 'd', status: 'pending', assignee: 'alice', dependencies: ['t9'], createdAt: 0, updatedAt: 0 },
-]
-check('completed -> completed visual state', taskVisualState('completed', [], vtasks) === 'completed')
-check('failed -> failed visual state', taskVisualState('failed', [], vtasks) === 'failed')
-check('cancelled -> cancelled visual state', taskVisualState('cancelled', [], vtasks) === 'cancelled')
-check('in_progress -> running visual state', taskVisualState('in_progress', [], vtasks) === 'running')
-check('pending with completed dep -> open', taskVisualState('pending', ['t1'], vtasks) === 'open')
-check('pending with open dep -> blocked', taskVisualState('pending', ['t2'], vtasks) === 'blocked')
-check('missing dependency is ignored (not blocked)', taskVisualState('pending', ['t9'], vtasks) === 'open')
-const depths = taskDepthsById(vtasks)
-check('t1 depth 0', depths.get('t1') === 0)
-check('t2 depth 1 (longest path)', depths.get('t2') === 1)
-check('t3 depth 2', depths.get('t3') === 2)
-check('missing dep contributes no depth', depths.get('t4') === 0)
-
-console.log('6/8 client relationship projections')
-const projectionTasks = [
-  { id: 't4', dependencies: ['t2'], depth: 2 },
-  { id: 't1', dependencies: [], depth: 0 },
-  { id: 't3', dependencies: ['t1'], depth: 1 },
-  { id: 't2', dependencies: ['t1'], depth: 1 },
-  { id: 't5', dependencies: [], depth: Number.NaN },
-]
-const stages = taskStages(projectionTasks)
-check('task stages sort by depth', stages.map(stage => stage.depth).join(',') === '0,1,2')
-check('task stages sort ids naturally', stages[1]?.tasks.map(task => task.id).join(',') === 't2,t3')
-check('non-finite depth falls back to stage 0', stages[0]?.tasks.some(task => task.id === 't5') === true)
-const chain = relatedTaskIds('t2', projectionTasks)
-check('relationship chain includes upstream dependency', chain.has('t1'))
-check('relationship chain includes focused task', chain.has('t2'))
-check('relationship chain includes downstream dependent', chain.has('t4'))
-check('relationship chain excludes sibling branch', !chain.has('t3'))
-check(
-  'pinned dependency chain wins over keyboard and hover previews',
-  dependencyFocusTaskId('pinned', 'keyboard', 'hover') === 'pinned',
-)
-check(
-  'keyboard dependency chain wins over delayed hover preview',
-  dependencyFocusTaskId(null, 'keyboard', 'hover') === 'keyboard',
-)
-check(
-  'hover dependency chain is used without a pinned or keyboard task',
-  dependencyFocusTaskId(null, null, 'hover') === 'hover',
-)
-const cyclic = [
-  { id: 'a', dependencies: ['b'], depth: 0 },
-  { id: 'b', dependencies: ['a'], depth: 1 },
-]
-check('relationship traversal is cycle-safe', relatedTaskIds('a', cyclic).size === 2)
-check('edge-free tasks switch to the fill-width parallel grid', usesParallelTaskGrid([
-  { id: 't1', dependencies: [], depth: 0 },
-  { id: 't2', dependencies: [], depth: 0 },
-  { id: 't3', dependencies: ['missing'], depth: 0 },
-]))
-const liveTeam = {
-  captainSessionId: 'captain-1',
-  members: [{ name: 'analyst', status: 'working', activity: 'working', currentTask: 't1' }],
-  tasks: [{ id: 't1', subject: 'Clarify requirements', status: 'in_progress' }],
-}
-check('live captain team is selected only for the current session', liveCaptainTeam([liveTeam], 'captain-1') === liveTeam)
-check('halted captain team is hidden from the composer banner', liveCaptainTeam([{ ...liveTeam, halted: true }], 'captain-1') === undefined)
-check('active team with working members stays visible', teamIsActive(liveTeam) === true)
-check('planning roster with no tasks still shows the banner', teamIsActive({
-  members: [{ name: 'analyst', status: 'idle', activity: 'idle' }],
-  tasks: [],
-}) === true)
-check('halted team is not active', teamIsActive({ ...liveTeam, halted: true }) === false)
-check('staged team is not presented as actively executing', teamIsActive({ ...liveTeam, phase: 'staged' }) === false)
-check('settled failed/completed team is not waiting to be scheduled', teamIsActive({
-  members: [{ name: 'analyst', status: 'idle', activity: 'idle' }],
-  tasks: [
-    { id: 't1', status: 'completed' },
-    { id: 't2', status: 'failed' },
-  ],
-}) === false)
-check('progress summary prefers running task titles', teamProgressSummary(liveTeam, '、').detail === 'Clarify requirements')
-check('delegation list keeps running members first in snapshot order', orderDelegationMembers([
-  { name: 'finished-b', activity: 'idle' },
-  { name: 'running-a', activity: 'working' },
-  { name: 'finished-a', activity: 'idle' },
-], [
-  { assignee: 'finished-a', status: 'completed', updatedAt: 20 },
-  { assignee: 'finished-b', status: 'completed', updatedAt: 10 },
-  { assignee: 'running-a', status: 'in_progress', updatedAt: 5 },
-]).map((member) => member.name).join(',') === 'running-a,finished-a,finished-b')
-check('delegation list sorts finished members by finish time, newest first', orderDelegationMembers([
-  { name: 'old', activity: 'idle' },
-  { name: 'new', activity: 'idle' },
-  { name: 'unstamped', activity: 'idle' },
-], [
-  { assignee: 'old', status: 'failed', updatedAt: 3 },
-  { assignee: 'new', status: 'cancelled', updatedAt: 9 },
-]).map((member) => member.name).join(',') === 'new,old,unstamped')
-check('member finish time ignores open tasks and missing stamps', memberFinishedAt('solo', [
-  { assignee: 'solo', status: 'in_progress', updatedAt: 99 },
-  { assignee: 'solo', status: 'completed' },
-]) === undefined && memberFinishedAt('solo', [
-  { assignee: 'solo', status: 'completed', updatedAt: 7 },
-  { assignee: 'other', status: 'completed', updatedAt: 50 },
-]) === 7)
-check('a real dependency keeps the layered DAG layout', !usesParallelTaskGrid([
-  { id: 't1', dependencies: [], depth: 0 },
-  { id: 't2', dependencies: ['t1'], depth: 1 },
-]))
-const dag = compactDagLayout(projectionTasks.filter(task => Number.isFinite(task.depth)))
-check('compact DAG lays dependency depths out left-to-right',
-  dag.nodes.find(node => node.task.id === 't1')?.x === 0
-    && dag.nodes.find(node => node.task.id === 't2')?.x === 118
-    && dag.nodes.find(node => node.task.id === 't4')?.x === 236)
-check('compact DAG keeps stable rows and reference node geometry',
-  dag.nodes.find(node => node.task.id === 't3')?.y === 38
-    && dag.width === 328
-    && dag.height === 68
-    && COMPACT_DAG_NODE_WIDTH === 92
-    && COMPACT_DAG_NODE_HEIGHT === 30)
-check('compact DAG emits one curved SVG edge per valid dependency',
-  dag.edges.length === 3
-    && dag.edges.some(edge => edge.from === 't1' && edge.to === 't2' && edge.path.startsWith('M92 15C')))
-check(
-  'task model labels prefer the snapshot field and fall back to the assignee route',
-  memberRouteLabel({ provider: 'openai', model: 'gpt-5.6-sol' }) === 'openai/gpt-5.6-sol'
-    && memberRouteLabel({ model: 'grok-4.6' }) === 'grok-4.6'
-    && compactModelLabel('openai/gpt-5.6-sol') === 'gpt-5.6-sol'
-    && taskModelLabel({ assignee: 'analyst', model: 'openai/gpt-5.6-sol' }, []) === 'openai/gpt-5.6-sol'
-    && taskModelLabel({ assignee: 'analyst' }, [{ name: 'analyst', provider: 'grok', model: 'grok-4.5' }]) === 'grok/grok-4.5'
-    && taskModelLabel({ assignee: 'analyst' }, []) === '',
-)
-check(
-  'existing member route helpers retain expanded fallback regression coverage',
-  memberRouteLabel({ provider: 'openai', model: 'gpt-5.6-sol' }) === 'openai/gpt-5.6-sol'
-    && compactModelLabel('openai/gpt-5.6-sol') === 'gpt-5.6-sol'
-    && memberRouteLabel({ model: 'grok-4.6' }) === 'grok-4.6'
-    && compactModelLabel('grok-4.6') === 'grok-4.6'
-    && memberRouteLabel({}) === ''
-    && memberRouteLabel(undefined) === ''
-    && compactModelLabel('') === ''
-    && compactModelLabel('   ') === ''
-    && memberRouteLabel({ provider: ' openai ', model: ' gpt-5.6-sol ' }) === 'openai/gpt-5.6-sol'
-    && memberRouteLabel({ provider: ' ', model: ' gpt-5.6-sol ' }) === 'gpt-5.6-sol'
-    && compactModelLabel(' openai/gpt-5.6-sol ') === 'gpt-5.6-sol'
-    && memberRouteLabel({ provider: 'openai/org', model: 'gpt-5.6-sol' }) === 'openai/org/gpt-5.6-sol'
-    && compactModelLabel('openai/org/gpt-5.6-sol') === 'gpt-5.6-sol',
-)
-const panelBounds = { width: 1440, height: 900, anchorRight: 1440 }
-const dockedPanel = resolvePanelGeometry(DEFAULT_PANEL_LAYOUT, panelBounds)
-check('docked panel follows the shell anchor and retains an available-height ceiling',
-  dockedPanel.mode === 'docked'
-    && dockedPanel.x === 1034
-    && dockedPanel.y === 64
-    && dockedPanel.width === 388
-    && dockedPanel.height === 788
-    && dockedPanel.heightMode === 'auto'
-    && panelUsesAutoHeight(dockedPanel, panelBounds)
-    && panelMaximumHeight(dockedPanel, panelBounds) === 788)
-const floatingPanel = floatPanelLayout(dockedPanel, panelBounds)
-const movedPanel = movePanelLayout(floatingPanel, 999, 999, panelBounds)
-check('floating panel movement clamps every edge inside the shell',
-  movedPanel.mode === 'floating' && movedPanel.x === 1040 && movedPanel.y === 100)
-const widerDockedPanel = resizePanelLayout(dockedPanel, 'left', -120, 0, panelBounds)
-check('docked left-edge resize preserves the right anchor',
-  widerDockedPanel.width === 508 && widerDockedPanel.x === 914)
-const narrowerFloatingPanel = resizePanelLayout(floatingPanel, 'left', 200, 0, panelBounds)
-check('floating left-edge resize preserves the opposite edge at minimum width',
-  narrowerFloatingPanel.width === 320 && narrowerFloatingPanel.x === 1102)
-const cornerPanel = resizePanelLayout({ ...floatingPanel, x: 400, y: 200, width: 388, height: 500 }, 'corner', 1200, 1200, panelBounds)
-check('floating corner resize preserves its top-left anchor at shell limits',
-  cornerPanel.x === 400 && cornerPanel.y === 200
-    && cornerPanel.width === 640 && cornerPanel.height === 688
-    && cornerPanel.heightMode === 'manual'
-    && !panelUsesAutoHeight(cornerPanel, panelBounds))
-const bottomPanel = resizePanelLayout({ ...floatingPanel, x: 400, y: 200, width: 388, height: 500 }, 'bottom', 0, 1200, panelBounds)
-check('floating bottom resize preserves its top edge at the shell limit',
-  bottomPanel.y === 200 && bottomPanel.height === 688
-    && bottomPanel.heightMode === 'manual')
-const redockedPanel = dockPanelLayout({ ...floatingPanel, width: 472, x: 120, y: 100, heightMode: 'manual' }, panelBounds)
-check('dock toggle preserves width while restoring shell alignment and content-fit height',
-  redockedPanel.x === 950 && redockedPanel.width === 472 && redockedPanel.heightMode === 'auto')
-const compactBounds = { width: 900, height: 700, anchorRight: 900 }
-const compactPanel = resolvePanelGeometry(floatingPanel, compactBounds)
-check('compact shell disables free geometry and uses a balanced inset',
-  compactPanelForBounds(compactBounds)
-    && compactPanel.x === 12 && compactPanel.y === 12
-    && compactPanel.width === 876 && compactPanel.height === 676
-    && panelUsesAutoHeight({ ...compactPanel, heightMode: 'manual' }, compactBounds)
-    && panelMaximumHeight(compactPanel, compactBounds) === 676)
-check('persisted panel state rejects corrupt or partial values',
-  parsePanelLayout('{"mode":"floating","x":1}').mode === 'docked'
-    && parsePanelLayout('not-json').mode === 'docked')
-const migratedPanel = parsePanelLayout('{"mode":"floating","x":120,"y":80,"width":420,"height":600}')
-const manualPanel = parsePanelLayout('{"mode":"floating","x":120,"y":80,"width":420,"height":600,"heightMode":"manual"}')
-const legacyDockedManualPanel = parsePanelLayout('{"mode":"docked","x":120,"y":80,"width":420,"height":600,"heightMode":"manual"}')
-check('persisted panel height migrates to auto but preserves explicit manual sizing',
-  migratedPanel.heightMode === 'auto'
-    && panelUsesAutoHeight(migratedPanel, panelBounds)
-    && manualPanel.heightMode === 'manual'
-    && !panelUsesAutoHeight(manualPanel, panelBounds)
-    && legacyDockedManualPanel.heightMode === 'auto')
-check(
-  'expanded activity panel belongs only to its current session',
-  activityPanelExpandedForSession(true, 'session-a', 'session-a')
-    && !activityPanelExpandedForSession(true, 'session-a', 'session-b')
-    && !activityPanelExpandedForSession(true, 'session-a', undefined),
-)
-check(
-  'restored live activity stays collapsed when a conversation is reopened',
-  !activityPanelShouldAutoExpand({
-    alreadyAutoOpened: false,
-    pageSettled: true,
-    restoreComplete: true,
-    previousLiveTeamIds: new Set(['restored-team']),
-    currentLiveTeamIds: ['restored-team'],
-  }),
-)
-check(
-  'archived-only conversation restore never auto-expands the activity panel',
-  !activityPanelShouldAutoExpand({
-    alreadyAutoOpened: false,
-    pageSettled: true,
-    restoreComplete: true,
-    previousLiveTeamIds: new Set(),
-    currentLiveTeamIds: [],
-  }),
-)
-check(
-  'a new live team appearing after restore still auto-expands once',
-  activityPanelShouldAutoExpand({
-    alreadyAutoOpened: false,
-    pageSettled: true,
-    restoreComplete: true,
-    previousLiveTeamIds: new Set(),
-    currentLiveTeamIds: ['new-team'],
-  }) && !activityPanelShouldAutoExpand({
-    alreadyAutoOpened: true,
-    pageSettled: true,
-    restoreComplete: true,
-    previousLiveTeamIds: new Set(),
-    currentLiveTeamIds: ['new-team'],
-  }),
-)
-let monitorNotifications = 0
-const unsubscribeMonitor = subscribeActivityMonitorTargets(() => { monitorNotifications += 1 })
-const releaseMonitorOne = monitorAgentTeam('verify-session', 'verify-team')
-const releaseMonitorTwo = monitorAgentTeam('verify-session', 'verify-team')
-const registeredMonitor = getActivityMonitorTargetsSnapshot()[0]
-check(
-  'activity monitor coalesces duplicate cards into one shared target',
-  getActivityMonitorTargetsSnapshot().length === 1
-    && registeredMonitor?.sessionId === 'verify-session'
-    && registeredMonitor.teamId === 'verify-team',
-)
-releaseMonitorOne()
-check('one card cleanup keeps another card monitoring', getActivityMonitorTargetsSnapshot().length === 1)
-if (registeredMonitor !== undefined) settleActivityMonitorTargets(new Set([registeredMonitor.key]))
-check('archived targets retire from polling', getActivityMonitorTargetsSnapshot().length === 0)
-releaseMonitorTwo()
-unsubscribeMonitor()
-check('activity monitor publishes lifecycle changes without duplicate-card churn', monitorNotifications === 2)
-
-let dormantFetches = 0
-let dormantSchedules = 0
-const dormantPoller = startActivityPolling([], {
-  fetchState: async () => {
-    dormantFetches += 1
-    return { ok: true, json: async () => ({ teams: [] }) }
-  },
-  schedule: () => {
-    dormantSchedules += 1
-    return 0
-  },
-})
-await dormantPoller.firstTick
-dormantPoller.stop()
-check(
-  'no monitor targets create no request and no timer',
-  dormantFetches === 0 && dormantSchedules === 0,
-)
-
-const discoveryUrls = []
-const discoveryIntervals = []
-let scheduledDiscoveryTick
-const discoveryPoller = startActivityPolling([], {
-  discoverySessionId: 'cold-captain',
-  fetchState: async (url) => {
-    discoveryUrls.push(url)
-    return { ok: true, json: async () => ({ teams: [] }) }
-  },
-  schedule: (callback, intervalMs) => {
-    scheduledDiscoveryTick = callback
-    discoveryIntervals.push(intervalMs)
-    return 'discovery-timer'
-  },
-  cancel: () => {},
-  publishSnapshots: () => {},
-})
-await discoveryPoller.firstTick
-scheduledDiscoveryTick?.()
-await new Promise((resolve) => setImmediate(resolve))
-discoveryPoller.stop()
-check(
-  'a cardless cold session restores live and archive once, then probes at the discovery cadence',
-  discoveryUrls.length === 3
-    && discoveryUrls[0] === '/plugins/dsh-agent-teams/state'
-    && discoveryUrls[1]?.endsWith('?archived=1')
-    && discoveryUrls[2] === '/plugins/dsh-agent-teams/state'
-    && discoveryIntervals.length === 1
-    && discoveryIntervals[0] === ACTIVITY_PROBE_MS,
-)
-
-// Regression (GitHub #57): a team created AFTER the cold-start discovery pass
-// (e.g. a run_code-wrapped agent_teams_create) must be discovered without a
-// manual reload. The controller keeps probing while its discovery session owns
-// no team yet, so a later team is published — and once found, the probe
-// upgrades to the live cadence so the panel stays fresh.
-const latePublished = []
-const lateUrls = []
-const lateIntervals = []
-let lateLiveTeams = []
-let lateTick = () => {}
-const latePoller = startActivityPolling([], {
-  discoverySessionId: 'cold-captain',
-  fetchState: async (url) => {
-    lateUrls.push(url)
-    if (url === '/plugins/dsh-agent-teams/state') {
-      return { ok: true, json: async () => ({ teams: lateLiveTeams }) }
-    }
-    return { ok: true, json: async () => ({ teams: [] }) }
-  },
-  schedule: (callback, intervalMs) => {
-    lateTick = callback
-    lateIntervals.push(intervalMs)
-    return 'late-timer'
-  },
-  cancel: () => {},
-  publishSnapshots: (update) => { latePublished.push(update) },
-})
-await latePoller.firstTick
-lateTick()
-await new Promise((resolve) => setImmediate(resolve))
-check(
-  'a cardless session keeps probing at the discovery cadence after an empty first pass',
-  lateUrls.length === 3
-    && lateIntervals.length === 1
-    && lateIntervals[0] === ACTIVITY_PROBE_MS,
-)
-lateLiveTeams = [{
-  workspace: '',
-  teamId: 'post-discovery-team',
-  name: 'Post Discovery Team',
-  captainSessionId: 'cold-captain',
-  members: [],
-  tasks: [],
-  messageCount: 0,
-  captainInbox: [],
-}]
-lateTick()
-await new Promise((resolve) => setImmediate(resolve))
-latePoller.stop()
-check(
-  'a team created after the discovery pass is picked up without a reload and upgrades to the live cadence',
-  lateUrls.length === 4
-    && latePublished.some((update) => update.teams?.some((team) => team.teamId === 'post-discovery-team'))
-    && lateIntervals.length === 2
-    && lateIntervals[1] === ACTIVITY_POLL_MS,
-)
-
-// Explicit card targets are demanded work: they start at the live cadence and
-// are never downgraded to the low-frequency probe.
-const cardIntervals = []
-const cardPoller = startActivityPolling([{
-  key: 'card-target',
-  sessionId: 'card-session',
-  teamId: 'card-team',
-}], {
-  fetchState: async () => ({ ok: true, json: async () => ({ teams: [] }) }),
-  schedule: (_callback, intervalMs) => {
-    cardIntervals.push(intervalMs)
-    return 'card-timer'
-  },
-  cancel: () => {},
-  publishSnapshots: () => {},
-})
-await cardPoller.firstTick
-cardPoller.stop()
-check(
-  'explicit card targets poll at the live cadence from the start',
-  cardIntervals.length === 1 && cardIntervals[0] === ACTIVITY_POLL_MS,
-)
-
-const pollTarget = { key: 'poll-target', sessionId: 'poll-session', teamId: 'poll-team' }
-let resolveSlowLive
-const slowLive = new Promise((resolve) => { resolveSlowLive = resolve })
-const slowFetchSignals = []
-let slowFetchCount = 0
-let scheduledTick
-let cancelledTimer = false
-let latePublications = 0
-const slowPoller = startActivityPolling([pollTarget], {
-  fetchState: async (_url, init) => {
-    slowFetchCount += 1
-    slowFetchSignals.push(init.signal)
-    return slowLive
-  },
-  schedule: (callback) => {
-    scheduledTick = callback
-    return 'slow-timer'
-  },
-  cancel: (timer) => { cancelledTimer = timer === 'slow-timer' },
-  publishSnapshots: () => { latePublications += 1 },
-})
-scheduledTick?.()
-scheduledTick?.()
-await Promise.resolve()
-check('a slow state request never overlaps the next interval', slowFetchCount === 1)
-slowPoller.stop()
-check(
-  'stopping activity polling clears its timer and aborts the in-flight request',
-  cancelledTimer && slowFetchSignals[0]?.aborted === true,
-)
-resolveSlowLive?.({ ok: true, json: async () => ({ teams: [] }) })
-await slowPoller.firstTick
-check('a late response after stop cannot publish snapshots', latePublications === 0)
-
-const fallbackUrls = []
-const settledFallbackKeys = []
-let fallbackResponseIndex = 0
-const fallbackResponses = [
-  { ok: true, json: async () => ({ teams: [] }) },
-  { ok: true, json: async () => ({ teams: [] }) },
-]
-const fallbackPoller = startActivityPolling([pollTarget], {
-  fetchState: async (url) => {
-    fallbackUrls.push(url)
-    return fallbackResponses[fallbackResponseIndex++]
-  },
-  schedule: () => 'fallback-timer',
-  cancel: () => {},
-  publishSnapshots: () => {},
-  settleTargets: (keys) => { settledFallbackKeys.push(...keys) },
-})
-await fallbackPoller.firstTick
-fallbackPoller.stop()
-check(
-  'a live miss checks archive once and retires even an orphaned legacy card',
-  fallbackUrls.length === 2
-    && fallbackUrls[1]?.endsWith('?archived=1')
-    && settledFallbackKeys.length === 1
-    && settledFallbackKeys[0] === pollTarget.key,
-)
-const navigationCalls = []
-const addressedNavigation = await openAgentTeamMember({
-  open: (id) => { navigationCalls.push(['open', id]) },
-  refreshSubagents: async (id) => { navigationCalls.push(['refresh', id]) },
-  subagentAddress: () => undefined,
-  openSubagent: (address) => { navigationCalls.push(['openSubagent', address]) },
-}, 'captain-session', 'member-session')
-check(
-  'rc.8 member navigation refreshes the parent catalog and opens an addressed continuable child',
-  addressedNavigation === 'subagent'
-    && navigationCalls[0]?.[0] === 'refresh'
-    && navigationCalls[1]?.[0] === 'openSubagent'
-    && navigationCalls[1]?.[1]?.parentSessionId === 'captain-session'
-    && navigationCalls[1]?.[1]?.childSessionId === 'member-session'
-    && navigationCalls[1]?.[1]?.mode === 'continuable',
-)
-const legacyNavigationCalls = []
-const legacyNavigation = await openAgentTeamMember({
-  open: (id) => { legacyNavigationCalls.push(id) },
-}, 'captain-session', 'member-session')
-check(
-  'pre-rc.8 member navigation keeps the ordinary session fallback',
-  legacyNavigation === 'session' && legacyNavigationCalls[0] === 'member-session',
-)
-const panelNavigationCalls = []
-await openAgentTeamMember({
-  open() { throw new Error('expected addressed navigation') },
-  refreshSubagents: async () => {},
-  openSubagent: () => panelNavigationCalls.push('member'),
-}, 'captain-session', 'member-session', {
-  beginNavigation: () => new AbortController().signal,
-  selectPanel: id => panelNavigationCalls.push(id),
-})
-check('0.1.5 member navigation selects the Conversation after opening its transcript',
-  JSON.stringify(panelNavigationCalls) === JSON.stringify(['member', null]))
-const supersededNavigation = new AbortController()
-const cancelledNavigation = await openAgentTeamMember({
-  open() { throw new Error('cancelled navigation must not open a Session') },
-  refreshSubagents: async () => { supersededNavigation.abort() },
-  openSubagent() { throw new Error('cancelled refresh must not steal the current Session') },
-}, 'captain-session', 'member-session', {
-  beginNavigation: () => supersededNavigation.signal,
-  selectPanel() { throw new Error('cancelled navigation must not change main panel') },
-})
-check('0.1.5 superseded catalog refresh cannot steal navigation', cancelledNavigation === 'cancelled')
-check(
-  'agent team cards derive a stable id from the standard create tool call',
-  JSON.stringify(parseAgentTeamsCreateArgs('{"name":" Repo Review 2W! "}'))
-    === JSON.stringify({ teamId: 'repo-review-2w', name: 'Repo Review 2W!' }),
-)
-check('malformed create tool arguments do not create a card', parseAgentTeamsCreateArgs('{bad') === undefined)
-
-const captainDeliveries = []
-const captainSteered = steerCaptainReport(
-  { steer: message => captainDeliveries.push(message) },
-  'alice',
-  'finished t1',
-)
-check(
-  'member report delivery calls the live captain steer API',
-  captainSteered
-    && captainDeliveries.length === 1
-    && captainDeliveries[0]?.content[0]?.type === 'text'
-    && captainDeliveries[0]?.content[0]?.text === 'AgentTeams message from member alice:\n\nfinished t1',
-)
-check(
-  'failed live captain delivery falls back to the durable mailbox',
-  steerCaptainReport({ steer: () => { throw new Error('offline') } }, 'alice', 'finished t1') === false,
-)
-
-console.log('7/8 member model selection and continuation restore')
+console.log('5/6 member model selection and continuation restore')
 const captain = {
   id: 'captain-session',
   options: { provider: 'birth-provider', model: 'birth-model' },
@@ -1467,7 +647,7 @@ await spawnMember(
   captain,
   spawnTeam,
   spawnMemberRecord,
-  '.agent-teams',
+  '.ctf-teams',
   new AbortController().signal,
 )
 check(
@@ -1529,16 +709,16 @@ const selectionRuntime = installMemberSelectionRuntime({
       return () => undefined
     },
   },
-}, '.agent-teams')
+}, '.ctf-teams')
 const freshChild = fakeChildContext({
-  label: 'agent-teams:fresh-team:backend',
+  label: 'ctf-teams:fresh-team:backend',
   parentSessionId: 'captain-session',
   cwd: process.cwd(),
 })
 let disposeFresh
 await selectionRuntime.withPending(
   'captain-session',
-  'agent-teams:fresh-team:backend',
+  'ctf-teams:fresh-team:backend',
   overriddenSelection,
   async () => {
     disposeFresh = setupMemberSelection(freshChild.context)
@@ -1553,9 +733,9 @@ check(
 )
 disposeFresh()
 
-const restoreWorkspace = await mkdtemp(join(tmpdir(), 'dsh-agent-teams-selection-'))
+const restoreWorkspace = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-selection-'))
 try {
-  const restoreStateRoot = join(restoreWorkspace, '.agent-teams')
+  const restoreStateRoot = join(restoreWorkspace, '.ctf-teams')
   await createTeamDir(restoreStateRoot, {
     name: 'Restore Team',
     id: 'restore-team',
@@ -1574,7 +754,7 @@ try {
     taskSeq: 0,
   })
   const coldChild = fakeChildContext({
-    label: 'agent-teams:restore-team:reviewer',
+    label: 'ctf-teams:restore-team:reviewer',
     parentSessionId: 'captain-session',
     cwd: restoreWorkspace,
     agentProvider: 'cold-provider',
@@ -1593,7 +773,7 @@ try {
   await rm(restoreWorkspace, { recursive: true, force: true })
 }
 
-console.log('8/8 state-file atomic write hardening (Windows EPERM fallback)')
+console.log('6/6 state-file atomic write hardening (Windows EPERM fallback)')
 // The durable state files (team.json, mailboxes, retired index) are replaced
 // through `atomicWriteText` = write-temp + rename. On Windows a rename over an
 // existing target throws EPERM while another process holds it open without
@@ -1601,7 +781,7 @@ console.log('8/8 state-file atomic write hardening (Windows EPERM fallback)')
 // degrades to a direct overwrite (content-equivalent because the temp file was
 // fully written). These checks pin that behavior through the injectable seam
 // and, on Windows, against a real cross-process handle lock.
-const atomicStateRoot = await mkdtemp(join(tmpdir(), 'dsh-agent-teams-atomic-'))
+const atomicStateRoot = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-atomic-'))
 try {
   const {
     replaceFileAtomicOrDirect,

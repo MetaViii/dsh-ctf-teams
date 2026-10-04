@@ -32,7 +32,7 @@ async function fixture(t, { captainStatus = 'idle', fallback, captainOffline = f
     await Promise.all(pendingFailures)
     await rm(workspace, { recursive: true, force: true })
   })
-  const stateRoot = join(workspace, '.agent-teams')
+  const stateRoot = join(workspace, '.ctf-teams')
   const listeners = new Map()
   const steers = []
   const deliveries = []
@@ -55,7 +55,7 @@ async function fixture(t, { captainStatus = 'idle', fallback, captainOffline = f
     session: {
       header: { cwd: workspace, parentSession: captain.id, seedLength: 0 },
       events: [{ type: 'subagent/descriptor', data: {
-        version: 3, mode: 'continuable', provider: 'spawn', label: 'agent-teams:team:worker',
+        version: 3, mode: 'continuable', provider: 'spawn', label: 'ctf-teams:team:worker',
         agentProvider: 'fake', agentModel: 'primary',
       } }],
       append(type, data) { sessionEvents.push({ type, data }) },
@@ -99,11 +99,11 @@ async function fixture(t, { captainStatus = 'idle', fallback, captainOffline = f
       return () => { for (const dispose of disposers) dispose() }
     }
   }
-  const scheduler = installTeamScheduler(ctx, { stateDir: '.agent-teams' })
-  const runtime = installMemberSelectionRuntime(ctx, '.agent-teams', (workspace, teamId, memberName) => (
+  const scheduler = installTeamScheduler(ctx, { stateDir: '.ctf-teams' })
+  const runtime = installMemberSelectionRuntime(ctx, '.ctf-teams', (workspace, teamId, memberName) => (
     scheduler.kickMember(workspace, teamId, memberName)
   ))
-  const dispose = await runtime.withPending(captain.id, 'agent-teams:team:worker', {
+  const dispose = await runtime.withPending(captain.id, 'ctf-teams:team:worker', {
     provider: 'fake', model: 'primary', ...fallback ? { fallback } : {},
   }, () => setup({
     agent: child,

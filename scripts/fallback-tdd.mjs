@@ -35,8 +35,8 @@ check('member prompt config is normalized', profile.members[0].executionPrompt =
 throws('fallback requires provider', () => resolveTeamProfile({ bad: { members: [{ name: 'w', fallback: { model: 'x' } }] } }, 'bad', 8))
 throws('fallback requires model', () => resolveTeamProfile({ bad: { members: [{ name: 'w', fallback: { provider: 'x' } }] } }, 'bad', 8))
 
-const assignment = assignmentPrompt({ taskId: 't1', memberName: 'worker', memberId: 'm', attempt: 1, attemptId: 'a', subject: 'Work', dependencyOutputs: [], executionPrompt: prompt }, '.agent-teams', 'demo')
-const persona = memberPersona({ name: 'Demo', id: 'demo', description: 'goal', captainSessionId: 'c', createdAt: 0, profile: { name: 'demo' }, members: [], tasks: [], taskSeq: 0 }, { name: 'worker', id: 'm', executionPrompt: prompt, joinedAt: 0, status: 'idle' }, '.agent-teams')
+const assignment = assignmentPrompt({ taskId: 't1', memberName: 'worker', memberId: 'm', attempt: 1, attemptId: 'a', subject: 'Work', dependencyOutputs: [], executionPrompt: prompt }, '.ctf-teams', 'demo')
+const persona = memberPersona({ name: 'Demo', id: 'demo', description: 'goal', captainSessionId: 'c', createdAt: 0, profile: { name: 'demo' }, members: [], tasks: [], taskSeq: 0 }, { name: 'worker', id: 'm', executionPrompt: prompt, joinedAt: 0, status: 'idle' }, '.ctf-teams')
 check('prompt is present in assignment', assignment.includes(prompt))
 check('prompt is present in persona', persona.includes(prompt))
 check('assignment does not require process disclosure', !assignment.includes('record the process') || assignment.includes(prompt))

@@ -3,235 +3,217 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-agent-teams turns one DeepSeek Harness session into a coordinated multi-agent team">
+  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-ctf-teams turns one DeepSeek Harness session into a multi-agent CTF squad">
 </p>
 
-<p align="center">
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://img.shields.io/badge/recommended%20by-dshfind-FFD700?style=flat-square" alt="Recommended by dshfind"></a>
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?lang=en" alt="dshfind score"></a>
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?metric=downloads&amp;lang=en" alt="dshfind downloads"></a>
-</p>
+# dsh-ctf-teams
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@nanmicoder/dsh-agent-teams"><img src="https://img.shields.io/npm/v/@nanmicoder/dsh-agent-teams?style=flat-square&amp;color=5B4CF0" alt="npm version"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0B7285?style=flat-square" alt="MIT license"></a>
-  <a href="./cordis.patch.yml"><img src="https://img.shields.io/badge/DSH-Web%20%2B%20Headless-5B4CF0?style=flat-square" alt="DSH Web and Headless"></a>
-</p>
+**CTFTeams** for DeepSeek Harness — a fork of [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) rebuilt for CTF. One session becomes the **captain** and dispatches a squad of full-stack CTF experts (web, pwn, reverse, crypto, forensics, misc — every agent covers every domain). They attack the challenge **in parallel from different angles**, sync progress **every round**, track candidate flags on a shared board, and render the whole solve through a **terminal dashboard**.
 
-## One prompt. A working team.
+## Why
 
-`dsh-agent-teams` turns the current DeepSeek Harness session into a captain that can assemble durable sub-agents, split a goal into dependency-aware tasks, and coordinate work through direct messages.
+A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-teams machinery (durable continuable members, task DAG with dependencies, mailboxes, two-phase plan approval, quality gates) and adds the parts CTF actually needs:
 
-Ask in natural language. The plugin provides the team protocol, 14 coordination tools, persistent state, an automatic shared-task scheduler, and a live Web UI—without requiring a separate workflow engine.
+- **A selectable agent mode** — the bundle also declares the `ctf-teams` Harness **agent preset** (`CTF 团队模式`), so the squad is a mode you pick in the app (session mode picker / Settings → General default preset) rather than a tool set you have to remember. The mode composes a full agent plane (shell, filesystem, skills, delegation, plan mode, compaction) plus a CTF captain persona; the `ctf_teams_*` tools come from the profile-wide host row and stay callable in every mode.
+- **`ctf-teams` team profile** — a built-in, zero-config squad definition: `/ctf-teams <challenge>` dispatches four interchangeable full-stack experts at the challenge and the captain plans the attack graph.
+- **Round-sync protocol** — every meaningful result is published to a shared findings board; members pull their delta with one call, the scheduler attaches new findings to every task assignment and pushes digests to idle members. A round with no new progress costs nothing.
+- **Evidence-gated flags** — candidates are submitted with reproducible evidence, validated against the challenge's flag format, deduplicated, and only the captain records the platform verdict. A verified flag flips the whole team into writeup mode.
+- **Shipped knowledge base** — kali toolbox, pwntools, SageMath, Volatility 3, per-domain playbooks (web / pwn / reverse / crypto / forensics / misc), and a fresh-PoC/CVE hunting workflow, readable in-session via `ctf_teams_knowledge`.
+- **Toolchain service** — `ctf_teams_env` probes the machine for every managed tool (pwntools, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions, then installs the missing ones from a curated apt/pip/brew/gem map — argv-by-argv, no shell. Heavy tools (sage, ghidra, pwndbg) report their manual command instead.
+- **Reference library, pre-provisioned** — the small PoC/skill repos (ctf-skills, Awesome-POC) clone automatically when a team is created; `ctf_teams_references` syncs the rest (exphub, 0xMarcio pocindex/cve, trickest/cve, PoC-in-GitHub, cvelistV5) on demand into `<workspace>/.ctf-teams/references/` and hands each agent the absolute paths + `rg` hints, so N-day hunting works offline before any web search.
+- **Live dashboard tab, and it is operable** — a `解题面板` view next to 对话 / 轨迹: challenge header, task progress bar, member lanes with live activity and unseen-board badges, the finding feed, the flag board and the host-computed `Next` line, refreshed every 1.5 s from a trust-gated route. Its controls drive the solve — 开始解题 (challenge form), 批准并运行, 推进一轮, 暂停 / 继续, 核对 flag, 附件 (workspace file picker), 写 WRITEUP, 导出 WP / 导出复盘 — and each click becomes exactly one user turn, so the captain agent stays the only writer of team state.
+- **Terminal dashboard** — the same picture in the harness transcript, for surfaces without the tab: `ctf_teams_status` (model + human) and `/ctf-teams-board` (human only, zero model turns).
 
-<p align="center">
-  <img src="./assets/readme/workspace.png" width="100%" alt="AgentTeams native workspace with members, task dependencies, and progress">
-</p>
+## Quick start
 
-## Releases
+**DeepSeek Harness Desktop (primary target):** open 「Plugins → Add Plugin」 in the app sidebar, enter the package name and version (`@nanmicoder/dsh-ctf-teams`), click enable, and restart the app when the host asks. The desktop app ships its own Harness kernel and package manager, so it manages its own profiles.
 
-[v0.1.22](./release-notes/v0.1.22.md) targets the published Harness `0.2.0-rc.2` packages and retains script-free Git installation. This plugin release uses npm `latest`; the recommended host is Harness `0.2.0-rc.2` (its `next` channel). See the exact [support matrix](./compatibility.json).
+**CLI / Web:**
 
-## Why AgentTeams?
-
-| Capability | What it changes |
-| --- | --- |
-| **Captain-led delegation** | The current session creates the team, assigns roles, and consolidates the final result. |
-| **Durable members** | Members are continuable DSH sub-agents that can be woken for focused follow-up turns. |
-| **Dependency-aware tasks** | Tasks move through explicit states and cannot be claimed before their dependencies finish. |
-| **Automatic reuse and safe takeover** | Idle members claim the next ready task; reassignment revokes stale attempts before new work starts, and cold recovery retries stranded open attempts. |
-| **Direct messaging** | Members send durable mailbox messages directly to teammates or the captain—no relay required. |
-| **Live activity panel** | The Web UI combines segmented progress, a collapsible roster, and an interactive task DAG; running tasks show the member's model, and completed archives retain their full member and task history. |
-| **Plan before execution** | Normal `/agent-teams` runs stage an unspawned roster and DAG first. The Web panel uses the host model catalog for member routes. Returning to chat stops the planning turn, asks what should change, and revises the same draft; discarding archives the draft, aborts the turn, and explicitly prevents automatic recreation. Only **Approve & Run** enables scheduling; each member starts with its first ready task. |
-| **Quality gates** | Opt-in quality tasks support requirements → implementation → verification → review → integration contracts, automatic repair/re-review, and explicit resume. Scope control is a completion-time audit, not host write interception. See [docs/quality-gates.md](./docs/quality-gates.md). |
-
-The conversation card and activity panel use Harness's official locale service. They follow live language changes between English and Simplified Chinese—including status labels, dynamic summaries, controls, archive markers, and accessibility text—without a page reload or a separate plugin setting.
-
-## Install and choose versions
-
-**Recommended pair: DeepSeek Harness `0.2.0-rc.2` + AgentTeams `0.1.22`. The host remains an RC.**
-
-| Use case | DeepSeek Harness | AgentTeams plugin |
-| --- | --- | --- |
-| **Recommended** | **`0.2.0-rc.2`** | **`0.1.22`** |
-| Previous recommended RC | `0.1.7-rc.2` | `0.1.22` |
-| Legacy RC | `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.5-rc.3` | `0.1.22` |
-| Retaining an older RC | `0.1.2-rc.1` | `0.1.22` |
-| Developer Alpha testing | `0.1.2-alpha.5` | `0.1.22` |
-| Retaining an older Alpha | `0.1.2-alpha.2` | `0.1.22` |
-
-### Desktop app
-
-In the app sidebar, open **Plugins → Add plugin** and enter the npm package spec:
-
-```text
-@nanmicoder/dsh-agent-teams@0.1.22
+```bash
+dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
 ```
 
-Install it, then choose **Enable now**. If the host asks for a restart, restart the desktop app. Use the package spec above for the published build; an npm or GitHub webpage URL is not the same install source. For Git installation, use a commit containing the verified build outputs described below.
+(Replace `<name>` with your CLI profile; restart the profile's Harness process after installing.) The bundle ships two patch layers — the plugin row and the `ctf-teams` agent preset — and both are read when the composition loads, so **restart the Host / Desktop app** after installing or upgrading, then pick the mode:
 
-The desktop app supplies its own Harness core and package manager. Upgrading the global CLI does not upgrade that core, and an ordinary standalone CLI cannot manage its desktop profile. The CLI carrier installed by the desktop app can manage that profile in `0.2.0-rc.2`. Check the embedded core against the compatibility list. Harness `0.2.0-rc.2` is now the exact published target; its RC status is unchanged. The earlier source-only `0.2.0` prediction is no longer a support declaration. See the [release migration evidence](./docs/harness-0.2.0-rc.2/README.md).
+- Desktop: choose 「CTF 团队模式」 for a new session (or set it as the default under Settings → General). A fresh install whose mode list shows no `CTF 团队模式` needs the restart, not a reinstall.
+- CLI/web profile: the mode follows the same preset roster.
 
-### CLI / Web: 1. Install DeepSeek Harness
-
-```sh
-npm install --global @deepseek-ai/dsh@0.2.0-rc.2
-dsh --version
-```
-
-Skip this if you already run this version. Alpha is opt-in: select an exact Alpha version from the table and lock all host dependencies as described in the [maintenance guide](./docs/maintenance-workflow.md).
-
-### CLI / Web: 2. Install the AgentTeams plugin
-
-Install or upgrade from npm (pinned to this `latest` release):
-
-```sh
-dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.22
-```
-
-For a CLI-managed installation, replace `web` with your active CLI profile. **Stop and restart that profile's Harness process, then refresh the browser.** Installing the plugin does not upgrade Harness; the host and plugin have independent `latest` channels.
-
-For Git installation, use a Git package spec pinned to a commit containing the verified server, client, and type build outputs in `lib/`, rather than an npm webpage URL. The repository distributes these outputs so installation does not need a `prepare` hook or build-script approval. Source maintainers must run `pnpm build` and update the committed outputs whenever the source changes. Existing npm releases remain immutable.
-
-For a manually cloned checkout, run `pnpm install --frozen-lockfile` and `pnpm build` after pulling, then restart the corresponding Harness process. Updating Git alone does not update local build output. See the [maintenance guide](./docs/maintenance-workflow.md).
-
-> For older `0.1.0-*` / `0.1.1-*` or unlisted hosts, keep a working pair and follow the [older-version and diagnostic guide](./docs/maintenance-workflow.md).
-
-See the full [compatibility matrix](./compatibility.json), [source installation and Alpha testing guide](./docs/maintenance-workflow.md), and [verification coverage and platform limits](./docs/maintenance-2026-09-06/release/README.md).
-
-Then ask for a team directly:
-
-> Use AgentTeams to review the commits after v0.5.3 from performance, security, and product perspectives. Return one consolidated report.
-
-## View teams in the workspace
-
-Click **View team** in the current chat header or the team card below a reply to open the native **Team collaboration** tab. The entry belongs to its chat, rather than the general workspace start page.
-
-Team and task content starts immediately: wide panes use columns and narrow panes stack them. Select a task to locate its owner; member icons open their conversations. Closing the tab does not stop the team, and its chat can reopen it. Completed teams retain their archives. Older hosts keep the activity panel.
-
-## How it works
-
-1. For a request to use AgentTeams, the captain follows the core protocol already in its system instructions. It continues an existing team and uses `agent_teams_status` when current state needs checking. When no team exists, the goal becomes a staged plan for review.
-2. The captain adds role-specific members backed by continuable sub-agents.
-3. The goal becomes tasks with owners and explicit dependencies.
-4. The shared scheduler uses real `running / idle / ready` state to atomically claim one ready task per idle member and wake it. An interrupted resident attempt stays parked and can resume through a direct message without losing its capability; after a cold process restart, the scheduler retries stranded open work with a fresh attempt.
-5. Members update with the current `attempt_id`; reassignment or captain takeover revokes the old attempt and waits for the old worker to quiesce before a new attempt starts.
-6. The captain presents the combined result, then archives the complete team record.
-
-Team state is stored under `<workspace>/.agent-teams/`; the Web panel reads that disk truth and combines it with live sub-agent activity.
-
-Member creation is zero-interaction by default: a member on the captain's current LLM route snapshots that provider, model, and reasoning effort, while a member on a requested alternative route snapshots the target model's default effort; later continuations restore the resolved snapshot. Only an explicit heterogeneous-team request (for example, “backend on provider A/model X, frontend on provider B/model Y”) supplies a member-specific `provider` + `model`; there is no per-member model or reasoning prompt.
-
-Captain sessions keep the concise core protocol and the original 14 native team tools from their first request. All business tools are directly available; no loading tool or extra activation call is needed. Configured profiles retain their bounded directory in the fixed system prompt. Creating, approving, continuing or ending a team does not rewrite the system prompt or tool schemas. Core rules remain available after history compaction or discarded code-mode tool results. Members receive four team tools, fixed member instructions, and their ordinary coding/research tools. Web approval wakes the captain with a control message; later member reports wake it again. See the [fixed protocol and benchmark contract](./docs/progressive-loading.md).
-
-## Slash command
-
-No “use AgentTeams” phrasing required. The plugin registers the
-closed-namespace `/agent-teams` host command, so the Web GUI slash menu shows
-an `agent-teams` placeholder with an input hint: pick it (or type the
-command), describe the goal, and press Enter.
+Then, in a session of that profile:
 
 ```
-/agent-teams research the pricing pages of three competitors
+/ctf-teams solve http://chal.local:8000, attachments are in ./dist
+/ctf-teams-board          # print the solving dashboard without waking the model
 ```
 
-The command pipeline claims the line, then preserves that exact input as an
-ordinary user follow-up so it remains visible in the main chat. The gesture
-boundary adds the deterministic activation directive at pre-step, so the
-first model request follows the staged planning protocol without a mandatory helper call. The invocation is also durably
-logged (`command/run` / `command/done`).
+or in natural language: "Use CTFTeams to solve this pwn challenge." The captain stages the plan (roster + task graph), you approve, and the squad starts racing the challenge. With the squad running, open the **`解题面板` tab** next to 对话 / 轨迹 and watch it live.
 
-Surfaces without command adjudication (for example the headless CLI) get the
-same deterministic activation through a gesture boundary: any genuine user
-message starting with `/agent-teams` activates the protocol for the rest of
-the text. Mid-sentence mentions stay ordinary prose.
+## Commands
 
-Historical panels require saved team state or archives. Sessions from early versions that deleted teams without retaining archives do not yet support reconstructing the full panel from logs.
+The plugin owns a closed command namespace, so the `/` menu is short and every entry means one thing:
+
+| Command | What it does |
+|---|---|
+| `/ctf-teams [--profile <name>] <challenge>` | Start (or continue) a solve. Without `--profile` the configured default squad — the built-in `ctf-teams` roster — applies. |
+| `/ctf-teams-board` | Print the dashboard into the transcript. No model turn, no state change. |
+| `/ctf-teams-<profile>` | One alias per *other* configured team profile, so `/ctf-teams-web-only <goal>` selects that roster explicitly. |
+
+Two generated aliases are deliberately not registered: the **default** profile's own alias (it would be `/ctf-teams` under a longer name, e.g. `ctf-teams-ctf-teams`), and any profile whose name maps onto a command this plugin already owns (`board`). Set `defaultProfile: ''` to disable the default squad and get its alias back.
+
+## The dashboard
+
+Two surfaces, one truth source. The **`解题面板` tab** (对话 / 轨迹 / 解题面板) is the live picture: a read-only client view that polls `GET /plugins/dsh-ctf-teams/state` every 1.5 s behind the harness browser-trust fence (an unauthenticated request gets 401, not data) and renders
+
+- the challenge header — 🚩 solved / ◌ running, category, points, remote, attachments, flag format;
+- a task progress bar plus the census (`3 完成 · 1 进行中 · 1 待办 · …`);
+- member lanes with live activity, `⚡` unseen board beats, unread mail, the task they own and `done/total`;
+- the newest findings with their age, the flag board with verdicts, and the **下一步 (`Next`)** line;
+- a team switcher plus the archived roster for finished solves.
+
+Polling keeps the last snapshot when the host restarts ("重连中") and pauses while the page is hidden.
+
+### Operating from the tab
+
+Every control queues **one user turn** and nothing else — the tab never writes team state, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked:
+
+| Button | When | What it sends |
+|---|---|---|
+| 开始解题 | no team | a challenge form (goal, profile, remote, category, points, flag format) → `/ctf-teams …` + the facts |
+| 批准并运行 | plan staged (captain) | `ctf_teams_approve` + dispatch ready tasks |
+| 推进一轮 | running | `ctf_teams_status`, dispatch ready work, wake lanes that are behind |
+| 暂停 / 继续 | running / halted (captain) | halt, or `ctf_teams_resume` with a reason |
+| 核对 flag fN | a candidate exists (captain) | platform check, then `ctf_teams_mark_flag` |
+| 附件 | not archived (captain) | workspace file picker → `ctf_teams_set_challenge` with the picked paths |
+| 写 WRITEUP | participant | write the reproducible chain to `WRITEUP.md` |
+| 导出 WP / 导出复盘 | always | download `WRITEUP.md`, or a generated markdown review report |
+
+Captain-only buttons are disabled (not silently failing) in a member's session; an archived team is read-only with exports only; there is deliberately no one-click archive/delete, because discarding unfinished work stays a captain decision. The endpoints behind these controls are method-whitelisted, body-limited and authority-checked against durable state, and they sit behind the same browser-trust fence as the read path.
+
+The **terminal panel** is the same state for surfaces without the tab (`ctf_teams_status` for the model and the human, `/ctf-teams-board` for the human with zero model turns). Every section bar carries its own live counter and the `Next` line is computed by the same helper the tab uses, so the two can never disagree:
+
+
+```
+╭─ CTF TEAMS ── 🚩 SOLVED ────────────────────────────────────────────────────╮
+│ Challenge  baby_rsa · crypto · 500pts                                      │
+│ Remote     nc chal.local:9999                                              │
+│ Files      rsa.pem, out.txt                                                │
+│ Flag fmt   /flag\{[^}]+\}/                                                 │
+│ Status     running · round 4 · 12m · 3 findings · 1 flag                   │
+│ Goal       解出 baby_rsa 并写出可复现的解题链                              │
+├─ Agents ─────────────────────────────────────────────────────── 1/4 working┤
+│ ○ agent-1     idle ⚡1      full-stack CTF expert                           │
+│ ○ agent-2     idle         full-stack CTF expert                           │
+│ ● agent-3     working      t3 Write the reproducible solve cha…            │
+│ ◇ agent-4     unspawned    full-stack CTF expert                           │
+├─ Task board ──────────────────── [████████████░░░░] 3/4 · last beat 30s ago┤
+│ t3 ▶       Write the reproducible solve chain to WRITEUP.md → agent-3      │
+│ t1 ✓       Recon attachments and fingerprint the challenge → agent-1       │
+│ t2 ✓       Attack the RSA parameters (Wiener / Coppersmith) → agent-2      │
+│ t4 ✓       Cross-check the flag against the platform → captain             │
+│            3 done · 1 active · 0 pending                                   │
+├─ Findings (latest) ──────────────────────────────── 3 total · newest 3m ago┤
+│ r1 fd1     [agent-1/recon] 两个附件 rsa.pem + out.txt；openssl rsa -pubin… │
+│ r2 fd2     [agent-2/crypto] Wiener 命中：e 极大、d 很小；已还原私钥并解出… │
+│ r3 fd3     [agent-3/dead-end] 远端无 HTTP 面，纯 nc 交互，排除 web 链路    │
+├─ Flags ─────────────────────────────────────────── 1 total · 1 verified    ┤
+│ f1 ✓       flag{w13n3r_4tt4ck_ftw} by agent-2 — platform accepted          │
+│ Next       ▸ solved — write WRITEUP.md, then archive the team              │
+╰─ live · ctf_teams_status for the full detail                               ╯
+```
+
+Reading it at a glance: the header is the verdict (🚩 SOLVED vs ◌ unsolved); each section bar carries its own counter (working lanes, a task progress bar plus the last board beat, finding freshness, verified flags); `⚡N` on a lane means that member has N unseen board beats; and `Next` is the single most useful action for whoever is reading — verify a flag candidate, dispatch idle lanes that still have ready work, resume a halted team, or finish the writeup.
+
+## The built-in `ctf-teams` squad
+
+Four agents (`agent-1` … `agent-4`), deliberately interchangeable: each one is a full-stack CTF expert (web, pwn, reverse, crypto, forensics, misc) reading the same knowledge base (kali-tools, pwntools, sage-math, volatility3, web, pwn, reverse, crypto, forensics, misc, cve-poc). The speed-up comes from parallel angles, not from domain walls: every agent syncs before committing to an angle, claims publicly (`ctf_teams_report_finding`), takes over a teammate's line only by announcing it, and publishes every result — dead ends included — the round it gets them.
+
+Task planning is `captain` mode: the profile supplies people and guardrails; the captain derives the task graph from the actual challenge (recon first, parallel domain tasks, converge on flag + writeup). Your own `profiles.ctf-teams` config entry overrides it key-for-key.
+
+## Toolchain & references services
+
+Before the squad starts, the captain (or any member) readies the box:
+
+```
+ctf_teams_env  { action: "check" }                  # probe pwntools, vol3, sage, kali tools …
+ctf_teams_env  { action: "install", dry_run: true } # review the plan
+ctf_teams_env  { action: "install" }                # install the missing ones (apt/pip/brew/gem)
+ctf_teams_references { action: "sync", repo: "all" }# clone the PoC/CVE/skill libraries
+ctf_teams_references { action: "path", repo: "exphub" }
+```
+
+The managed catalog covers ~40 tools (python stack, pwn/reverse, web, crypto, forensics, misc). `check` reports versions and per-tool install hints; `install` executes curated argv sequences directly (no shell), re-probes what it installed, and never auto-runs heavy tools — sage/ghidra/pwndbg print their manual path. Disable execution entirely with `env.allowInstall: false` (dry-run keeps working).
+
+The reference manifest ships curated entries — the collections stay on GitHub (several are multi-GB), so the service shallow-clones what you ask for into the workspace instead of bloating the package:
+
+| Repo id | Source | What you get |
+|---|---|---|
+| `ctf-skills` | [ljagiello/ctf-skills](https://github.com/ljagiello/ctf-skills) | agent playbooks per CTF domain (MIT) |
+| `awesome-poc` | [WyAtu/Awesome-POC](https://github.com/WyAtu/Awesome-POC) | curated PoC index by product |
+| `exphub` | [zhzyker/exphub](https://github.com/zhzyker/exphub) | ready-to-run classic-CVE exploit scripts |
+| `pocindex` | [0xMarcio/pocindex](https://github.com/0xMarcio/pocindex) | 82k+ PoC index keyed by CVE |
+| `marcio-cve` | [0xMarcio/cve](https://github.com/0xMarcio/cve) | per-year CVE+PoC aggregation |
+| `trickest-cve` | [trickest/cve](https://github.com/trickest/cve) | auto-aggregated CVE database (huge) |
+| `poc-in-github` | [nomi-sec/PoC-in-GitHub](https://github.com/nomi-sec/PoC-in-GitHub) | daily JSON PoC index (large) |
+| `cvelistv5` | [CVEProject/cvelistV5](https://github.com/CVEProject/cvelistV5) | official CVE JSON v5 archive (huge) |
+
+## Round-sync protocol
+
+1. Members publish every real result as a finding (`ctf_teams_report_finding`) — including dead ends, tagged `dead-end`.
+2. `ctf_teams_sync` returns everything a member has not seen yet and advances their cursor; an empty sync means "nobody has new progress — continue or yield".
+3. The scheduler rides along: task assignments carry the newest findings, and idle members with unseen board content get a digest pushed to them. Cursors are durable — nothing is repeated, nothing is lost.
+4. Flags are a board too: `ctf_teams_submit_flag` validates against the challenge flag format and de-duplicates; the captain verifies against the platform and records the verdict with `ctf_teams_mark_flag`. `verified` marks the challenge solved and redirects every agent to the writeup.
+
+## Tools
+
+Captain-only: `ctf_teams_create`, `ctf_teams_approve`, `ctf_teams_edit_plan`, `ctf_teams_add_member`, `ctf_teams_remove_member`, `ctf_teams_create_task`, `ctf_teams_reassign_task`, `ctf_teams_amend_task`, `ctf_teams_set_challenge`, `ctf_teams_mark_flag`, `ctf_teams_resume`, `ctf_teams_delete`
+
+Shared with members: `ctf_teams_claim_task`, `ctf_teams_update_task`, `ctf_teams_send_message`, `ctf_teams_status`, `ctf_teams_submit_flag`, `ctf_teams_report_finding`, `ctf_teams_sync`, `ctf_teams_knowledge`, `ctf_teams_env`, `ctf_teams_references`
 
 ## Configuration
 
-Defaults work without extra setup. A trusted profile can override member behavior:
-
 ```yaml
-- id: agent-teams
-  config:
-    stateDir: .agent-teams
-    memberProvider: spawn
-    memberModel: deepseek-v4
-    memberMaxDepth: 0
-    maxMembers: 8
+# cordis.patch.yml / profile config
+stateDir: .ctf-teams          # team state root under the session workspace
+memberProvider: spawn         # 'spawn' or 'fork'
+maxMembers: 8
+defaultProfile: ctf-teams     # applied when create omits profile/plan ('' disables)
+slashCommand: true            # /ctf-teams + gesture boundary
+boardCommand: true            # /ctf-teams-board dashboard command
+profiles: {}                  # your own profiles; override the builtin by name
+env:
+  allowInstall: true          # false keeps ctf_teams_env install dry-run only
+  probeTimeoutMs: 10000
+  installTimeoutMs: 300000
+  # pythonBin: /usr/bin/python3
+references:
+  autoSync: small             # small repos clone at team creation ('off'|'small'|'all'; shipped config enables it — the library default is off)
+  depth: 1                    # shallow clone depth for the reference repos
+  dirName: references         # under <stateDir>: .ctf-teams/references
+  timeoutMs: 600000
 ```
 
-`memberMaxDepth` defaults to `0`: team members cannot create nested subagents. Set `1` to explicitly permit one descendant level; the limit also covers runtime/code-tool calls. Default members report through team messages only, avoiding duplicate native parent reports. Idle roster members make no model requests. Task assignments start distinct turns; coordination joins the nearest model step. Acceptance and consumption are tracked separately. Removal/archive drains the selected branch and its pending input before reporting success.
+## The agent preset mode
 
-`memberProvider` is the sub-agent runtime backend (`spawn` / `fork`), not an LLM provider. Cross-LLM-provider routing uses the optional `provider` + `model` fields of `agent_teams_add_member`; `memberModel` is only a model default for all members. A member on the captain's current provider/model inherits the captain's reasoning effort, while a changed provider or model automatically uses the target model's default. To request a particular effort, pass the optional `reasoning_effort` field — one of the target model's supported effort ids, or `"default"` to force the model's own default.
+The bundle applies two patch layers, in `dsh.bundle.patch` order:
 
-`slashCommand: false` disables the deterministic `/agent-teams` activation surfaces (slash command and gesture boundary), leaving the natural-language trigger as the only entry point.
+| Layer | File | What it contributes |
+|---|---|---|
+| 1 | `cordis.patch.yml` | The `@nanmicoder/dsh-ctf-teams` plugin row on the host plane: `ctf_teams_*` tools, `/ctf-teams`, `/ctf-teams-board`, the captain usage section — every session of the profile. |
+| 2 | `presets/ctf-teams.patch.yml` | The `ctf-teams` **agent preset** (`@deepseek-ai/dsh-agent-preset`, `CTF 团队模式`, order 3): the mode's persona, shell, filesystem, skills, delegation, plan mode and compaction. |
 
-## Boundaries
+Edit layer 2 to shape the mode: every row in its `plugins` list is part of the agent plane, so removing `tool-web` removes web search from this mode only, and enabling `tool-subagent-codex` adds a delegation provider to it. Preset rows resolve against the Harness installation and the profile, exactly like the shipped presets, and a Host restart is what makes an edit visible (later sessions pick it up).
 
-- One captain leads one active team at a time.
-- Idle members with no open task are automatically reused for ready work. An idle member that still owns an open attempt is parked until messaged or explicitly reassigned; messages that cannot be delivered live remain durable and are retried at a later status boundary.
-- State is file-backed and serialized within one DSH process; concurrent processes editing the same team are not coordinated.
-- The activity panel reports persisted state as-is. Models may occasionally finish work without performing the expected task-state update.
-
-See [docs/usage.md](./docs/usage.md) for the full tool reference, state model, Web UI behavior, configuration, and known limits.
-
-## Plugin development Skill
-
-Community upgrade, audit, benchmark, testing and release skills are vendored with a pinned source revision. See [skills/README.md](./skills/README.md) for local rules and [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow.
-
-The repository also ships the open Agent Skills package [`dsh-plugin-development`](./skills/dsh-plugin-development/SKILL.md):
-
-```sh
-npx skills add NanmiCoder/dsh-agent-teams --skill dsh-plugin-development
-```
-
-## Documentation
-
-| Guide | Covers |
-| --- | --- |
-| [Usage](./docs/usage.md) | Architecture, UI behavior, tools, configuration, limits, and validation |
-| [Verification](./docs/verification-guide.md) | Offline, composition, real e2e, and GUI verification |
-| [Plugin development](./docs/developing-dsh-plugins.md) | Human-readable guide built from this plugin |
-| [README writing](./docs/readme-writing-guide.md) | Repository documentation conventions |
+This layer needs a Harness that carries the agent-preset registry (**0.2.0-rc.2 or later**), where a preset is a declaration row in the composition. On an older host the row cannot resolve, the mode does not appear, and layer 1 keeps working unchanged — add `- insert: [{ id: ctf-teams, name: '@nanmicoder/dsh-ctf-teams' }]` to that profile's `cordis.patch.yml` if you want the tools mounted there explicitly.
 
 ## Development
 
-```sh
+```bash
 pnpm install
-pnpm build
-pnpm verify
+pnpm build          # tsc -> lib/ + git-artifact stamp
+pnpm typecheck
+pnpm verify         # full offline chain incl. ctf-verify, lifecycle, quality gates
 ```
 
-## Named multi-role profiles
+## Credits
 
-Configure one or more complete team profiles in `cordis.patch.yml`. A profile always supplies the roster (independent provider/model/role/reasoning effort). Set `taskPlanning: captain` when the Captain should derive the DAG from the user's goal; omit it or set `taskPlanning: seed` to keep a fixed template workflow:
-
-```yaml
-profiles:
-  demo-delivery:
-    description: Ship a small feature
-    protocol: Discuss requirements, review, test, then prepare release; do not deploy automatically.
-    members:
-      - name: analyst
-        model: gpt-5.6-sol
-        role: Analyze requirements
-      - name: implementer
-        model: gpt-5.6-terra
-        role: Implement the approved solution
-    tasks:
-      - id: requirements
-        subject: Requirements discussion
-        assignee: analyst
-      - id: implementation
-        subject: Implement solution
-        assignee: implementer
-        dependencies: [requirements]
-```
-
-Use an explicit profile flag: `/agent-teams --profile demo-delivery implement the feature`. The first ordinary token is never treated as an implicit profile. Normal command runs call `agent_teams_create({ profile, approval: "required" })`: the roster and seed/Captain-designed DAG remain staged, no child session is created, and no task is claimed. Edit the plan in the activity panel using the host model catalog, return to chat so the Captain asks what to revise and then atomically updates the same draft, discard it, or click **Approve & Run**. Return/discard actions cancel any planning turn still running; discard also parks model-facing context that forbids silently creating a replacement team. Approval resolves the final provider/model/reasoning choices, commits the roster, and creates each member session only when its first task is ready. A running team is stopped from its own panel header through a confirmation dialog rather than from the composer. Direct tool clients may pass `approval: "automatic"` for the legacy immediate path. Failed review/test tasks do not unlock downstream work; automatic repair/review tasks do not depend on the failed review.
-
-## License
-
-[MIT](./LICENSE)
+Forked from [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) by 程序员阿江 (Relakkes) — thanks for the excellent multi-agent foundation. The CTF-specific round sync, flag board, knowledge base, and terminal dashboard are this fork's additions. MIT licensed.

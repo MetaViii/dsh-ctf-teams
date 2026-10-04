@@ -5,7 +5,7 @@ import { acknowledgeMailbox, CAPTAIN_KEY, discardMailboxMessages, findTeamByCapt
 import type { TeamMessage, TeamState } from './types.ts'
 import { sessionOwnEvents } from './harness-compat.ts'
 
-const PREFIX = 'AgentTeams inbox receipt: '
+const PREFIX = 'CTFTeams inbox receipt: '
 
 export function isCurrentMail(team: TeamState, message: TeamMessage): boolean {
   if (message.discardedAt !== undefined) return false
@@ -25,8 +25,8 @@ export function mailboxContent(message: TeamMessage): string {
 
 function mailboxBody(recipient: string, messages: readonly TeamMessage[]): string {
   return messages.map(message => recipient === CAPTAIN_KEY
-      ? `AgentTeams message from member ${message.from}:\n\n${mailboxContent(message)}`
-      : `AgentTeams message from ${message.from}${message.attemptId === undefined ? '' : ` for task ${message.taskId}, attempt_id ${message.attemptId}`}:\n\n${mailboxContent(message)}`).join('\n\n')
+      ? `CTFTeams message from member ${message.from}:\n\n${mailboxContent(message)}`
+      : `CTFTeams message from ${message.from}${message.attemptId === undefined ? '' : ` for task ${message.taskId}, attempt_id ${message.attemptId}`}:\n\n${mailboxContent(message)}`).join('\n\n')
 }
 
 /** Fallback reads must enforce the same current-generation rule as live admission. */

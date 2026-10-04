@@ -1,12 +1,12 @@
 /**
- * The `agent_teams_*` model-facing tools.
+ * The `ctf_teams_*` model-facing tools.
  *
  * The captain (the agent that created the team) orchestrates: members are
  * continuable subagents it spawns and wakes. Members share the same tools and
- * drive their own task state, mirroring the Claude Code AgentTeams flow:
+ * drive their own task state, mirroring the Claude Code CTFTeams flow:
  * create team → add members → create tasks with dependencies → claim/assign →
  * work → report → status → delete.
- * @module dsh-agent-teams/tools
+ * @module dsh-ctf-teams/tools
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
@@ -28,8 +28,25 @@ export interface ToolsConfig {
     memberMaxDepth?: number;
     /** Team size cap (members). */
     maxMembers: number;
-    /** Named team profiles from the active DSH profile. */
+    /** Named team profiles from the active DSH profile (builtin included). */
     profiles: Record<string, import('./profiles.ts').TeamProfileConfig>;
+    /** Profile used when create omits both `profile` and `plan`; empty disables. */
+    defaultProfile?: string;
+    /** Toolchain service options for `ctf_teams_env`. */
+    env?: {
+        allowInstall?: boolean;
+        probeTimeoutMs?: number;
+        installTimeoutMs?: number;
+        pythonBin?: string;
+    };
+    /** References library options for `ctf_teams_references`. */
+    references?: {
+        /** Clone small reference repos automatically when a team is created. */
+        autoSync?: 'off' | 'small' | 'all';
+        depth?: number;
+        dirName?: string;
+        timeoutMs?: number;
+    };
 }
 /** Browser/UI mutations allowed while a plan is waiting for approval. */
 export type StagedPlanMutation = {
@@ -61,7 +78,7 @@ export type StagedPlanMutation = {
     memberName: string;
 };
 /** Runtime bridge shared by model-facing tools and the Web staging surface. */
-export interface AgentTeamsRuntime {
+export interface CTFTeamsRuntime {
     isPendingMember(agent: Agent): boolean;
     updateStagedPlan(captain: Agent, teamId: string, mutation: StagedPlanMutation, signal?: AbortSignal): Promise<TeamState>;
     updateStagedPlanBatch(captain: Agent, teamId: string, mutations: readonly StagedPlanMutation[], signal?: AbortSignal): Promise<TeamState>;
@@ -96,11 +113,11 @@ export declare function stagedPlanDiscardContext(teamName: string): string;
 /** Model-facing continuation that turns the review UI back into a conversation. */
 export declare function stagedPlanFeedbackContext(teamName: string): string;
 /**
- * Register every `agent_teams_*` tool into the shared tools registry.
+ * Register every `ctf_teams_*` tool into the shared tools registry.
  * @param ctx - the plugin context (injects `tools`).
  * @param config - resolved tool config.
  */
-export declare function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): AgentTeamsRuntime;
+export declare function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTeamsRuntime;
 export declare function applyQualityFollowUp(team: TeamState, closed: TeamTask): {
     created: TeamTask[];
     escalated: boolean;

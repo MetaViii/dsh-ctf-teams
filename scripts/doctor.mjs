@@ -51,8 +51,8 @@ export function inspectInstallation(hostRoot, profileRoot, support = policy) {
   walk(hostPath)
   let plugin
   if (profileRoot) {
-    const path = locatePackage('@nanmicoder/dsh-agent-teams', resolve(profileRoot))
-    if (!path) missing.push('@nanmicoder/dsh-agent-teams (profile)')
+    const path = locatePackage('@nanmicoder/dsh-ctf-teams', resolve(profileRoot))
+    if (!path) missing.push('@nanmicoder/dsh-ctf-teams (profile)')
     else {
       const pkg = manifest(path)
       plugin = { version: pkg.version, path: dirname(path) }
@@ -113,7 +113,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
         if (!value || value.startsWith('--')) throw new Error(`${arg} requires a directory`)
         if (arg === '--host-root') hostRoot = value
         else profileRoot = value
-      } else throw new Error('Usage: dsh-agent-teams-doctor [--host-root dir] [--profile-root dir] [--json]')
+      } else throw new Error('Usage: dsh-ctf-teams-doctor [--host-root dir] [--profile-root dir] [--json]')
     }
     const result = inspectInstallation(hostRoot, profileRoot)
     console.log(json ? JSON.stringify(result, null, 2) : [

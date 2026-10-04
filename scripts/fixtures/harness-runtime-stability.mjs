@@ -52,7 +52,7 @@ export function apply(ctx) {
     await ctx.get('loader').await();
     const captain = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd: process.cwd() }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } });
     captainId = captain.agent.id;
-    const root = join(process.cwd(), '.agent-teams'), file = join(root, 'stability/team.json');
+    const root = join(process.cwd(), '.ctf-teams'), file = join(root, 'stability/team.json');
     const state = () => JSON.parse(readFileSync(file, 'utf8'));
     const mail = name => { const p = join(root, `stability/inbox/${name}.jsonl`); return existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []; };
     async function run(...items) {
@@ -61,7 +61,7 @@ export function apply(ctx) {
       await captain.agent.whenIdle();
       assert.equal(commands.length, 0, 'captain did not execute all scripted tools');
     }
-    const cmd = (name, args = {}) => ({ name: `agent_teams_${name}`, args });
+    const cmd = (name, args = {}) => ({ name: `ctf_teams_${name}`, args });
     await run(cmd('create', { name: 'stability', description: 'Stability regression', approval: 'required' }), cmd('add_member', { name: 'worker' }), cmd('add_member', { name: 'blocked' }), cmd('create_task', { subject: 'Long working turn', assignee: 'worker' }), cmd('create_task', { subject: 'Dependency blocked task', assignee: 'blocked', dependencies: ['t1'] }));
     assert.equal(requests.filter(r => r.sessionId !== captainId).length, 0, 'staged roster must not call a model');
     await run(cmd('approve', { confirmation: 'User approved the deterministic test plan' }));
@@ -69,7 +69,7 @@ export function apply(ctx) {
     await until(() => gates.has(workerId), 'first actual assignment');
     assert.equal(state().members.find(m => m.name === 'blocked').id, '', 'dependency-blocked member must stay dormant');
     const first = requests.find(r => r.sessionId === workerId);
-    assert.match(first.userText, /AgentTeams automatic task assignment/);
+    assert.match(first.userText, /CTFTeams automatic task assignment/);
     assert.doesNotMatch(first.userText, /You have joined/);
     assert.match(first.userText, /Long working turn/);
     assert.equal(requests.filter(r => r.sessionId !== captainId).length, 1, 'only ready worker may call model');
@@ -98,7 +98,7 @@ export function apply(ctx) {
     // A status tool can read inbox mail before the queued receipt reaches the
     // next step. Filtering that duplicate must preserve the active turn.
     await run(cmd('send_message', { to: 'worker', content: 'STATUS_RECEIPT_RACE' }));
-    memberResponses.set(workerId, { name: 'agent_teams_status', args: {} });
+    memberResponses.set(workerId, { name: 'ctf_teams_status', args: {} });
     gates.get(workerId)();
     await until(() => requests.filter(r => r.sessionId === workerId).length === 3 && gates.has(workerId), 'tool continuation after already-read receipt');
     assert.match(JSON.stringify(requests.filter(r => r.sessionId === workerId).at(-1).messages), /STATUS_RECEIPT_RACE/);
@@ -155,13 +155,13 @@ export function apply(ctx) {
     const settledId = settledState().members[0].id;
     await until(() => gates.has(settledId), 'settlement worker ready');
     const attempt = settledState().tasks[0].attemptId;
-    for (const update of [{ name: 'agent_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'in_progress' } },
-      { name: 'agent_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'completed', output: 'Task result is complete.' } }]) {
+    for (const update of [{ name: 'ctf_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'in_progress' } },
+      { name: 'ctf_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'completed', output: 'Task result is complete.' } }]) {
       memberResponses.set(settledId, update); gates.get(settledId)();
       await until(() => gates.has(settledId), 'next settlement worker step');
     }
     const originalResult = structuredClone(settledState().tasks[0]);
-    const supplement = { name: 'agent_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'completed', commandsRun: [{command:'late verification',status:'passed',exitCode:0}], evidence_note:'Independent observation after completion' } };
+    const supplement = { name: 'ctf_teams_update_task', args: { task_id: 't1', attempt_id: attempt, status: 'completed', commandsRun: [{command:'late verification',status:'passed',exitCode:0}], evidence_note:'Independent observation after completion' } };
     for (let i = 0; i < 2; i++) {
       const count = requests.filter(r => r.sessionId === settledId).length;
       memberResponses.set(settledId, supplement); gates.get(settledId)();
@@ -177,13 +177,13 @@ export function apply(ctx) {
     assert.equal(settledState().tasks.length,1);
     record({event:'stability-terminal-evidence-passed',records:1,duplicateAppend:false,originalResultPreserved:true});
     const parentBeforeReport = requests.filter(r => r.sessionId === captainId).length;
-    memberResponses.set(settledId, { name: 'agent_teams_send_message', args: { to: 'captain', content: 'Task t1 completed with verified result.' } });
+    memberResponses.set(settledId, { name: 'ctf_teams_send_message', args: { to: 'captain', content: 'Task t1 completed with verified result.' } });
     gates.get(settledId)();
     await until(() => gates.has(settledId) && requests.filter(r => r.sessionId === captainId).length > parentBeforeReport, 'completion report wakes parent');
     await captain.agent.whenIdle();
     const parentAfterReport = requests.filter(r => r.sessionId === captainId).length;
     const beforeDuplicate = requests.filter(r => r.sessionId === settledId).length;
-    memberResponses.set(settledId, { name: 'agent_teams_send_message', args: { to: 'captain', source_task_id:'t1',source_attempt_id:attempt,content: 'Task t1 completed with verified result.' } });
+    memberResponses.set(settledId, { name: 'ctf_teams_send_message', args: { to: 'captain', source_task_id:'t1',source_attempt_id:attempt,content: 'Task t1 completed with verified result.' } });
     gates.get(settledId)();
     await until(() => gates.has(settledId) && requests.filter(r => r.sessionId === settledId).length > beforeDuplicate, 'duplicate report acknowledged');
     await captain.agent.whenIdle();

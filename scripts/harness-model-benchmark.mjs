@@ -86,7 +86,7 @@ async function extract(artifact,label) {
     const unpacked=await command(['tar','-xzf',artifact,'-C',target],report,environment,label+'-unpack',60000);
     if(unpacked.code!==0)throw Error('Artifact extraction failed');
     const packageDir=join(target,'package'),pkg=JSON.parse(readFileSync(join(packageDir,'package.json'),'utf8'));
-    if(pkg.name!=='@nanmicoder/dsh-agent-teams')throw Error('Wrong artifact identity');
+    if(pkg.name!=='@nanmicoder/dsh-ctf-teams')throw Error('Wrong artifact identity');
     symlinkSync(join(runtime,'node_modules'),join(packageDir,'node_modules'),'dir');
     return {packageDir,artifactSha256:hash(artifact),pluginVersion:pkg.version};
 }
@@ -105,17 +105,17 @@ async function run(label,phase,artifact,existing) {
     if(existsSync(artifactSnapshot))throw Error('Run artifact already exists; never overwrite benchmark evidence');
     writeFileSync(artifactSnapshot,artifact.bytes);
     const extracted={...await extract(artifactSnapshot,label),sourceArtifact:artifact.path};
-    const pluginLink=join(profile,'node_modules/@nanmicoder/dsh-agent-teams');
+    const pluginLink=join(profile,'node_modules/@nanmicoder/dsh-ctf-teams');
     if(existsSync(pluginLink))rmSync(pluginLink);
     symlinkSync(extracted.packageDir,pluginLink,'dir');
-    json(join(profile,'package.json'),{name:'agentteams-real-model-profile',version:'0.0.0',private:true,type:'module',dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-headless','@nanmicoder/dsh-agent-teams'],patchReload:'startup'}}});
+    json(join(profile,'package.json'),{name:'agentteams-real-model-profile',version:'0.0.0',private:true,type:'module',dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-headless','@nanmicoder/dsh-ctf-teams'],patchReload:'startup'}}});
     mkdirSync(join(runDir,'executed-fixtures'),{recursive:true});
     for(const [source,target] of [['fixtures/harness-model-driver.mjs','fixture-model-driver.mjs'],['fixtures/harness-benchmark-scope.mjs','fixture-benchmark-scope.mjs'],[caseFile,'fixture-model-case.mjs'],...caseName!=='review'?[['fixtures/harness-model-case.mjs','harness-model-case.mjs']]:[],...caseName==='complex'?[['fixtures/harness-complex-oracle.mjs','harness-complex-oracle.mjs']]:[]]) {
         writeFileSync(join(profile,target),testContents[source]);
         writeFileSync(join(runDir,'executed-fixtures',target),testContents[source]);
     }
     const patch=[{id:'headless-startup',disabled:true},{id:'headless-runner',disabled:true},{id:'llm-pi-ai',disabled:true},{id:'session-title-llm',disabled:true},{id:'credentials',config:{path:credentialFile,watch:false}},{id:'llm-deepseek',config:adapter},{id:'agent-default-model',config:model},{id:'approval',config:{policy:'never'}},{id:'permission',config:{defaultPreset:'benchmark-workspace',presets:{'benchmark-workspace':{sandbox:'workspace-write',approval:'never'}}}},{insert:[{id:'agentteams-real-model-benchmark',name:'./fixture-model-driver.mjs'}]}];
-    if(requestedAgentCwd) patch.push({id:'agent-teams',config:{stateDir:relative(agentCwd,join(workspace,'.agent-teams'))}});
+    if(requestedAgentCwd) patch.push({id:'ctf-teams',config:{stateDir:relative(agentCwd,join(workspace,'.ctf-teams'))}});
     writeFileSync(join(profile,'cordis.patch.yml'),yaml.stringify(patch));
     const trace=join(runDir,'trace.jsonl'),resultPath=join(runDir,'result.json'),configPath=join(runDir,'driver-config.json');
     json(configPath,{phase,caseName,model,workspace,agentCwd,trace,result:resultPath,timeoutMs,maxRequests,...existing?.previous?{previous:existing.previous}:{},...existing?.priorTrace?{priorTrace:existing.priorTrace}:{}});

@@ -9,7 +9,7 @@
  * still owns an open attempt is parked: only an explicit captain reassignment
  * may rotate that capability. Automatic retry is reserved for cold recovery,
  * when this process has not observed the durable owner settle its open attempt.
- * @module dsh-agent-teams/scheduler
+ * @module dsh-ctf-teams/scheduler
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -18,6 +18,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import { join } from 'node:path'
 import { deliverToMember } from './members.ts'
 import { isCurrentMail, mailboxPrompt } from './mailbox.ts'
+import { advanceCursor, deltaSince, formatBoardDelta } from './findings.ts'
 import {
   markMailboxDelivered,
   discardMailboxMessages,
@@ -90,6 +91,10 @@ export interface DispatchTicket {
   readonly acceptance?: readonly string[]
   readonly verify?: readonly string[]
   readonly reviewedTaskId?: string
+  /** Round-sync digest carried alongside this assignment; empty board → undefined. */
+  readonly digest?: string
+  /** Board seq bounds the digest actually covered; the cursor must not pass these. */
+  readonly digestUpTo?: { findingSeq: number; flagSeq: number }
 }
 
 function taskProfileSeedId(task: TeamTask): string | undefined {
@@ -117,7 +122,7 @@ export function collectCompletedDependencyOutputs(
 
   const walk = (id: string): void => {
     if (visiting.has(id)) {
-      warn?.(`agent-teams: dependency cycle involving "${id}" while collecting outputs; stopping this branch`)
+      warn?.(`ctf-teams: dependency cycle involving "${id}" while collecting outputs; stopping this branch`)
       return
     }
     if (visited.has(id)) return
@@ -227,7 +232,7 @@ acceptanceResults: ${JSON.stringify((ticket.acceptance ?? []).map((criterion) =>
 commandsRun: ${JSON.stringify((ticket.verify ?? []).map((command) => ({ command, status: 'passed', exitCode: 0, evidence: '<observed result>' })))}
 ${kind === 'implementation' || kind === 'repair' ? 'changedPaths: list the actual workspace-relative POSIX paths you changed.\n' : ''}`
     : ''
-  return `AgentTeams automatic task assignment from the shared task list.
+  return `CTFTeams automatic task assignment from the shared task list.
 
 You are executing as configured member "${ticket.memberName}".
 Do not start a teammate's assigned task.
@@ -243,6 +248,10 @@ ${executionPrompt}
 `}
 Completed dependency results:
 ${formatDependencyOutputs(ticket.dependencyOutputs)}
+${ticket.digest === undefined || ticket.digest === '' ? '' : `
+Round sync — new teammate progress since this member's last sync:
+${ticket.digest}
+`}
 
 Task: ${ticket.taskId}${seed} — ${ticket.subject}${description}
 ${contract === '' ? '' : `\nContract:\n${contract}\n`}
@@ -250,10 +259,19 @@ ${structuredCompletion}
 Attempt: ${ticket.attempt}
 Attempt id: ${ticket.attemptId}
 
-Call agent_teams_claim_task for ${ticket.taskId}; it will return this same attempt_id. Include attempt_id=${ticket.attemptId} in every agent_teams_update_task call. If it is rejected as stale, stop work because the task was reassigned. claimed cannot jump to completed. Mark in_progress first, then completed or failed. Include attempt_id on every update. Then send_message to captain with source_task_id and source_attempt_id and become idle.
-When finishing: use status=completed only when the task's success criteria are satisfied; use status=failed when blocking findings or validation failures mean downstream work must not proceed; include a concise output in either case. Quality kinds must submit structured fields: review/requirements need verdict=pass to complete (needs_revision/reject must fail with findings); implementation/repair/verification/integration need acceptanceResults and commandsRun, while implementation/repair also need in-scope changedPaths. Use status values "passed" or "failed" inside those arrays. After the work and verification finish, call agent_teams_update_task immediately; do not wait for captain confirmation and do not continue exploring. Do not approve your own implementation. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict. Treat the dependency results above as source material. Do not ignore them. Work only this task and only its in-scope paths in this turn.
+Call ctf_teams_claim_task for ${ticket.taskId}; it will return this same attempt_id. Include attempt_id=${ticket.attemptId} in every ctf_teams_update_task call. If it is rejected as stale, stop work because the task was reassigned. claimed cannot jump to completed. Mark in_progress first, then completed or failed. Include attempt_id on every update. Then send_message to captain with source_task_id and source_attempt_id and become idle.
+When finishing: use status=completed only when the task's success criteria are satisfied; use status=failed when blocking findings or validation failures mean downstream work must not proceed; include a concise output in either case. Quality kinds must submit structured fields: review/requirements need verdict=pass to complete (needs_revision/reject must fail with findings); implementation/repair/verification/integration need acceptanceResults and commandsRun, while implementation/repair also need in-scope changedPaths. Use status values "passed" or "failed" inside those arrays. After the work and verification finish, call ctf_teams_update_task immediately; do not wait for captain confirmation and do not continue exploring. Do not approve your own implementation. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict. Treat the dependency results above as source material. Do not ignore them. Work only this task and only its in-scope paths in this turn.
 
-State policy: ${stateDir}/${teamId}/ is read-only diagnostics; mutate team state only through agent_teams_* tools.`
+State policy: ${stateDir}/${teamId}/ is read-only diagnostics; mutate team state only through ctf_teams_* tools.`
+}
+
+/** Prompt for an idle member whose only pending work is the round-sync digest. */
+export function digestPrompt(teamId: string, memberName: string, digest: string): string {
+  return `CTFTeams round sync for member "${memberName}" (team ${teamId}).
+
+${digest}
+
+Apply what changes your current plan: a finding may invalidate your approach, hand you a shortcut, or end the challenge entirely. If the board contradicts your direction, answer with a ctf_teams_report_finding of your own. If nothing changes your angle, continue your task or become idle.`
 }
 
 /** Install one scheduler and its member activity observer. */
@@ -338,7 +356,11 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
           return
         }
 
-        const ticket = await withTeamLock(teamLockKey(stateRoot, team.id), async (): Promise<DispatchTicket | undefined> => {
+        // One lock pass decides the next unit of work: a task dispatch (with
+        // any pending round-sync digest riding along), a digest-only push for
+        // an idle member, or nothing. The cursor advances only after the
+        // harness accepts the delivery, so a failed dispatch stays pending.
+        const planned = await withTeamLock(teamLockKey(stateRoot, team.id), async (): Promise<{ kind: 'task'; ticket: DispatchTicket } | { kind: 'digest'; text: string; upTo: { findingSeq: number; flagSeq: number } } | undefined> => {
           const fresh = await readTeam(stateRoot, team!.id)
           if (fresh === undefined || fresh.halted === true || fresh.phase === 'staged') return undefined
           const currentMember = fresh.members.find(candidate => candidate.name === memberName && candidate.status !== 'removed')
@@ -355,10 +377,21 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
           const task = recoverOwned ? owned : owned === undefined
             ? nextReadyTask(fresh.tasks, currentMember.name)
             : undefined
+          const delta = deltaSince(fresh, currentMember.name)
+          const digest = formatBoardDelta(delta)
+          // The digest covers exactly the board head at computation time;
+          // beats arriving before delivery acceptance stay pending instead of
+          // being skipped by a cursor that jumped to a newer head.
+          const upTo = { findingSeq: fresh.findingSeq ?? 0, flagSeq: fresh.flagSeq ?? 0 }
           if (task === undefined) {
             if (currentMember.status !== 'idle') {
               currentMember.status = 'idle'
               await writeTeam(stateRoot, fresh)
+            }
+            // An idle member with nothing to claim still syncs: new board
+            // content may redirect its next round or tell it to stop.
+            if (delta.hasUpdates || delta.solved) {
+              return { kind: 'digest', text: digestPrompt(fresh.id, currentMember.name, digest), upTo }
             }
             return undefined
           }
@@ -381,7 +414,7 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
           await writeTeam(stateRoot, fresh)
           const profileSeedId = taskProfileSeedId(task)
           const protocol = teamProfileProtocol(fresh)
-          return {
+          return { kind: 'task' as const, ticket: {
             taskId: task.id,
             memberName: currentMember.name,
             memberId: currentMember.id,
@@ -414,16 +447,46 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
               task.id,
               (message) => ctx.logger.warn(message),
             ),
-          }
+            ...digest === '' ? {} : { digest },
+            ...digest === '' ? {} : { digestUpTo: upTo },
+          } }
         })
-        if (ticket === undefined) return
+        if (planned === undefined) return
 
+        if (planned.kind === 'digest') {
+          const signal = new AbortController().signal
+          const accepted = config.dispatch === undefined
+            ? await deliverToMember(ctx, captain, member.id, planned.text, signal, 'steer')
+            : await config.dispatch(captain, team.id, memberName, planned.text, signal, 'steer')
+          if (accepted) {
+            await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+              const fresh = await readTeam(stateRoot, team.id)
+              if (fresh === undefined) return
+              advanceCursor(fresh, memberName, planned.upTo)
+              await writeTeam(stateRoot, fresh)
+            })
+          }
+          return
+        }
+
+        const ticket = planned.ticket
         const prompt = assignmentPrompt(ticket, config.stateDir, team.id)
         const signal = new AbortController().signal
         const accepted = config.dispatch === undefined
           ? await deliverToMember(ctx, captain, ticket.memberId, prompt, signal)
           : await config.dispatch(captain, team.id, ticket.memberName, prompt, signal, 'queue', ticket.attemptId)
-        if (accepted) return
+        if (accepted) {
+          // The digest rode along with the assignment: the member has seen it.
+          if (ticket.digest !== undefined) {
+            await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+              const fresh = await readTeam(stateRoot, team.id)
+              if (fresh === undefined) return
+              advanceCursor(fresh, ticket.memberName, ticket.digestUpTo)
+              await writeTeam(stateRoot, fresh)
+            })
+          }
+          return
+        }
 
         // Roll back only our exact failed dispatch. A concurrent captain
         // handoff has already changed the capability and wins.
@@ -519,7 +582,7 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
 
   ctx.on('agent/status', ({ agent, status }) => {
     void syncMemberStatus(agent, status).catch((error: unknown) => {
-      ctx.logger.warn(`agent-teams: member status scheduling failed for ${agent.id}: ${String(error)}`)
+      ctx.logger.warn(`ctf-teams: member status scheduling failed for ${agent.id}: ${String(error)}`)
     })
   })
 

@@ -1,12 +1,12 @@
 /**
- * The `agent_teams_*` model-facing tools.
+ * The `ctf_teams_*` model-facing tools.
  *
  * The captain (the agent that created the team) orchestrates: members are
  * continuable subagents it spawns and wakes. Members share the same tools and
- * drive their own task state, mirroring the Claude Code AgentTeams flow:
+ * drive their own task state, mirroring the Claude Code CTFTeams flow:
  * create team → add members → create tasks with dependencies → claim/assign →
  * work → report → status → delete.
- * @module dsh-agent-teams/tools
+ * @module dsh-ctf-teams/tools
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -74,6 +74,37 @@ import { TERMINAL_TASK_STATUSES, type TeamMember, type TeamState, type TeamTask 
 import { collectCompletedDependencyOutputs, formatDependencyOutputs, installTeamScheduler } from './scheduler.ts'
 import { installMailboxAdmission, isCurrentMail, mailboxContent, mailboxPrompt, readCurrentMailbox } from './mailbox.ts'
 import { resolveTeamProfile } from './profiles.ts'
+import {
+  advanceCursor,
+  appendFinding,
+  appendFlagCandidate,
+  challengeOf,
+  deltaSince,
+  readCursor,
+  reviewFlagCandidate,
+  updateChallenge,
+} from './findings.ts'
+import { listKnowledgeTopics, readKnowledgeDoc } from './knowledge.ts'
+import { renderDashboard } from './dashboard.ts'
+import {
+  defaultCommandRunner,
+  detectTools,
+  planInstall,
+  renderStatuses,
+  runInstallPlan,
+  TOOL_SPECS,
+  type ToolStatus,
+} from './env.ts'
+import {
+  autoSyncTargets,
+  REFERENCE_REPOS,
+  REFERENCE_SIZE_NOTES,
+  referenceRepoPath,
+  referenceStatus,
+  referenceSyncCommand,
+  renderReferenceList,
+  resolveReferenceRepo,
+} from './references.ts'
 
 export { steerCaptainReport } from './members.ts'
 
@@ -93,8 +124,25 @@ export interface ToolsConfig {
   memberMaxDepth?: number
   /** Team size cap (members). */
   maxMembers: number
-  /** Named team profiles from the active DSH profile. */
+  /** Named team profiles from the active DSH profile (builtin included). */
   profiles: Record<string, import('./profiles.ts').TeamProfileConfig>
+  /** Profile used when create omits both `profile` and `plan`; empty disables. */
+  defaultProfile?: string
+  /** Toolchain service options for `ctf_teams_env`. */
+  env?: {
+    allowInstall?: boolean
+    probeTimeoutMs?: number
+    installTimeoutMs?: number
+    pythonBin?: string
+  }
+  /** References library options for `ctf_teams_references`. */
+  references?: {
+    /** Clone small reference repos automatically when a team is created. */
+    autoSync?: 'off' | 'small' | 'all'
+    depth?: number
+    dirName?: string
+    timeoutMs?: number
+  }
 }
 
 /** Browser/UI mutations allowed while a plan is waiting for approval. */
@@ -127,7 +175,7 @@ export type StagedPlanMutation =
   | { action: 'remove_member'; memberName: string }
 
 /** Runtime bridge shared by model-facing tools and the Web staging surface. */
-export interface AgentTeamsRuntime {
+export interface CTFTeamsRuntime {
   isPendingMember(agent: Agent): boolean
   updateStagedPlan(captain: Agent, teamId: string, mutation: StagedPlanMutation, signal?: AbortSignal): Promise<TeamState>
   updateStagedPlanBatch(captain: Agent, teamId: string, mutations: readonly StagedPlanMutation[], signal?: AbortSignal): Promise<TeamState>
@@ -139,7 +187,7 @@ export interface AgentTeamsRuntime {
 /** The caller agent, or a loud failure for non-agent callers. */
 function requireCaptain(exec: ToolRunContext): Agent {
   if (!exec.agent) {
-    throw new Error('agent_teams tools require a calling agent (exec.agent was undefined)')
+    throw new Error('ctf_teams tools require a calling agent (exec.agent was undefined)')
   }
   return exec.agent
 }
@@ -168,7 +216,7 @@ function captainLockKey(stateRoot: string, captainId: string): string {
 async function requireCaptainTeam(workspace: string, config: ToolsConfig, captain: Agent): Promise<TeamState> {
   const team = await findTeamByCaptain(stateRootOf(workspace, config), captain.id)
   if (team === undefined) {
-    throw new Error('you are not leading any team yet — call agent_teams_create first')
+    throw new Error('you are not leading any team yet — call ctf_teams_create first')
   }
   return team
 }
@@ -238,7 +286,7 @@ function requireMember(team: TeamState, name: string): TeamMember {
 function requireTask(team: TeamState, taskId: string): TeamTask {
   const task = team.tasks.find((candidate) => candidate.id === taskId)
   if (task === undefined) {
-    throw new Error(`no task "${taskId}" in team "${team.name}" — use agent_teams_status to list tasks`)
+    throw new Error(`no task "${taskId}" in team "${team.name}" — use ctf_teams_status to list tasks`)
   }
   return task
 }
@@ -362,7 +410,7 @@ export async function haltTeamWork(input: {
     fresh.halted = true
     fresh.haltedAt = now
     await writeTeam(input.stateRoot, fresh)
-    appendTeamEvent(input.ctx, captainSessionOf(input.ctx, fresh.captainSessionId, input.captain.session), 'agent-teams/team-halted', {
+    appendTeamEvent(input.ctx, captainSessionOf(input.ctx, fresh.captainSessionId, input.captain.session), 'ctf-teams/team-halted', {
       teamId: fresh.id,
       cancelledTasks,
     })
@@ -394,7 +442,7 @@ export async function haltTeamWork(input: {
 /** Web approval has no tool result in the captain's conversation. */
 export function stagedPlanApprovedContext(teamName: string): string {
   return [
-    `The user approved the staged AgentTeams plan "${teamName}" from the pre-run review UI.`,
+    `The user approved the staged CTFTeams plan "${teamName}" from the pre-run review UI.`,
     'Approval has committed; the scheduler owns dispatch of the approved team. Do not approve again, recreate the roster, or send messages merely to start assigned tasks.',
     'Acknowledge the approval and handle any reports or user work already pending. Yield only when waiting for members is the remaining action. Their reports will wake you automatically; do not busy-poll status or keep a turn running just to wait.',
     'On a report, inspect the result and coordinate the next necessary action. If work has since been halted, respect that state and resume only on an explicit user request.',
@@ -404,29 +452,29 @@ export function stagedPlanApprovedContext(teamName: string): string {
 /** Context queued after the human rejects a staged plan. */
 export function stagedPlanDiscardContext(teamName: string): string {
   return [
-    `The user discarded the staged AgentTeams plan "${teamName}" from the pre-run review UI.`,
+    `The user discarded the staged CTFTeams plan "${teamName}" from the pre-run review UI.`,
     'That decision is final for this draft: it has been archived, no members were created, and no tasks may run.',
-    'Do not call agent_teams_create, agent_teams_approve, or recreate a replacement team merely because the old team is no longer active.',
-    'Wait for a later explicit user request. If the next user message is unrelated to AgentTeams, answer it normally and do not start a team.',
+    'Do not call ctf_teams_create, ctf_teams_approve, or recreate a replacement team merely because the old team is no longer active.',
+    'Wait for a later explicit user request. If the next user message is unrelated to CTFTeams, answer it normally and do not start a team.',
   ].join('\n')
 }
 
 /** Model-facing continuation that turns the review UI back into a conversation. */
 export function stagedPlanFeedbackContext(teamName: string): string {
   return [
-    `The user selected "Return to chat and revise" for the staged AgentTeams plan "${teamName}".`,
+    `The user selected "Return to chat and revise" for the staged CTFTeams plan "${teamName}".`,
     'The existing staged plan is still the only draft. Do not create a replacement team, approve it, spawn members, edit the plan, or start work in this turn.',
     'Ask the user one concise, concrete question about what they want changed, then stop and wait for their answer.',
-    'After the user answers, revise this same staged roster and DAG with one atomic agent_teams_edit_plan call, summarize the changes, and ask the user to review the updated plan again.',
+    'After the user answers, revise this same staged roster and DAG with one atomic ctf_teams_edit_plan call, summarize the changes, and ask the user to review the updated plan again.',
   ].join('\n')
 }
 
 /**
- * Register every `agent_teams_*` tool into the shared tools registry.
+ * Register every `ctf_teams_*` tool into the shared tools registry.
  * @param ctx - the plugin context (injects `tools`).
  * @param config - resolved tool config.
  */
-export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): AgentTeamsRuntime {
+export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTeamsRuntime {
   installRetiredMemberGuard(ctx, config.stateDir)
   installMemberDelegationGuard(ctx, config.stateDir, config.memberMaxDepth ?? 0)
   installMailboxAdmission(ctx, config.stateDir)
@@ -450,7 +498,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           await writeTeam(root, fresh)
         })
       } catch (error: unknown) {
-        ctx.logger.warn(`agent-teams: could not record the member start failure for ${memberName}: ${String(error)}`)
+        ctx.logger.warn(`ctf-teams: could not record the member start failure for ${memberName}: ${String(error)}`)
       }
     }
     let orphan: TeamMember | undefined
@@ -480,7 +528,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       // The stack carries the failing frame; the message alone rarely does.
       let reason = String(error)
       if (error instanceof Error && typeof error.stack === 'string' && error.stack !== '') reason = error.stack
-      ctx.logger.warn(`agent-teams: member dispatch failed for ${memberName}: ${String(error)}`)
+      ctx.logger.warn(`ctf-teams: member dispatch failed for ${memberName}: ${String(error)}`)
       await recordSpawnError(reason)
       return false
     }
@@ -576,15 +624,15 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }
 
   // Browser review controls retain their staged-only contract.
-  const updateStagedPlanBatch: AgentTeamsRuntime['updateStagedPlanBatch'] = (captain, teamId, mutations, signal) => (
+  const updateStagedPlanBatch: CTFTeamsRuntime['updateStagedPlanBatch'] = (captain, teamId, mutations, signal) => (
     updatePlanBatch(captain, teamId, mutations, signal)
   )
 
-  const updateStagedPlan: AgentTeamsRuntime['updateStagedPlan'] = async (captain, teamId, mutation, signal) => (
+  const updateStagedPlan: CTFTeamsRuntime['updateStagedPlan'] = async (captain, teamId, mutation, signal) => (
     updateStagedPlanBatch(captain, teamId, [mutation], signal)
   )
 
-  const approveStagedTeam: AgentTeamsRuntime['approveStagedTeam'] = async (captain, teamId, signal) => {
+  const approveStagedTeam: CTFTeamsRuntime['approveStagedTeam'] = async (captain, teamId, signal) => {
     const workspace = workspaceOf(captain)
     const stateRoot = stateRootOf(workspace, config)
     const runSignal = signal ?? new AbortController().signal
@@ -618,12 +666,12 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       // Approval is already durably committed. A transient wake-up failure is
       // recoverable by the next status/member lifecycle kick and must not make
       // the UI report that an already-running team failed to approve.
-      ctx.logger.warn(`agent-teams: post-approval kick failed for "${teamId}": ${String(error)}`)
+      ctx.logger.warn(`ctf-teams: post-approval kick failed for "${teamId}": ${String(error)}`)
     }
     return approved
   }
 
-  const continueStagedPlanning: AgentTeamsRuntime['continueStagedPlanning'] = async (captain, teamId) => {
+  const continueStagedPlanning: CTFTeamsRuntime['continueStagedPlanning'] = async (captain, teamId) => {
     const workspace = workspaceOf(captain)
     const stateRoot = stateRootOf(workspace, config)
     const prepared = await withTeamLock(teamLockKey(stateRoot, teamId), async () => {
@@ -645,7 +693,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     try {
       captain.followup(createUserMessage({
         content: [{ type: 'text', text: stagedPlanFeedbackContext(prepared.teamName) }],
-        source: { kind: 'agent-teams' },
+        source: { kind: 'ctf-teams' },
       }))
     } catch (error: unknown) {
       // Do not leave the durable UI in a false waiting state when the live
@@ -663,13 +711,13 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     return { teamId, alreadyWaiting: false }
   }
 
-  const discardStagedTeam: AgentTeamsRuntime['discardStagedTeam'] = async (captain, teamId) => {
+  const discardStagedTeam: CTFTeamsRuntime['discardStagedTeam'] = async (captain, teamId) => {
     const workspace = workspaceOf(captain)
     const stateRoot = stateRootOf(workspace, config)
     const discarded = await withTeamLock(teamLockKey(stateRoot, teamId), async () => {
       const fresh = await requireFreshCaptainTeam(stateRoot, teamId, captain.id)
       requireStagedTeam(fresh)
-      appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/plan-discarded', {
+      appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/plan-discarded', {
         teamId: fresh.id,
       })
       // A staged plan owns no child sessions. Archiving releases the captain
@@ -683,19 +731,19 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     try {
       captain.inject(createUserMessage({
         content: [{ type: 'text', text: stagedPlanDiscardContext(discarded.teamName) }],
-        source: { kind: 'agent-teams' },
+        source: { kind: 'ctf-teams' },
       }))
     } catch (error: unknown) {
       // The archive is already authoritative. Cancellation still prevents a
       // late step from recreating work; failure to park extra context is only a
       // live-delivery warning and must not turn a successful discard into 409.
-      ctx.logger.warn(`agent-teams: failed to inject discard context for "${discarded.teamId}": ${String(error)}`)
+      ctx.logger.warn(`ctf-teams: failed to inject discard context for "${discarded.teamId}": ${String(error)}`)
     }
     captain.cancel({ kind: 'user' }, { keepInbox: true })
     return { teamId: discarded.teamId }
   }
 
-  const runtime: AgentTeamsRuntime = {
+  const runtime: CTFTeamsRuntime = {
     isPendingMember: memberSelections.isPendingMember,
     updateStagedPlan,
     updateStagedPlanBatch,
@@ -705,7 +753,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_create',
+    name: 'ctf_teams_create',
     description: 'Create a team. Use approval=required for a two-phase plan: members and tasks remain unspawned/unclaimed until the user reviews the Web plan and explicitly approves it. Optional profiles expand their configured roster; seed profiles also expand template tasks, while captain profiles leave the graph for the Captain to design. approval=automatic preserves the legacy immediate-execution path.',
     parameters: {
       name: { type: 'string', required: true, description: 'Name for the new team (used as its stable id).' },
@@ -769,13 +817,23 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       const profileName = args.profile !== undefined && args.profile.trim() !== ''
         ? args.profile.trim()
         : undefined
+      // The configured default profile (the built-in `ctf-teams` squad by
+      // default) applies when the create call names neither a profile nor an
+      // inline plan. A bad default name degrades to a plain empty team rather
+      // than breaking every unprofiled create.
+      const defaultProfile = profileName === undefined && args.plan === undefined
+        && config.defaultProfile !== undefined
+        && config.profiles[config.defaultProfile] !== undefined
+        ? config.defaultProfile
+        : undefined
+      const effectiveProfile = profileName ?? defaultProfile
       if (profileName !== undefined && args.plan !== undefined) throw new Error('choose either a configured profile or an inline plan')
       const created = await withTeamLock(captainLockKey(stateRoot, captain.id), async () => {
         const current = await findTeamByParticipant(stateRoot, captain.id)
         if (current !== undefined) {
           const relationship = current.captainSessionId === captain.id ? 'lead' : 'belong to'
           const guidance = current.captainSessionId === captain.id
-            ? 'Use agent_teams_status and continue the existing team. Do not delete and recreate it merely to continue work. End it only when the user explicitly wants a separate new team.'
+            ? 'Use ctf_teams_status and continue the existing team. Do not delete and recreate it merely to continue work. End it only when the user explicitly wants a separate new team.'
             : 'Continue your assigned member work and report to your captain; do not create a separate team.'
           throw new Error(`you already ${relationship} team "${current.name}" (id ${current.id}). ${guidance}`)
         }
@@ -784,7 +842,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           if (existing !== undefined) {
             throw new Error(`team id "${teamId}" is taken by another captain — pick a different team name`)
           }
-          if (profileName === undefined && args.plan === undefined) {
+          if (effectiveProfile === undefined && args.plan === undefined) {
             const state: TeamState = {
               name: teamName,
               id: teamId,
@@ -808,7 +866,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
             stateRoot,
             teamName,
             teamId,
-            profileName: profileName ?? 'inline-plan',
+            profileName: effectiveProfile ?? 'inline-plan',
             inlinePlan: args.plan,
             description: args.description,
             staged,
@@ -816,13 +874,14 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         })
       })
       if (created.committed) {
+        scheduleReferenceAutoSync(ctx, workspace, created.state.id, config)
         try {
           await scheduler.kickTeam(workspace, created.state.id, captain)
         } catch (error: unknown) {
-          ctx.logger.warn(`agent-teams: post-create kick failed for "${created.state.id}": ${String(error)}`)
+          ctx.logger.warn(`ctf-teams: post-create kick failed for "${created.state.id}": ${String(error)}`)
         }
         try {
-          appendTeamEvent(ctx, captain.session, 'agent-teams/team-created', {
+          appendTeamEvent(ctx, captain.session, 'ctf-teams/team-created', {
             teamId: created.state.id,
             captainSessionId: captain.id,
             name: created.state.name,
@@ -830,7 +889,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
             ...created.state.profile?.name === undefined ? {} : { profile: created.state.profile.name },
           })
           for (const member of created.state.members) {
-            appendTeamEvent(ctx, captain.session, 'agent-teams/member-added', {
+            appendTeamEvent(ctx, captain.session, 'ctf-teams/member-added', {
               teamId: created.state.id,
               memberId: member.id,
               name: member.name,
@@ -838,7 +897,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
             })
           }
           for (const task of created.state.tasks) {
-            appendTeamEvent(ctx, captain.session, 'agent-teams/task-created', {
+            appendTeamEvent(ctx, captain.session, 'ctf-teams/task-created', {
               teamId: created.state.id,
               taskId: task.id,
               subject: task.subject,
@@ -847,7 +906,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
             })
           }
         } catch (error: unknown) {
-          ctx.logger.warn(`agent-teams: post-create events failed for "${created.state.id}": ${String(error)}`)
+          ctx.logger.warn(`ctf-teams: post-create events failed for "${created.state.id}": ${String(error)}`)
         }
       }
       const persisted = await readTeam(stateRoot, created.state.id).catch(() => undefined)
@@ -889,8 +948,8 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_edit_plan',
-    description: 'Atomically revise an AgentTeams plan. While staged, edit tasks and roster without starting work. While running, only update_task is allowed, and only for pending tasks with no prior attempt: correct dependencies, assignees or descriptions before they start; newly ready work is scheduled after commit. Never edit active/finished attempts. Submit dependent edits in order. Never modify .agent-teams files directly.',
+    name: 'ctf_teams_edit_plan',
+    description: 'Atomically revise an CTFTeams plan. While staged, edit tasks and roster without starting work. While running, only update_task is allowed, and only for pending tasks with no prior attempt: correct dependencies, assignees or descriptions before they start; newly ready work is scheduled after commit. Never edit active/finished attempts. Submit dependent edits in order. Never modify .ctf-teams files directly.',
     parameters: {
       operations: {
         type: 'array',
@@ -1009,7 +1068,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_approve',
+    name: 'ctf_teams_approve',
     description: 'Approve and start a staged team plan. Call this only in response to an explicit user approval in a new user turn; never call it during the turn that created or edited the plan. The Web Approve & Run button uses the same runtime directly.',
     parameters: {
       confirmation: { type: 'string', required: true, description: 'The user\'s explicit approval statement.' },
@@ -1041,7 +1100,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_add_member',
+    name: 'ctf_teams_add_member',
     description: 'Add a member to the team roster. Planning and idle roster rows do not call a model. After approval, the member session starts with its first ready task or explicit message and remains durable for later work.',
     parameters: {
       name: { type: 'string', required: true, description: 'Unique member name inside the team.' },
@@ -1113,7 +1172,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         await validateMemberLlmSelections(ctx, [selection], exec.signal)
         fresh.members.push(member)
         await writeTeam(stateRoot, fresh)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/member-added', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/member-added', {
           teamId: fresh.id,
           memberId: member.id,
           name: member.name,
@@ -1138,7 +1197,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_remove_member',
+    name: 'ctf_teams_remove_member',
     description: 'Remove a member safely: revoke its current attempts, return all unfinished owned tasks to the shared pending pool, interrupt its live turn, and mark it removed.',
     parameters: {
       name: { type: 'string', required: true, description: 'Name of the member to remove.' },
@@ -1177,7 +1236,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         member.status = 'removed'
         await discardMailboxMessages(stateRoot, fresh.id, member.name, (await readUnreadMailbox(stateRoot, fresh.id, member.name)).map(message => message.id))
         await writeTeam(stateRoot, fresh)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/member-removed', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/member-removed', {
           teamId: fresh.id,
           memberId: member.id,
         })
@@ -1197,7 +1256,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_create_task',
+    name: 'ctf_teams_create_task',
     description: 'Create a task in your team\'s task list. Use kind=work (default) for research, repository audits and general tasks. kind=review is only a quality gate for an existing implementation/repair task via reviewedTaskId. Every call must include a non-empty subject, including verification and review tasks. Tasks can depend on other tasks (dependencies): a task is only claimable once every dependency is completed. Optionally assign it to a member, who still claims it before working.',
     parameters: {
       subject: { type: 'string', required: true, description: 'Required non-empty title for this task. Never omit it, including for verification or review tasks.' },
@@ -1221,7 +1280,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       verify: { type: 'array', items: { type: 'string' }, description: 'Verification commands. Required for implementation/repair.' },
       deliverables: { type: 'array', items: { type: 'string' }, description: 'Expected deliverable paths or names.' },
       nonGoals: { type: 'array', items: { type: 'string' }, description: 'Explicit non-goals.' },
-      reviewedTaskId: { type: 'string', description: 'Existing AgentTeams implementation/repair task id. Required for kind=review; an external repository audit is kind=work.' },
+      reviewedTaskId: { type: 'string', description: 'Existing CTFTeams implementation/repair task id. Required for kind=review; an external repository audit is kind=work.' },
       sourceTaskId: { type: 'string', description: 'Source implementation/artifact. Required for kind=repair.' },
       sourceFindingIds: { type: 'array', items: { type: 'string' }, description: 'Finding ids this repair must close.' },
       coverageOf: { type: 'array', items: { type: 'string' }, description: 'User-constraint / goal items this task covers.' },
@@ -1282,11 +1341,11 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         if (fresh.halted === true) {
           const resumed = resumeTeamState(fresh, args.resumeReason ?? '')
           if (resumed.status !== 'resumed' || resumed.team === undefined) {
-            throw new Error(resumed.error ?? 'team is halted; call agent_teams_resume or pass resume=true with resumeReason')
+            throw new Error(resumed.error ?? 'team is halted; call ctf_teams_resume or pass resume=true with resumeReason')
           }
           fresh.halted = false
           fresh.haltedAt = undefined
-          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/team-resumed', {
+          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/team-resumed', {
             teamId: fresh.id,
             reason: args.resumeReason ?? '',
           })
@@ -1332,7 +1391,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         fresh.taskSeq += 1
         fresh.tasks.push(task)
         await writeTeam(stateRoot, fresh)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/task-created', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/task-created', {
           teamId: fresh.id,
           taskId: task.id,
           subject: task.subject,
@@ -1355,7 +1414,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_reassign_task',
+    name: 'ctf_teams_reassign_task',
     description: 'Atomically retry, reassign, or let the captain take over one ready unfinished/failed task. The old attempt is revoked before its member is interrupted, so late updates cannot overwrite the new owner. Use assignee="captain" only when you will finish that task in this turn; a captain can own only one unfinished takeover at a time, and an unfinished takeover returns to the member pool when the captain becomes idle.',
     parameters: {
       task_id: { type: 'string', required: true, description: 'Task to retry/reassign.' },
@@ -1461,7 +1520,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           task.updatedAt = Date.now()
         }
         await writeTeam(stateRoot, fresh)
-        appendTeamEvent(ctx, captain.session, 'agent-teams/task-updated', {
+        appendTeamEvent(ctx, captain.session, 'ctf-teams/task-updated', {
           teamId: fresh.id,
           taskId: task.id,
           status: task.status,
@@ -1486,7 +1545,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_claim_task',
+    name: 'ctf_teams_claim_task',
     description: 'Members claim their own ready task or read their existing attempt_id. Captains must use reassign_task to assign and wake a member; claim_task does not dispatch work. A member cannot own a second unfinished task. The returned attempt_id is required for updates and becomes stale after retry/reassignment.',
     parameters: {
       task_id: { type: 'string', required: true, description: 'The task id to claim.' },
@@ -1527,7 +1586,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           // but must never create a member claim without dispatching it (#125).
           if (args.assignee !== undefined || task.assignee !== CAPTAIN_KEY
               || (task.status !== 'claimed' && task.status !== 'in_progress')) {
-            throw new Error('claim_task is for members claiming their own task; captains must use agent_teams_reassign_task to assign and wake a member')
+            throw new Error('claim_task is for members claiming their own task; captains must use ctf_teams_reassign_task to assign and wake a member')
           }
         } else {
           if (args.assignee !== undefined) {
@@ -1568,7 +1627,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         }
         const attemptId = beginTaskAttempt(task, assignee)
         await writeTeam(stateRoot, fresh)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'agent-teams/task-updated', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/task-updated', {
           teamId: fresh.id,
           taskId: task.id,
           status: task.status,
@@ -1587,7 +1646,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_update_task',
+    name: 'ctf_teams_update_task',
     description: 'Update a task status/output. Members must supply the current attempt_id returned by claim_task; stale attempts are rejected after takeover/reassignment. Terminal results are immutable, but owners and the captain can append acceptanceResults/commandsRun/evidence_note as attributed supplemental evidence, without reclaiming or changing the verdict. A captain must use reassign_task(assignee="captain") before updating active member-owned work.',
     parameters: {
       task_id: { type: 'string', required: true, description: 'The task id to update.' },
@@ -1687,7 +1746,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           && task.assignee !== CAPTAIN_KEY
           && !TERMINAL_TASK_STATUSES.includes(task.status)
           && !(args.status === 'cancelled' && task.status === 'pending' && (task.attempt ?? 0) === 0 && task.reassigning !== true)) {
-          throw new Error(`task ${task.id} is owned by member "${task.assignee}"; call agent_teams_reassign_task with assignee="captain" before takeover`)
+          throw new Error(`task ${task.id} is owned by member "${task.assignee}"; call ctf_teams_reassign_task with assignee="captain" before takeover`)
         }
         if (identity.kind === 'member') {
           if (task.assignee !== identity.name) {
@@ -1764,7 +1823,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         }
         await writeTeam(stateRoot, fresh)
         if (followUpMessage !== undefined) await appendMailbox(stateRoot, fresh.id, CAPTAIN_KEY, followUpMessage)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'agent-teams/task-updated', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/task-updated', {
           teamId: fresh.id,
           taskId: task.id,
           status: task.status,
@@ -1774,7 +1833,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           ...task.round === undefined ? {} : { round: task.round },
         })
         for (const created of followUp?.created ?? []) {
-          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'agent-teams/task-created', {
+          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/task-created', {
             teamId: fresh.id,
             taskId: created.id,
             subject: created.subject,
@@ -1805,7 +1864,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_amend_task',
+    name: 'ctf_teams_amend_task',
     description: 'Captain-only controlled contract amendment for one non-terminal quality task: replace a wrong objective/acceptance/verify/inScope/outOfScope when the original contract makes honest completion impossible (for example a verify command that cannot pass, or an inScope that forbids the file the objective names). The amendment is appended to the task\'s revisions ledger with previous values and the reason, and is rejected once a review/requirements task has passed judgment on this task. Members cannot amend contracts; the implementer re-reads the amended contract before its next quality gate. Lists are full replacements, not deltas.',
     parameters: {
       task_id: { type: 'string', required: true, description: 'Task whose contract is being amended.' },
@@ -1869,7 +1928,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           },
         }
       })
-      appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, captain.session), 'agent-teams/task-amended', {
+      appendTeamEvent(ctx, captainSessionOf(ctx, team.captainSessionId, captain.session), 'ctf-teams/task-amended', {
         teamId: team.id,
         taskId: amended.taskId,
         fields: amended.fields,
@@ -1886,7 +1945,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_send_message',
+    name: 'ctf_teams_send_message',
     description: 'Send coordination or current-task guidance directly to the captain or a teammate. A running recipient receives it at the next model step; an idle recipient wakes. Messages are durably retained until read. Use task creation/reassignment for a new unit of work, not repeated status nudges.',
     parameters: {
       source_task_id: { type: 'string', description: 'Sender task, NOT the recipient task. Members include it with source_attempt_id. Captains sending guidance normally omit both source fields.' },
@@ -1923,7 +1982,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         // `from` may only be the caller's own identity: impersonating another
         // member (or the captain) would poison the mailbox and event records.
         if (args.from !== undefined && args.from !== from) {
-          throw new Error(`agent_teams_send_message: "from" must be your own identity ("${from}"), not "${args.from}"`)
+          throw new Error(`ctf_teams_send_message: "from" must be your own identity ("${from}"), not "${args.from}"`)
         }
         const sourceTaskId = args.source_task_id?.trim() || undefined
         const sourceAttemptId = args.source_attempt_id?.trim() || undefined
@@ -1944,7 +2003,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         if (to === CAPTAIN_KEY) {
           const message = { ...createMessage(from, CAPTAIN_KEY, args.content), ...sourceFields, deliveryClaimedAt: Date.now() }
           await appendMailbox(stateRoot, fresh.id, CAPTAIN_KEY, message)
-          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'agent-teams/message-sent', {
+          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/message-sent', {
             teamId: fresh.id,
             messageId: message.id,
             from,
@@ -1955,14 +2014,14 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           return { kind: 'captain' as const, fresh, identity, message, from }
         }
         if (fresh.halted === true) {
-          throw new Error(`team "${fresh.name}" is halted; call agent_teams_resume before waking a member`)
+          throw new Error(`team "${fresh.name}" is halted; call ctf_teams_resume before waking a member`)
         }
         const recipient = requireMember(fresh, to)
         const message = { ...createMessage(from, recipient.name, args.content), ...sourceFields, deliveryClaimedAt: Date.now(),
           ...owned?.attemptId === undefined ? {} : { taskId: owned.id, attemptId: owned.attemptId },
         }
         await appendMailbox(stateRoot, fresh.id, recipient.name, message)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'agent-teams/message-sent', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/message-sent', {
           teamId: fresh.id,
           messageId: message.id,
           from,
@@ -2019,12 +2078,12 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_status',
-    description: 'Team snapshot: members with live activity and tasks with status/assignee/dependencies/output. Captains also see every team mailbox; members see only their own inbox. Use after mailbox progress deliveries or for an explicit status request. After dispatch, end your turn while members work; do not repeatedly poll.',
+    name: 'ctf_teams_status',
+    description: 'Team snapshot rendered as the solving dashboard: challenge context, member status, task board, latest findings, flag candidates with verdicts, plus the full model-facing detail (mailboxes, dependency outputs, loop state). Captains also see every team mailbox; members see only their own inbox. Use after mailbox progress deliveries or for an explicit status request. After dispatch, end your turn while members work; do not repeatedly poll.',
     parameters: {},
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
-      render: (_args, value) => [{ type: 'text', text: renderStatus(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderStatusPanel(value) }],
     },
     async execute(_args, exec) {
       const caller = requireCaptain(exec)
@@ -2110,6 +2169,21 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       const deliveryCheck = canDeclareDelivery(team)
       const delivery = { ok: deliveryCheck.ok, blockers: [...deliveryCheck.blockers] }
       const loop = describeQualityLoop(team)
+      const challenge = challengeOf(team)
+      const memberSync: Record<string, { behind: number; working_on?: string }> = {}
+      for (const member of members) {
+        const cursor = readCursor(team, member.name)
+        const behind = Math.max(
+          (team.findingSeq ?? 0) - cursor.findingSeq,
+          (team.flagSeq ?? 0) - cursor.flagSeq,
+        )
+        const openTask = team.tasks.find((task) => task.assignee === member.name
+          && (task.status === 'claimed' || task.status === 'in_progress'))
+        memberSync[member.name] = {
+          behind,
+          ...(openTask === undefined ? {} : { working_on: `${openTask.id} ${openTask.subject}` }),
+        }
+      }
       const result = {
         team_id: team.id,
         team_name: team.name,
@@ -2122,6 +2196,15 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         deliverable: loop.deliverable,
         coverage,
         delivery,
+        ctf: {
+          challenge: { ...challenge },
+          round: team.round ?? 0,
+          created_at: team.createdAt,
+          finding_count: team.findings?.length ?? 0,
+          flags: (team.flags ?? []).map((flag) => ({ ...flag })),
+          findings: (team.findings ?? []).slice(-10).map((finding) => ({ ...finding })),
+          member_sync: memberSync,
+        },
         ...team.profile === undefined ? {} : {
           profile: {
             name: team.profile.name,
@@ -2157,7 +2240,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_resume',
+    name: 'ctf_teams_resume',
     description: 'Explicitly resume a halted team. Requires a non-empty reason. Does not recreate cancelled tasks; only still-pending work is scheduled.',
     parameters: {
       reason: { type: 'string', required: true, description: 'Why the team is being resumed.' },
@@ -2192,7 +2275,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           fresh.halted = false
           fresh.haltedAt = undefined
           await writeTeam(stateRoot, fresh)
-          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/team-resumed', {
+          appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/team-resumed', {
             teamId: fresh.id,
             reason: args.reason,
           })
@@ -2209,7 +2292,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
   }))
 
   ctx.tools.register(defineTool({
-    name: 'agent_teams_delete',
+    name: 'ctf_teams_delete',
     description: 'End and archive your team: interrupts members and moves the current tasks and mailboxes out of active state for later inspection. Use when the work is done or explicitly abandoned. A same-name archive replaces its previous generation.',
     parameters: {},
     output: {
@@ -2251,7 +2334,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       await stopTeamMemberActivations(ctx, captain, members, exec.signal)
       await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
-        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'agent-teams/team-deleted', {
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/team-deleted', {
           teamId: fresh.id,
         })
         // Archive, not delete: tasks (with their dependency graph) and the
@@ -2261,7 +2344,610 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       return { deleted: true, team_name: team.name }
     },
   }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_set_challenge',
+    description: 'Captain-only: record or update the challenge context (title, category, points, description, attachments, remote endpoint, flag format). Every member sees this on the dashboard and in digests. Set it before dispatching work so lanes target the right artifacts and submit flags in the right shape.',
+    parameters: {
+      title: { type: 'string', description: 'Challenge title.' },
+      category: { type: 'string', description: 'Category tag: web, pwn, reverse, crypto, forensics, misc, …' },
+      points: { type: 'number', description: 'Point value when the platform publishes one.' },
+      description: { type: 'string', description: 'The original challenge description text.' },
+      attachments: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative attachment paths.' },
+      remote: { type: 'string', description: 'Remote endpoint (URL or host:port).' },
+      flag_format: { type: 'string', description: 'Regex source a flag must match, e.g. flag\\{[^}]+\\} or a competition-specific wrapper. Omit to keep the current format.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          challenge: { type: 'object', additionalProperties: true, properties: {} },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Challenge context recorded: ${JSON.stringify(value.challenge)}`,
+      }],
+    },
+    async execute(args, exec) {
+      const captain = requireCaptain(exec)
+      const workspace = workspaceOf(captain)
+      const stateRoot = stateRootOf(workspace, config)
+      const team = await requireCaptainTeam(workspace, config, captain)
+      const challenge = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
+        const next = updateChallenge(fresh, {
+          title: args.title,
+          category: args.category,
+          points: args.points,
+          description: args.description,
+          attachments: args.attachments,
+          remote: args.remote,
+          flagFormat: args.flag_format,
+        })
+        await writeTeam(stateRoot, fresh)
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/challenge-updated', {
+          teamId: fresh.id,
+          ...next.title === undefined ? {} : { title: next.title },
+          ...next.category === undefined ? {} : { category: next.category },
+          ...next.flagFormat === undefined ? {} : { flagFormat: next.flagFormat },
+        })
+        return next
+      })
+      return { challenge: { ...challenge } }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_submit_flag',
+    description: 'Submit a candidate flag to the team flag board with the evidence that produced it. The string must match the challenge flag format; duplicates are pointed out instead of re-added. The captain reviews candidates against the platform — a submission is a claim, not a confirmed solve. Members: submit the moment a flag-shaped string appears.',
+    parameters: {
+      flag: { type: 'string', required: true, description: 'The candidate flag string.' },
+      evidence: { type: 'string', description: 'How this flag was produced (script, command, path) so others can reproduce it.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          flag_id: { type: 'string', required: true },
+          flag: { type: 'string', required: true },
+          status: { type: 'string', required: true },
+          duplicate: { type: 'boolean', required: true },
+          submitted_by: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.duplicate
+          ? `Flag ${value.flag_id} is already on the board (${value.status}, submitted by ${value.submitted_by}). Do not resubmit; wait for the captain's verdict.`
+          : `Candidate ${value.flag_id} recorded (${value.flag}). The captain will verify it against the platform.`,
+      }],
+    },
+    async execute(args, exec) {
+      const caller = requireCaptain(exec)
+      const workspace = workspaceOf(caller)
+      const stateRoot = stateRootOf(workspace, config)
+      const team = await requireParticipantTeam(workspace, config, caller)
+      let notifyCaptain = false
+      let notice = ''
+      const result = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const { team: fresh, identity } = await requireFreshParticipant(stateRoot, team.id, caller.id)
+        const { candidate, duplicate } = appendFlagCandidate(fresh, {
+          flag: args.flag,
+          submittedBy: identity.name,
+          evidence: args.evidence,
+        })
+        await writeTeam(stateRoot, fresh)
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/flag-submitted', {
+          teamId: fresh.id,
+          flagId: candidate.id,
+          flag: candidate.flag,
+          submittedBy: candidate.submittedBy,
+          duplicate,
+          ts: candidate.ts,
+        })
+        if (identity.kind === 'member' && !duplicate) {
+          notifyCaptain = true
+          notice = [
+            `Flag candidate ${candidate.id} submitted by ${identity.name}: ${candidate.flag}`,
+            candidate.evidence === undefined ? '' : `Evidence: ${candidate.evidence}`,
+            'Verify against the platform, then ctf_teams_mark_flag with the verdict.',
+          ].filter((line) => line !== '').join('\n')
+        }
+        return { candidate, duplicate }
+      })
+      if (notifyCaptain) {
+        // Wake the captain directly: a flag on the board is the one board beat
+        // that should not wait for the next status poll.
+        const captain = ctx.agents.get(team.captainSessionId as SessionId)
+        if (captain !== undefined) {
+          try {
+            steerCaptainReport(captain, result.candidate.submittedBy, notice)
+          } catch (error: unknown) {
+            ctx.logger.warn(`ctf-teams: flag notice steering failed for ${team.id}: ${String(error)}`)
+          }
+        }
+      }
+      return {
+        flag_id: result.candidate.id,
+        flag: result.candidate.flag,
+        status: result.candidate.status,
+        duplicate: result.duplicate,
+        submitted_by: result.candidate.submittedBy,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_mark_flag',
+    description: 'Captain-only: record a candidate flag verdict after checking it against the competition platform or validator. verdict=verified marks the challenge solved and tells every lane to converge on the writeup. verdict=rejected with a note keeps the board clean for the next candidates.',
+    parameters: {
+      flag_id: { type: 'string', required: true, description: 'Flag candidate id (f1, f2, …) from the board.' },
+      verdict: { type: 'string', required: true, enum: ['verified', 'rejected'], description: 'The platform result.' },
+      note: { type: 'string', description: 'Platform response or rejection reason.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          flag_id: { type: 'string', required: true },
+          flag: { type: 'string', required: true },
+          verdict: { type: 'string', required: true },
+          solved: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.solved
+          ? `Flag ${value.flag_id} verified — CHALLENGE SOLVED (${value.flag}). Tell every lane to stop exploring and converge on the writeup.`
+          : `Flag ${value.flag_id} rejected. The board is updated; keep hunting.`,
+      }],
+    },
+    async execute(args, exec) {
+      const captain = requireCaptain(exec)
+      const workspace = workspaceOf(captain)
+      const stateRoot = stateRootOf(workspace, config)
+      const team = await requireCaptainTeam(workspace, config, captain)
+      const result = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
+        const reviewed = reviewFlagCandidate(fresh, args.flag_id, args.verdict, { by: CAPTAIN_KEY, note: args.note })
+        await writeTeam(stateRoot, fresh)
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, captain.session), 'ctf-teams/flag-reviewed', {
+          teamId: fresh.id,
+          flagId: reviewed.candidate.id,
+          flag: reviewed.candidate.flag,
+          verdict: args.verdict,
+          solved: reviewed.solved,
+          ts: reviewed.candidate.ts,
+        })
+        return reviewed
+      })
+      if (result.solved) {
+        await scheduler.kickTeam(workspace, team.id, captain)
+      }
+      return { flag_id: result.candidate.id, flag: result.candidate.flag, verdict: args.verdict, solved: result.solved }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_report_finding',
+    description: 'Publish one finding to the shared board (recon result, attack path, dead end, extracted artifact) and receive everything teammates reported since your last sync in the same response. This is the round-sync heartbeat: report every meaningful result the round you get it, exact commands and paths included. Dead ends count — category "dead-end" saves your teammates a round.',
+    parameters: {
+      content: { type: 'string', required: true, description: 'The finding, one self-contained paragraph: what you tried, what you observed, what it means for the others.' },
+      category: { type: 'string', description: 'Free tag: the attack angle (web, pwn, crypto, …), "recon", or "dead-end".' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          finding_id: { type: 'string', required: true },
+          round: { type: 'number', required: true },
+          has_updates: { type: 'boolean', required: true },
+          new_findings: { type: 'array', items: { type: 'string' }, required: true },
+          flag_updates: { type: 'array', items: { type: 'string' }, required: true },
+          solved: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Finding ${value.finding_id} recorded (round ${value.round}).`
+          + (value.solved ? '\n*** THE CHALLENGE IS SOLVED — stop exploring and help finalize the writeup. ***' : '')
+          + (value.has_updates
+            ? `\nNew from teammates since your last sync:\n${[...value.new_findings, ...value.flag_updates].map((line) => `- ${line}`).join('\n')}`
+            : '\nNo new teammate progress since your last sync.'),
+      }],
+    },
+    async execute(args, exec) {
+      const caller = requireCaptain(exec)
+      const workspace = workspaceOf(caller)
+      const stateRoot = stateRootOf(workspace, config)
+      const team = await requireParticipantTeam(workspace, config, caller)
+      const result = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const { team: fresh, identity } = await requireFreshParticipant(stateRoot, team.id, caller.id)
+        // Compute the delta BEFORE appending: the response must carry only what
+        // teammates reported since this participant's last sync — never its own
+        // just-appended finding. Advancing afterwards marks the whole board
+        // (including the new finding) as seen.
+        const delta = deltaSince(fresh, identity.name)
+        const finding = appendFinding(fresh, { from: identity.name, category: args.category, content: args.content })
+        advanceCursor(fresh, identity.name)
+        await writeTeam(stateRoot, fresh)
+        appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/finding-reported', {
+          teamId: fresh.id,
+          findingId: finding.id,
+          from: finding.from,
+          ...finding.category === undefined ? {} : { category: finding.category },
+          content: finding.content,
+          round: finding.round,
+          ts: finding.ts,
+        })
+        return { finding, delta }
+      })
+      return {
+        finding_id: result.finding.id,
+        round: result.finding.round,
+        has_updates: result.delta.hasUpdates,
+        new_findings: result.delta.findings.map((finding) => `[${finding.id}] (${finding.from}${finding.category === undefined ? '' : `/${finding.category}`}) ${finding.content}`),
+        flag_updates: result.delta.flags.map((flag) => `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}`),
+        solved: result.delta.solved,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_sync',
+    description: 'Round sync: pull everything that changed on the shared boards since you last looked (teammate findings, flag candidates, verdicts, solve state). Call it when you go idle, before choosing an attack path, and after any teammate pings you. An empty result means nobody has new progress — do not invent work, continue or yield.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          has_updates: { type: 'boolean', required: true },
+          round: { type: 'number', required: true },
+          new_findings: { type: 'array', items: { type: 'string' }, required: true },
+          flag_updates: { type: 'array', items: { type: 'string' }, required: true },
+          solved: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.solved
+          ? '*** THE CHALLENGE IS SOLVED — stop exploring and help finalize the writeup. ***'
+          : value.has_updates
+            ? `Round ${value.round} — new progress to sync:\n${[...value.new_findings, ...value.flag_updates].map((line) => `- ${line}`).join('\n')}`
+            : `Round ${value.round} — no new teammate progress. Continue your angle or yield.`,
+      }],
+    },
+    async execute(_args, exec) {
+      const caller = requireCaptain(exec)
+      const workspace = workspaceOf(caller)
+      const stateRoot = stateRootOf(workspace, config)
+      const team = await requireParticipantTeam(workspace, config, caller)
+      const result = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const { team: fresh, identity } = await requireFreshParticipant(stateRoot, team.id, caller.id)
+        const delta = deltaSince(fresh, identity.name)
+        advanceCursor(fresh, identity.name)
+        await writeTeam(stateRoot, fresh)
+        return delta
+      })
+      return {
+        has_updates: result.hasUpdates,
+        round: result.round,
+        new_findings: result.findings.map((finding) => `[${finding.id}] (${finding.from}${finding.category === undefined ? '' : `/${finding.category}`}) ${finding.content}`),
+        flag_updates: result.flags.map((flag) => `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}`),
+        solved: result.solved,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_knowledge',
+    description: 'Read the shipped CTF knowledge base: the kali toolbox, pwntools, SageMath, volatility3, per-domain playbooks (web, pwn, reverse, crypto, forensics, misc), and the fresh-PoC/CVE hunting workflow. Call with no argument to list topics. Read the matching topic before choosing an attack path.',
+    parameters: {
+      topic: { type: 'string', description: 'Knowledge topic id (e.g. "pwntools", "volatility3", "cve-poc"). Omit to list all topics.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          mode: { type: 'string', required: true, description: 'list or doc' },
+          topics: { type: 'array', items: { type: 'string' } },
+          doc: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.mode === 'doc' ? value.doc ?? '' : `Knowledge topics:\n${(value.topics ?? []).join('\n')}`,
+      }],
+    },
+    async execute(args, _exec) {
+      if (args.topic === undefined || args.topic.trim() === '') {
+        const topics = listKnowledgeTopics().map((topic) => `${topic.topic}: ${topic.title} — ${topic.summary}`)
+        return { mode: 'list', topics }
+      }
+      return { mode: 'doc', doc: readKnowledgeDoc(args.topic) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_env',
+    description: 'CTF toolchain service: detect what this machine already has, then install what is missing. action=check (default) probes every managed tool in parallel (pwntools, pycryptodome, z3, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions; action=install builds a curated per-platform plan (apt/pip/brew/gem, executed argv-by-argv without a shell — heavy tools like sage/ghidra/pwndbg report their manual command instead) and runs it; pass dry_run=true to see the plan without executing; action=list shows the managed catalog. Run check at team start and before telling a lane to "just pip install" something.',
+    parameters: {
+      action: { type: 'string', enum: ['check', 'install', 'list'], description: 'check (default), install, or list the managed catalog.' },
+      tools: { type: 'array', items: { type: 'string' }, description: 'Subset of tool ids (e.g. ["pwntools","volatility3"]); omitted = all managed tools for check, and the detected-missing set for install.' },
+      dry_run: { type: 'boolean', description: 'install only: return the plan without executing.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true, properties: {} },
+      render: (_args, value) => [{ type: 'text', text: renderEnvResult(value as unknown as EnvResultValue) }],
+    },
+    async execute(args, exec) {
+      requireCaptain(exec)
+      const envConfig = config.env ?? {}
+      if (envConfig.allowInstall === false && args.action === 'install' && args.dry_run !== true) {
+        throw new Error('the env install service is disabled by plugin config (env.allowInstall=false); use dry_run or install manually')
+      }
+      const action = args.action ?? 'check'
+      const result: Record<string, JsonValue> = { action }
+      if (action === 'list') {
+        result.tools = TOOL_SPECS.map((spec) => {
+          const row: Record<string, JsonValue> = {
+            name: spec.name,
+            category: spec.category,
+            summary: spec.summary,
+            managed: spec.install !== undefined,
+          }
+          if (spec.manual !== undefined) row.manual = spec.manual
+          return row
+        })
+        return result
+      }
+      if (action === 'check') {
+        const statuses = await detectTools({
+          tools: args.tools,
+          timeoutMs: envConfig.probeTimeoutMs,
+          python: envConfig.pythonBin,
+        })
+        result.statuses = statuses.map((status) => {
+          const row: Record<string, JsonValue> = {
+            name: status.name,
+            category: status.category,
+            summary: status.summary,
+            status: status.status,
+            install_hint: status.installHint,
+          }
+          if (status.version !== undefined && status.version !== '') row.version = status.version
+          if (status.path !== undefined) row.path = status.path
+          return row
+        })
+        return result
+      }
+      // install: decide the target set (explicit list, or the detected-missing ones).
+      let targets = args.tools
+      if (targets === undefined || targets.length === 0) {
+        const precheck = await detectTools({ timeoutMs: envConfig.probeTimeoutMs, python: envConfig.pythonBin })
+        targets = precheck.filter((status) => status.status === 'missing').map((status) => status.name)
+        if (targets.length === 0) {
+          result.note = 'nothing to install — every managed tool is ok, unavailable, or manual-only'
+          return result
+        }
+      }
+      const plan = planInstall(targets, TOOL_SPECS, undefined, { python: envConfig.pythonBin })
+      if (args.dry_run === true) {
+        result.dry_run = true
+        result.unknown = [...plan.unknown]
+        result.plan = plan.steps.map((step) => {
+          const row: Record<string, JsonValue> = { tool: step.tool, manager: step.manager }
+          if (step.argv !== undefined) row.command = step.argv.join(' ')
+          if (step.note !== undefined) row.note = step.note
+          return row
+        })
+        return result
+      }
+      const outcomes = await runInstallPlan(plan.steps, {
+        timeoutMs: envConfig.installTimeoutMs,
+        python: envConfig.pythonBin,
+      })
+      result.unknown = [...plan.unknown]
+      result.outcomes = outcomes.map((outcome) => {
+        const row: Record<string, JsonValue> = { tool: outcome.tool, ok: outcome.ok, manager: outcome.manager, detail: outcome.detail }
+        if (outcome.version !== undefined && outcome.version !== '') row.version = outcome.version
+        return row
+      })
+      return result
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_references',
+    description: 'Local PoC/CVE/skill reference library. Curated repositories — ctf-skills (agent playbooks), awesome-poc (curated PoC index), exphub (classic exploit scripts), pocindex (82k+ PoC index), marcio-cve, trickest-cve, poc-in-github, cvelistv5 (official CVE JSON) — are cloned shallowly under <workspace>/.ctf-teams/references/<id> and searched offline with rg. action=list (default) shows status, size expectations and search hints; action=sync clones or updates (repo id, comma-separated ids, or "all"; huge repos warn but work); action=path returns one repo\'s absolute path and hints. Search local references BEFORE hunting online; cite the repo in findings.',
+    parameters: {
+      action: { type: 'string', enum: ['list', 'sync', 'path'], description: 'list (default), sync (clone/update), or path.' },
+      repo: { type: 'string', description: 'Reference repo id (e.g. "exphub"), several comma-separated ("ctf-skills,awesome-poc"), or "all" for sync.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true, properties: {} },
+      render: (_args, value) => [{ type: 'text', text: renderReferencesResult(value as unknown as ReferencesResultValue) }],
+    },
+    async execute(args, exec) {
+      const caller = requireCaptain(exec)
+      const workspace = workspaceOf(caller)
+      const stateRoot = stateRootOf(workspace, config)
+      const referencesConfig = config.references ?? {}
+      const referencesDir = join(stateRoot, referencesConfig.dirName ?? 'references')
+      const action = args.action ?? 'list'
+      const result: Record<string, JsonValue> = { action }
+      if (action === 'list') {
+        result.references_dir = referencesDir
+        result.repos = REFERENCE_REPOS.map((repo) => {
+          const status = referenceStatus(repo, referencesDir)
+          return { id: status.spec.id, provisioned: status.provisioned, size: status.spec.size, summary: status.spec.summary, path: status.path }
+        })
+        return result
+      }
+      const requested = args.repo?.trim() ?? ''
+      if (requested === '') throw new Error(`action=${action} requires a repo id (comma-separate several, or "all" for sync)`)
+      const ids = requested.toLowerCase().split(',').map((entry) => entry.trim()).filter((entry) => entry !== '')
+      if (ids.length === 0) throw new Error(`action=${action} requires a repo id (comma-separate several, or "all" for sync)`)
+      const repos = ids.includes('all')
+        ? [...REFERENCE_REPOS]
+        : ids.map((id) => resolveReferenceRepo(id))
+      if (action === 'path') {
+        const repo = repos[0]!
+        const status = referenceStatus(repo, referencesDir)
+        result.id = repo.id
+        result.provisioned = status.provisioned
+        result.path = status.path
+        result.search_hints = [...repo.searchHints]
+        return result
+      }
+      // sync: shallow clone or fast-forward update, sequentially (git is IO-bound).
+      const timeoutMs = referencesConfig.timeoutMs ?? 600_000
+      const rows: Record<string, JsonValue>[] = []
+      for (const repo of repos) {
+        const status = referenceStatus(repo, referencesDir)
+        const { argv } = referenceSyncCommand(repo, referencesDir, { depth: referencesConfig.depth, alreadyProvisioned: status.provisioned })
+        const outcome = await defaultCommandRunner(argv, timeoutMs)
+        const fresh = referenceStatus(repo, referencesDir)
+        rows.push({
+          id: repo.id,
+          ok: outcome.code === 0 && fresh.provisioned,
+          provisioned: fresh.provisioned,
+          path: referenceRepoPath(repo, referencesDir),
+          detail: outcome.code === 0
+            ? (status.provisioned ? 'updated' : 'cloned')
+            : `git exit ${outcome.code}: ${(outcome.stderr !== '' ? outcome.stderr : outcome.error ?? '').trim().slice(-500)}`,
+        })
+      }
+      result.references_dir = referencesDir
+      result.results = rows
+      return result
+    },
+  }))
   return runtime
+}
+
+/** The JSON shape the env tool returns (already JsonValue-safe). */
+interface EnvResultValue {
+  action?: string
+  note?: string
+  statuses?: { name: string; status: string; version?: string; path?: string; install_hint: string }[]
+  unknown?: string[]
+  plan?: { tool: string; manager: string; command?: string; note?: string }[]
+  outcomes?: { tool: string; ok: boolean; manager: string; detail: string; version?: string }[]
+  tools?: { name: string; category: string; summary: string; managed: boolean; manual?: string }[]
+}
+
+/** In-flight auto-sync guard: one clone per (references dir, repo id). */
+const referenceSyncInFlight = new Set<string>()
+
+/**
+ * Fire-and-forget provisioning of the reference library at team creation, so
+ * the PoC/CVE collections are already on disk when the lanes need them
+ * ("先内置好"). Never blocks or fails team start; already-provisioned repos
+ * are left alone (explicit sync refreshes them).
+ */
+function scheduleReferenceAutoSync(ctx: Context, workspace: string, teamId: string, config: ToolsConfig): void {
+  // Library default is 'off': cloning hits the network and locks files, which
+  // must never happen implicitly. The shipped patch config sets autoSync:
+  // 'small' so real deployments get pre-provisioned references.
+  const mode = config.references?.autoSync ?? 'off'
+  if (mode === 'off') return
+  const referencesDir = join(stateRootOf(workspace, config), config.references?.dirName ?? 'references')
+  for (const repo of autoSyncTargets(mode)) {
+    if (referenceStatus(repo, referencesDir).provisioned) continue
+    const key = `${referencesDir} ${repo.id}`
+    if (referenceSyncInFlight.has(key)) continue
+    referenceSyncInFlight.add(key)
+    void (async () => {
+      try {
+        const { argv } = referenceSyncCommand(repo, referencesDir, { depth: config.references?.depth })
+        const outcome = await defaultCommandRunner(argv, config.references?.timeoutMs ?? 600_000)
+        const fresh = referenceStatus(repo, referencesDir)
+        if (fresh.provisioned) {
+          ctx.logger.info(`ctf-teams: reference "${repo.id}" auto-synced for team ${teamId} → ${fresh.path}`)
+        } else {
+          ctx.logger.warn(`ctf-teams: auto-sync failed for reference "${repo.id}" (team ${teamId}): ${(outcome.error ?? outcome.stderr).trim().slice(-200)}`)
+        }
+      } catch (error: unknown) {
+        ctx.logger.warn(`ctf-teams: auto-sync crashed for reference "${repo.id}": ${String(error)}`)
+      } finally {
+        referenceSyncInFlight.delete(key)
+      }
+    })()
+  }
+}
+
+/** Render env check/install/list results for the transcript. */
+function renderEnvResult(value: EnvResultValue): string {
+  if (value.statuses !== undefined) {
+    return value.statuses.map((status) => {
+      const mark = status.status === 'ok' ? '✓' : status.status === 'missing' ? '✗' : '○'
+      const version = status.version === undefined || status.version === '' ? '' : ` ${status.version}`
+      const detail = status.status === 'ok' ? `${status.path ?? 'python module'}${version}` : status.install_hint
+      return `${mark} ${status.name.padEnd(16)} ${detail}`
+    }).join('\n')
+  }
+  if (value.note !== undefined) return value.note
+  if (value.plan !== undefined) {
+    return [
+      'Install plan (dry run):',
+      ...value.plan.map((step) => step.command === undefined
+        ? `  ○ ${step.tool} — ${step.note ?? 'manual'}`
+        : `  ▶ ${step.tool} [${step.manager}] ${step.command}`),
+      ...(value.unknown !== undefined && value.unknown.length > 0 ? [`unknown tools: ${value.unknown.join(', ')}`] : []),
+    ].join('\n')
+  }
+  if (value.outcomes !== undefined) {
+    return value.outcomes.map((outcome) => `${outcome.ok ? '✓' : '✗'} ${outcome.tool} [${outcome.manager}] ${outcome.detail}${outcome.version === undefined ? '' : ` (now ${outcome.version})`}`).join('\n')
+      + (value.unknown !== undefined && value.unknown.length > 0 ? `\nunknown tools: ${value.unknown.join(', ')}` : '')
+  }
+  if (value.tools !== undefined) {
+    return value.tools.map((tool) => `${tool.managed ? '▶' : '○'} ${tool.name} (${tool.category}) — ${tool.summary}${tool.manual === undefined ? '' : `\n    manual: ${tool.manual}`}`).join('\n')
+  }
+  return JSON.stringify(value)
+}
+
+/** The JSON shape the references tool returns (already JsonValue-safe). */
+interface ReferencesResultValue {
+  action?: string
+  references_dir?: string
+  repos?: { id: string; provisioned: boolean; size: string; summary: string; path: string }[]
+  results?: { id: string; ok: boolean; provisioned: boolean; path: string; detail: string }[]
+  id?: string
+  provisioned?: boolean
+  path?: string
+  search_hints?: string[]
+}
+
+/** Render references list/sync/path results for the transcript. */
+function renderReferencesResult(value: ReferencesResultValue): string {
+  if (value.repos !== undefined) {
+    return renderReferenceList(
+      (value.repos ?? []).map((repo) => {
+        const spec = REFERENCE_REPOS.find((entry) => entry.id === repo.id)!
+        return { spec, provisioned: repo.provisioned, path: repo.path }
+      }).filter((entry) => entry.spec !== undefined),
+      REFERENCE_SIZE_NOTES,
+    )
+  }
+  if (value.results !== undefined) {
+    return [
+      `references dir: ${value.references_dir}`,
+      ...value.results.map((result) => `${result.ok ? '✓' : '✗'} ${result.id} — ${result.detail}\n  path: ${result.path}`),
+      'Search with rg (e.g. rg -l "CVE-2025-xxxx" <path>) and cite the repo in your findings.',
+    ].join('\n')
+  }
+  if (value.id !== undefined) {
+    return `${value.provisioned === true ? '✓ provisioned' : '○ not provisioned yet'}: ${value.id}\npath: ${value.path}\n${(value.search_hints ?? []).map((hint) => `search: ${hint}`).join('\n')}`
+  }
+  return JSON.stringify(value)
 }
 
 async function initializeProfileTeam(input: {
@@ -2569,4 +3255,67 @@ function renderStatus(value: JsonValue): string {
     )
   }
   return lines.join('\n')
+}
+
+/**
+ * Render the solving dashboard panel above the compact model-facing detail.
+ * The panel is the human-facing picture (lanes, board, findings, flags); the
+ * detail keeps every field the model coordinates from.
+ */
+/** Newest finding/flag stamp in a status payload; drives the panel's `last beat`. */
+function lastStatusBeat(team: { ctf?: { findings?: { ts?: number }[]; flags?: { ts?: number }[] } }): number | undefined {
+  const stamps = [
+    ...(team.ctf?.findings ?? []).map((finding) => finding.ts),
+    ...(team.ctf?.flags ?? []).map((flag) => flag.ts),
+  ].filter((stamp): stamp is number => typeof stamp === 'number' && Number.isFinite(stamp))
+  return stamps.length === 0 ? undefined : Math.max(...stamps)
+}
+
+function renderStatusPanel(value: JsonValue): string {
+  const team = value as unknown as {
+    team_name: string
+    description?: string
+    phase?: string
+    halted?: boolean
+    escalated?: boolean
+    viewer?: string
+    members: { name: string; role: string; status: string; activity: string }[]
+    tasks: { id: string; subject: string; status: string; assignee?: string }[]
+    captain_inbox: { from: string; content: string }[]
+    ctf?: {
+      challenge?: import('./types.ts').ChallengeInfo
+      round?: number
+      created_at?: number
+      finding_count?: number
+      flags?: import('./types.ts').FlagCandidate[]
+      findings?: import('./types.ts').TeamFinding[]
+      member_sync?: Record<string, { behind?: number; working_on?: string }>
+    }
+  }
+  const phase = team.halted === true ? 'halted' : team.escalated === true ? 'escalated' : team.phase ?? 'running'
+  const panel = renderDashboard({
+    teamName: team.team_name,
+    description: team.description,
+    phase,
+    challenge: team.ctf?.challenge ?? {},
+    round: team.ctf?.round ?? 0,
+    findingCount: team.ctf?.finding_count ?? team.ctf?.findings?.length ?? 0,
+    flags: team.ctf?.flags ?? [],
+    findings: team.ctf?.findings ?? [],
+    members: team.members.map((member) => ({
+      name: member.name,
+      role: member.role || undefined,
+      status: member.status,
+      activity: member.activity,
+      behind: team.ctf?.member_sync?.[member.name]?.behind ?? 0,
+      workingOn: team.ctf?.member_sync?.[member.name]?.working_on,
+    })),
+    tasks: team.tasks,
+    captainUnread: team.captain_inbox.length,
+    createdAt: team.ctf?.created_at,
+    lastBeatAt: lastStatusBeat(team),
+    now: Date.now(),
+  })
+  const detail = renderStatus(value)
+  return detail === '' ? panel : `${panel}\n\n${detail}`
 }

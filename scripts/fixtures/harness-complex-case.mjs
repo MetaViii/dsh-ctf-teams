@@ -86,7 +86,7 @@ export const sources = {
 };
 const members = ['pricing','inventory','storage','api','verifier','reviewer'];
 const scope = '项目目录会在本消息开头给出。将完整项目路径传给每个成员，所有相对路径均基于该项目；先读 SPEC.md。每条bash命令必须以cd 完整项目路径 && 开头，不依赖上次命令的cwd；测试器会拒绝缺少此前缀的命令。临时服务使用随机空闲端口并记录自己的PID，结束时调用close或仅停止这个PID；禁止pkill/killall按名字清理进程。';
-export const freshPrompt = `请用 AgentTeams 真实实现 MiniFulfill 订单服务；我授权立即运行，不需计划审批。${scope}
+export const freshPrompt = `请用 CTFTeams 真实实现 MiniFulfill 订单服务；我授权立即运行，不需计划审批。${scope}
 不是只写报告：成员必须实现代码、运行测试并交付可启动的 HTTP 服务和 CLI。使用且仅使用六个成员：pricing、inventory、storage、api、verifier、reviewer。队长不要代写源码、测试或成员报告。
 一次规划以下10个初始任务，subject保留方括号标记，以后交接用实际 task_id，不能硬猜 ID：
 [SPEC] requirements，reviewer，根据现有 SPEC.md 输出明确验收；不修改 SPEC。所有实现依赖此任务。
@@ -161,11 +161,11 @@ export function evaluate(workspace,captainId,events,phase,previous) {
     const rereview=added.find(t=>t.kind==='review'&&t.reviewedTaskId===repair?.id);
     const release=added.find(t=>t.subject.includes('[REGRESSION-RELEASE]'));
     checks.regressionDetected=review?.status==='failed'&&review.verdict==='needs_revision'&&(review.findings?.length??0)>0;
-    checks.automaticRepair=repair?.status==='completed'&&repair.assignee==='pricing'&&!events.some(e=>e.event==='tool-result'&&e.name==='agent_teams_create_task'&&e.arguments?.kind==='repair');
+    checks.automaticRepair=repair?.status==='completed'&&repair.assignee==='pricing'&&!events.some(e=>e.event==='tool-result'&&e.name==='ctf_teams_create_task'&&e.arguments?.kind==='repair');
     checks.independentRereview=rereview?.status==='completed'&&rereview.verdict==='pass'&&rereview.assignee==='reviewer';
     checks.downstreamRewired=release?.status==='completed'&&release.dependencies.includes(rereview?.id)&&!release.dependencies.includes(review?.id);
     checks.downstreamExistedBeforeFailure=events.some(e=>e.event==='benchmark-state'&&e.team?.tasks?.some(t=>t.id===release?.id&&t.dependencies.includes(review?.id))&&e.team.tasks.some(t=>t.id===review?.id&&!['completed','failed','cancelled'].includes(t.status)));
-    checks.noManualDependencyRewrite=!events.some(e=>e.event==='tool-result'&&e.name==='agent_teams_edit_plan'&&e.arguments?.operations?.some(op=>op.task_id===release?.id&&op.dependencies!==undefined));
+    checks.noManualDependencyRewrite=!events.some(e=>e.event==='tool-result'&&e.name==='ctf_teams_edit_plan'&&e.arguments?.operations?.some(op=>op.task_id===release?.id&&op.dependencies!==undefined));
     const atomicReview=added.find(t=>t.subject.includes('[ATOMIC-REVIEW]'));
     if(previous?.coldPlan?.expectAtomicity!==false) {
     const atomicRepair=added.find(t=>t.kind==='repair'&&t.sourceTaskId===atomicReview?.reviewedTaskId);

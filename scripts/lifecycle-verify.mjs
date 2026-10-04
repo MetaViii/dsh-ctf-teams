@@ -12,16 +12,15 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import { haltTeamWork, registerAgentTeamsTools } from '../lib/tools.js'
-import { buildActivationDirective, invokedAgentTeamsGoal, invokedAgentTeamsInvocation, installAgentTeamsGestureBoundary, profileCommandName, registerAgentTeamsCommand } from '../lib/command.js'
+import { haltTeamWork, registerCTFTeamsTools } from '../lib/tools.js'
+import { buildActivationDirective, invokedCTFTeamsGoal, invokedCTFTeamsInvocation, installCTFTeamsGestureBoundary, profileCommandName, registerCTFTeamsCommand } from '../lib/command.js'
 import { readArchivedTeam, readMailbox, readTeam, readUnreadMailbox } from '../lib/state.js'
-import { collectArchivedTeamsActivity } from '../lib/snapshot.js'
 
 const deliveryHarness = process.argv.includes('--delivery-harness')
 const modernHarness = deliveryHarness || process.argv.includes('--modern-harness')
 const hostQueue = Symbol.for(deliveryHarness ? 'dsh.subagent.deliverPrompt' : 'dsh.subagent.queuePrompt')
 
-const workspace = await mkdtemp(join(tmpdir(), 'dsh-agent-teams-lifecycle-'))
+const workspace = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-lifecycle-'))
 const definitions = new Map()
 const liveAgents = new Map()
 const disposedAgents = new Map()
@@ -144,7 +143,7 @@ function emitTurnError(child, failure) {
 const captain = makeAgent('captain-session')
 liveAgents.set(captain.id, captain)
 let advertisedModels = []
-// A non-AgentTeams continuable sibling must survive every team lifecycle
+// A non-CTFTeams continuable sibling must survive every team lifecycle
 // operation untouched.
 children.push({ id: 'foreign-session', label: 'unrelated continuable', mode: 'continuable' })
 
@@ -192,7 +191,7 @@ const ctx = {
       child.status = 'running'
       liveAgents.set(id, child)
       children.push({ id, label: spec.label, mode: 'continuable' })
-      if (typeof spec.label === 'string' && spec.label.startsWith('agent-teams:')) {
+      if (typeof spec.label === 'string' && spec.label.startsWith('ctf-teams:')) {
         child.session[modernHarness ? '_ownEvents' : 'events'] = [{
           type: 'subagent/descriptor',
           data: {
@@ -280,8 +279,8 @@ function directPrompt(parent, childId, content, options) {
     : ctx.subagents.followup(parent, childId, content, options)
 }
 
-const agentTeamsRuntime = registerAgentTeamsTools(ctx, {
-  stateDir: '.agent-teams',
+const ctfTeamsRuntime = registerCTFTeamsTools(ctx, {
+  stateDir: '.ctf-teams',
   memberProvider: 'spawn',
   fallback: { provider: 'backup', model: 'backup-model' },
   memberMaxDepth: 1,
@@ -326,13 +325,13 @@ async function call(name, args, subject = captain) {
 }
 
 const teamId = 'lifecycle'
-const stateRoot = join(workspace, '.agent-teams')
+const stateRoot = join(workspace, '.ctf-teams')
 const state = () => readTeam(stateRoot, teamId)
 const task = async id => (await state())?.tasks.find(candidate => candidate.id === id)
 
-console.log('dsh-agent-teams lifecycle verification')
+console.log('dsh-ctf-teams lifecycle verification')
 
-// ── /agent-teams slash command and gesture boundary ───────────────────
+// ── /ctf-teams slash command and gesture boundary ───────────────────
 const commandDefinitions = new Map()
 ctx.commands = {
   register(definition) {
@@ -353,68 +352,95 @@ const liveProfiles = {
     ],
   },
 }
-registerAgentTeamsCommand(ctx, () => liveProfiles)
-installAgentTeamsGestureBoundary(ctx, () => liveProfiles)
+registerCTFTeamsCommand(ctx, () => liveProfiles)
+installCTFTeamsGestureBoundary(ctx, () => liveProfiles)
 
-const command = commandDefinitions.get('agent-teams')
-const profileCommand = commandDefinitions.get('agent-teams-demo-delivery')
-check('slash command registers as /agent-teams',
+const command = commandDefinitions.get('ctf-teams')
+const profileCommand = commandDefinitions.get('ctf-teams-demo-delivery')
+check('slash command registers as /ctf-teams',
   command !== undefined && typeof command.description === 'string' && command.description.length > 0)
 check('slash command advertises an input hint for the menu placeholder',
   typeof command?.input?.hint === 'string' && command.input.hint.length > 0)
 check('configured profile registers a concise dedicated slash command',
-  profileCommand !== undefined && profileCommandName('demo-delivery') === 'agent-teams-demo-delivery'
+  profileCommand !== undefined && profileCommandName('demo-delivery') === 'ctf-teams-demo-delivery'
     && typeof profileCommand.description === 'string' && profileCommand.description.includes('demo-delivery'))
 check('unsafe profile names do not generate ambiguous commands',
   profileCommandName('delivery team') === undefined && profileCommandName('delivery_team') === undefined)
 
+// The generated alias menu: the profile the generic command already runs must
+// not appear twice, and a profile whose name maps onto one of this plugin's own
+// commands must never shadow it.
+const aliasDefinitions = new Map()
+const aliasCtx = {
+  commands: { register(definition) { aliasDefinitions.set(definition.name, definition) } },
+  effect(generator) { const stop = generator(); return () => stop?.() },
+}
+registerCTFTeamsCommand(aliasCtx, () => ({
+  'ctf-teams': { members: [{ name: 'builtin' }] },
+  board: { members: [{ name: 'board-member' }] },
+  'web-squad': { members: [{ name: 'web-member' }] },
+}), { defaultProfile: 'ctf-teams' })
+check('the default profile does not repeat the generic command as an alias',
+  aliasDefinitions.has('ctf-teams') && !aliasDefinitions.has('ctf-teams-ctf-teams'))
+check('a profile named board cannot shadow the dashboard command',
+  !aliasDefinitions.has('ctf-teams-board'))
+check('every other profile keeps its concise command alias',
+  aliasDefinitions.has('ctf-teams-web-squad'))
+const withoutDefault = new Map()
+registerCTFTeamsCommand({
+  commands: { register(definition) { withoutDefault.set(definition.name, definition) } },
+  effect(generator) { const stop = generator(); return () => stop?.() },
+}, () => ({ 'ctf-teams': { members: [{ name: 'builtin' }] } }), { defaultProfile: '' })
+check('an empty default profile keeps the built-in squad reachable by alias',
+  withoutDefault.has('ctf-teams-ctf-teams'))
+
 const bare = command.handler({
   agent: captain, rawInput: '   ', signal: new AbortController().signal, commandId: 'cmd-bare',
 })
-check('bare /agent-teams reports usage instead of activating',
-  bare.kind === 'error' && bare.text.includes('Usage: /agent-teams')
+check('bare /ctf-teams reports usage instead of activating',
+  bare.kind === 'error' && bare.text.includes('Usage: /ctf-teams')
     && captain.followups.length === 0)
 
 const goal = 'ship a tiny CLI'
 const activated = command.handler({
   agent: captain, rawInput: `  ${goal}  `, signal: new AbortController().signal, commandId: 'cmd-goal',
 })
-check('argued /agent-teams queues one visible user turn',
+check('argued /ctf-teams queues one visible user turn',
   activated.kind === 'success' && captain.followups.length === 1)
 const submittedCommand = captain.followups[0]
 check('slash command preserves the exact submitted line as user-authored chat',
   submittedCommand?.source?.kind === 'user'
     && submittedCommand.content.some(block => block.type === 'text'
-      && block.text === `/agent-teams  ${goal}  `))
+      && block.text === `/ctf-teams  ${goal}  `))
 check('preserved slash command still activates through the gesture boundary',
-  invokedAgentTeamsGoal([submittedCommand]) === goal)
-check('activation directive names the protocol', buildActivationDirective(goal).includes('AgentTeams protocol'))
+  invokedCTFTeamsGoal([submittedCommand]) === goal)
+check('activation directive names the protocol', buildActivationDirective(goal).includes('CTFTeams protocol'))
 const profileGoal = 'ship the prepared release'
 const profileActivated = profileCommand.handler({
   agent: captain, rawInput: ` ${profileGoal}`, signal: new AbortController().signal, commandId: 'cmd-profile-alias',
 })
 check('profile command queues a visible profile-specific user turn',
   profileActivated.kind === 'success' && captain.followups.length === 2
-    && captain.followups[1]?.content.some(block => block.type === 'text' && block.text === `/agent-teams-demo-delivery ${profileGoal}`))
+    && captain.followups[1]?.content.some(block => block.type === 'text' && block.text === `/ctf-teams-demo-delivery ${profileGoal}`))
 
 const userMessage = text => ({ id: 'm', role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } })
-check('gesture recognizes a leading /agent-teams token',
-  invokedAgentTeamsGoal([userMessage('/agent-teams ship a CLI')]) === 'ship a CLI')
+check('gesture recognizes a leading /ctf-teams token',
+  invokedCTFTeamsGoal([userMessage('/ctf-teams ship a CLI')]) === 'ship a CLI')
 check('profile command gesture selects its configured profile and goal',
-  invokedAgentTeamsInvocation([userMessage('/agent-teams-demo-delivery ship a CLI')], () => liveProfiles)?.profile === 'demo-delivery'
-    && invokedAgentTeamsInvocation([userMessage('/agent-teams-demo-delivery ship a CLI')], () => liveProfiles)?.goal === 'ship a CLI')
+  invokedCTFTeamsInvocation([userMessage('/ctf-teams-demo-delivery ship a CLI')], () => liveProfiles)?.profile === 'demo-delivery'
+    && invokedCTFTeamsInvocation([userMessage('/ctf-teams-demo-delivery ship a CLI')], () => liveProfiles)?.goal === 'ship a CLI')
 check('bare profile command gesture asks for the goal',
-  invokedAgentTeamsInvocation([userMessage('/agent-teams-demo-delivery')], () => liveProfiles)?.profile === 'demo-delivery'
-    && invokedAgentTeamsInvocation([userMessage('/agent-teams-demo-delivery')], () => liveProfiles)?.goal === '')
+  invokedCTFTeamsInvocation([userMessage('/ctf-teams-demo-delivery')], () => liveProfiles)?.profile === 'demo-delivery'
+    && invokedCTFTeamsInvocation([userMessage('/ctf-teams-demo-delivery')], () => liveProfiles)?.goal === '')
 check('unknown profile command stays ordinary prose',
-  invokedAgentTeamsInvocation([userMessage('/agent-teams-missing ship a CLI')], () => liveProfiles) === undefined)
-check('bare gesture yields an empty goal', invokedAgentTeamsGoal([userMessage('  /agent-teams')]) === '')
+  invokedCTFTeamsInvocation([userMessage('/ctf-teams-missing ship a CLI')], () => liveProfiles) === undefined)
+check('bare gesture yields an empty goal', invokedCTFTeamsGoal([userMessage('  /ctf-teams')]) === '')
 check('mid-sentence mention stays ordinary prose',
-  invokedAgentTeamsGoal([userMessage('how do I use /agent-teams here?')]) === undefined)
+  invokedCTFTeamsGoal([userMessage('how do I use /ctf-teams here?')]) === undefined)
 check('non-user sources cannot forge the gesture',
-  invokedAgentTeamsGoal([{ ...userMessage('/agent-teams x'), source: { kind: 'plugin', plugin: 'fake' } }]) === undefined)
+  invokedCTFTeamsGoal([{ ...userMessage('/ctf-teams x'), source: { kind: 'plugin', plugin: 'fake' } }]) === undefined)
 check('latest user gesture wins in a batch',
-  invokedAgentTeamsGoal([userMessage('/agent-teams first'), userMessage('/agent-teams second')]) === 'second')
+  invokedCTFTeamsGoal([userMessage('/ctf-teams first'), userMessage('/ctf-teams second')]) === 'second')
 const profileOnly = command.handler({
   agent: captain, rawInput: '--profile demo-delivery', signal: new AbortController().signal, commandId: 'cmd-profile-only',
 })
@@ -423,10 +449,10 @@ check('slash --profile without a goal still activates',
 check('profile-only activation asks for the goal',
   buildActivationDirective('', 'demo-delivery').includes('The goal was not given')
     && buildActivationDirective('', 'demo-delivery').includes('Use profile="demo-delivery" when creating a new team')
-    && buildActivationDirective('', 'demo-delivery').includes('Inspect existing team state with agent_teams_status'))
+    && buildActivationDirective('', 'demo-delivery').includes('Inspect existing team state with ctf_teams_status'))
 check('captain-planning activation requires a staged user-reviewed graph',
   buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('approval="required"')
-    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('review the Web plan')
+    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('review the staged plan')
     && buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('run in parallel')
     && !buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('seed tasks'))
 const unknownProfile = command.handler({
@@ -435,8 +461,8 @@ const unknownProfile = command.handler({
 check('unknown slash profile reports error and does not followup',
   unknownProfile.kind === 'error' && captain.followups.length === 3)
 check('leading ordinary token is never treated as a profile',
-  invokedAgentTeamsInvocation([userMessage('/agent-teams research this bug')])?.goal === 'research this bug'
-    && invokedAgentTeamsInvocation([userMessage('/agent-teams research this bug')])?.profile === undefined)
+  invokedCTFTeamsInvocation([userMessage('/ctf-teams research this bug')])?.goal === 'research this bug'
+    && invokedCTFTeamsInvocation([userMessage('/ctf-teams research this bug')])?.profile === undefined)
 liveProfiles['hot-reload'] = { members: [{ name: 'solo', model: 'fake' }] }
 check('command getter sees HMR profile names',
   command.handler({
@@ -445,7 +471,7 @@ check('command getter sees HMR profile names',
 delete liveProfiles['hot-reload']
 
 try {
-  const createdProfile = await call('agent_teams_create', {
+  const createdProfile = await call('ctf_teams_create', {
     name: 'Profile Demo',
     description: 'ship a tiny demo',
     profile: 'demo-delivery',
@@ -465,7 +491,7 @@ try {
   const analyst = liveAgents.get(createdProfile.members[0].member_id)
   let implementer
   check('dependency-blocked roster does not spawn a model session', createdProfile.members[1].member_id === '')
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   const afterKick = await readTeam(stateRoot, 'profile-demo')
   const firstSeed = afterKick?.tasks[0]
   check('first-stage seed is assigned only to the configured member',
@@ -479,9 +505,9 @@ try {
   check('first assignment includes team goal and protocol',
     assignmentText.includes('ship a tiny demo')
       && assignmentText.includes('Discuss, then implement'))
-  const analystClaim = await call('agent_teams_claim_task', { task_id: firstSeed.id }, analyst)
-  await call('agent_teams_update_task', { task_id: firstSeed.id, status: 'in_progress', attempt_id: analystClaim.attempt_id }, analyst)
-  await call('agent_teams_update_task', {
+  const analystClaim = await call('ctf_teams_claim_task', { task_id: firstSeed.id }, analyst)
+  await call('ctf_teams_update_task', { task_id: firstSeed.id, status: 'in_progress', attempt_id: analystClaim.attempt_id }, analyst)
+  await call('ctf_teams_update_task', {
     task_id: firstSeed.id,
     status: 'failed',
     attempt_id: analystClaim.attempt_id,
@@ -492,10 +518,10 @@ try {
   check('failed upstream does not unlock the next configured stage',
     (await readTeam(stateRoot, 'profile-demo'))?.tasks[1]?.status === 'pending'
       && !deliveries.some(delivery => delivery.childId === implementer?.id && String(delivery.content?.[0]?.text ?? '').includes('Implement')))
-  await call('agent_teams_reassign_task', { task_id: firstSeed.id, assignee: 'analyst', reason: 'retry after user answer' })
-  const retryClaim = await call('agent_teams_claim_task', { task_id: firstSeed.id }, analyst)
-  await call('agent_teams_update_task', { task_id: firstSeed.id, status: 'in_progress', attempt_id: retryClaim.attempt_id }, analyst)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_reassign_task', { task_id: firstSeed.id, assignee: 'analyst', reason: 'retry after user answer' })
+  const retryClaim = await call('ctf_teams_claim_task', { task_id: firstSeed.id }, analyst)
+  await call('ctf_teams_update_task', { task_id: firstSeed.id, status: 'in_progress', attempt_id: retryClaim.attempt_id }, analyst)
+  await call('ctf_teams_update_task', {
     task_id: firstSeed.id,
     status: 'completed',
     attempt_id: retryClaim.attempt_id,
@@ -503,7 +529,7 @@ try {
   }, analyst)
   publishStatus(analyst, 'idle')
   if (implementer) publishStatus(implementer, 'idle')
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   implementer = liveAgents.get((await readTeam(stateRoot, 'profile-demo')).members.find(m => m.name === 'implementer').id)
   const secondSeed = (await readTeam(stateRoot, 'profile-demo'))?.tasks[1]
   check('completed upstream dispatches the configured downstream assignee',
@@ -515,30 +541,30 @@ try {
   check('downstream assignment includes dependency output and seed id',
     secondText.includes('Scope confirmed')
       && secondText.includes('[requirements]'))
-  await call('agent_teams_send_message', { to: 'implementer', content: 'stop and wait for a user answer' })
+  await call('ctf_teams_send_message', { to: 'implementer', content: 'stop and wait for a user answer' })
   const deliveriesAfterMail = deliveries.length
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   check('unread mailbox prevents a same-kick new assignment',
     deliveries.length >= deliveriesAfterMail
       && (await readTeam(stateRoot, 'profile-demo'))?.tasks[1]?.assignee === 'implementer')
-  const profileStatus = await call('agent_teams_status', {})
+  const profileStatus = await call('ctf_teams_status', {})
   check('status exposes profile snapshot and task seed ids',
     profileStatus.profile?.name === 'demo-delivery'
       && profileStatus.tasks.some(item => item.seed_id === 'requirements')
       && profileStatus.tasks.some(item => item.seed_id === 'implement'))
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
 
   const deliveriesBeforeDiscard = deliveries.length
   const captainCancelsBeforeDiscard = captain.cancelCount ?? 0
   const captainInjectionsBeforeDiscard = captain.injections.length
-  await call('agent_teams_create', {
+  await call('ctf_teams_create', {
     name: 'Rejected Demo',
     description: 'plan the user will reject',
     profile: 'dynamic-delivery',
     approval: 'required',
   })
-  await call('agent_teams_create_task', { subject: 'should never run', assignee: 'analyst' })
-  const discardedPlan = await agentTeamsRuntime.discardStagedTeam(captain, 'rejected-demo')
+  await call('ctf_teams_create_task', { subject: 'should never run', assignee: 'analyst' })
+  const discardedPlan = await ctfTeamsRuntime.discardStagedTeam(captain, 'rejected-demo')
   const discardedArchive = await readArchivedTeam(stateRoot, 'rejected-demo')
   check('discarding a staged plan archives it without spawning or dispatching',
     discardedPlan.teamId === 'rejected-demo'
@@ -551,11 +577,11 @@ try {
   check('discard aborts the active Captain turn and parks an authoritative no-recreate context',
     (captain.cancelCount ?? 0) === captainCancelsBeforeDiscard + 1
       && captain.injections.length === captainInjectionsBeforeDiscard + 1
-      && /Do not call agent_teams_create/.test(discardControlText)
+      && /Do not call ctf_teams_create/.test(discardControlText)
       && /Wait for a later explicit user request/.test(discardControlText)
       && captain.lastCancel?.options?.keepInbox === true)
 
-  const createdDynamic = await call('agent_teams_create', {
+  const createdDynamic = await call('ctf_teams_create', {
     name: 'Dynamic Demo',
     description: 'goal only',
     profile: 'dynamic-delivery',
@@ -574,13 +600,13 @@ try {
       && stagedDynamic.members.every(member => member.id === '')
       && stagedDynamic.tasks.length === 0)
   const deliveriesBeforePlan = deliveries.length
-  const dynamicFirst = await call('agent_teams_create_task', { subject: 'analyze goal', assignee: 'analyst' })
-  const dynamicSecond = await call('agent_teams_create_task', {
+  const dynamicFirst = await call('ctf_teams_create_task', { subject: 'analyze goal', assignee: 'analyst' })
+  const dynamicSecond = await call('ctf_teams_create_task', {
     subject: 'implement result',
     assignee: 'implementer',
     dependencies: [dynamicFirst.task_id],
   })
-  await agentTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
+  await ctfTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
     action: 'update_member',
     memberName: 'reviewer',
     role: 'security reviewer',
@@ -589,7 +615,7 @@ try {
     reasoningEffort: 'high',
     executionPrompt: 'Review security-sensitive changes only.',
   })
-  await agentTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
+  await ctfTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
     action: 'update_task',
     taskId: dynamicSecond.task_id,
     subject: 'implement approved result',
@@ -605,12 +631,12 @@ try {
       && editedDynamic.tasks[1]?.dependencies.join(',') === dynamicFirst.task_id
       && editedDynamic.tasks.every(item => item.status === 'pending')
       && deliveries.length === deliveriesBeforePlan)
-  const obsoleteReview = await call('agent_teams_create_task', {
+  const obsoleteReview = await call('ctf_teams_create_task', {
     subject: 'obsolete review',
     assignee: 'reviewer',
     dependencies: [dynamicFirst.task_id],
   })
-  await agentTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
+  await ctfTeamsRuntime.updateStagedPlan(captain, 'dynamic-demo', {
     action: 'update_task',
     taskId: dynamicSecond.task_id,
     subject: 'implement approved result',
@@ -620,7 +646,7 @@ try {
   })
   let rejectedAtomicEdit = false
   try {
-    await call('agent_teams_edit_plan', {
+    await call('ctf_teams_edit_plan', {
       operations: [
         { action: 'remove_task', task_id: obsoleteReview.task_id },
         { action: 'update_task', task_id: dynamicSecond.task_id, dependencies: [dynamicFirst.task_id] },
@@ -638,7 +664,7 @@ try {
       && unchangedAfterRejectedEdit.members.some(member => member.name === 'reviewer'))
   const captainCancelsBeforeContinue = captain.cancelCount ?? 0
   const captainFollowupsBeforeContinue = captain.followups.length
-  const continuedPlan = await agentTeamsRuntime.continueStagedPlanning(captain, 'dynamic-demo')
+  const continuedPlan = await ctfTeamsRuntime.continueStagedPlanning(captain, 'dynamic-demo')
   const waitingPlan = await readTeam(stateRoot, 'dynamic-demo')
   const feedbackControlText = captain.followups.at(-1)?.content?.map(block => block.text ?? '').join('\n') ?? ''
   check('return-to-chat cancels the planning turn and asks one question without recreating the team',
@@ -648,12 +674,12 @@ try {
       && captain.followups.length === captainFollowupsBeforeContinue + 1
       && /Ask the user one concise, concrete question/.test(feedbackControlText)
       && /Do not create a replacement team/.test(feedbackControlText))
-  const repeatedContinue = await agentTeamsRuntime.continueStagedPlanning(captain, 'dynamic-demo')
+  const repeatedContinue = await ctfTeamsRuntime.continueStagedPlanning(captain, 'dynamic-demo')
   check('return-to-chat is idempotent while feedback is already pending',
     repeatedContinue.alreadyWaiting === true
       && (captain.cancelCount ?? 0) === captainCancelsBeforeContinue + 1
       && captain.followups.length === captainFollowupsBeforeContinue + 1)
-  const modelEditedPlan = await call('agent_teams_edit_plan', {
+  const modelEditedPlan = await call('ctf_teams_edit_plan', {
     operations: [
       { action: 'update_task', task_id: dynamicSecond.task_id, dependencies: [dynamicFirst.task_id] },
       { action: 'remove_task', task_id: obsoleteReview.task_id },
@@ -672,24 +698,24 @@ try {
       && modelEditedDynamic.tasks.every(item => item.status === 'pending')
       && modelEditedDynamic.planReviewState === 'awaiting_review'
       && deliveries.length === deliveriesBeforePlan)
-  const approvedDynamic = await call('agent_teams_approve', { confirmation: 'user clicked Approve & Run' })
+  const approvedDynamic = await call('ctf_teams_approve', { confirmation: 'user clicked Approve & Run' })
   const dynamicTeam = await readTeam(stateRoot, 'dynamic-demo')
-  const correctedRunning = await call('agent_teams_edit_plan', { operations: [{ action: 'update_task', task_id: dynamicSecond.task_id, description: 'Corrected pending task context', dependencies: [dynamicFirst.task_id] }] })
+  const correctedRunning = await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: dynamicSecond.task_id, description: 'Corrected pending task context', dependencies: [dynamicFirst.task_id] }] })
   check('running never-started tasks can be corrected without replacing the DAG', correctedRunning.status === 'running' && (await readTeam(stateRoot, 'dynamic-demo')).tasks.find(t => t.id === dynamicSecond.task_id).description === 'Corrected pending task context')
   let rejectedRunningBatch = false
   try {
-    await call('agent_teams_edit_plan', { operations: [
+    await call('ctf_teams_edit_plan', { operations: [
       { action: 'update_task', task_id: dynamicSecond.task_id, description: 'must not persist' },
       { action: 'update_task', task_id: dynamicFirst.task_id, subject: 'must not overwrite active work' },
     ] })
   } catch { rejectedRunningBatch = true }
   check('invalid running plan batches preserve the entire previous graph', rejectedRunningBatch && (await readTeam(stateRoot, 'dynamic-demo')).tasks.find(t => t.id === dynamicSecond.task_id).description === 'Corrected pending task context')
   for (const operation of [{ action: 'update_task', task_id: dynamicFirst.task_id, subject: 'do not overwrite active work' }, { action: 'update_task', task_id: dynamicSecond.task_id, dependencies: [dynamicSecond.task_id] }, { action: 'remove_member', member_name: 'implementer' }]) {
-    let rejected = false; try { await call('agent_teams_edit_plan', { operations: [operation] }) } catch { rejected = true }
+    let rejected = false; try { await call('ctf_teams_edit_plan', { operations: [operation] }) } catch { rejected = true }
     check('running edits reject active attempts, cycles and roster changes: ' + JSON.stringify(operation), rejected)
   }
-  const abandoned = await call('agent_teams_create_task', { subject: 'Cancelled planning mistake', assignee: 'implementer', dependencies: [dynamicFirst.task_id] })
-  const cancelledPending = await call('agent_teams_update_task', { task_id: abandoned.task_id, status: 'cancelled', output: 'No execution began; captain corrected the plan.' })
+  const abandoned = await call('ctf_teams_create_task', { subject: 'Cancelled planning mistake', assignee: 'implementer', dependencies: [dynamicFirst.task_id] })
+  const cancelledPending = await call('ctf_teams_update_task', { task_id: abandoned.task_id, status: 'cancelled', output: 'No execution began; captain corrected the plan.' })
   check('captain can cancel dependency-blocked member work before its first attempt', cancelledPending.status === 'cancelled' && cancelledPending.attempt === 0)
   check('approval starts only dependency-ready members',
     approvedDynamic.status === 'running'
@@ -699,7 +725,7 @@ try {
       && dynamicTeam.tasks[0]?.status === 'claimed'
       && dynamicTeam.tasks[1]?.status === 'pending')
   for (const member of dynamicTeam.members) if (member.id !== '') publishStatus(liveAgents.get(member.id), 'idle')
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   const dispatchedDynamic = await readTeam(stateRoot, 'dynamic-demo')
   check('approved plan dispatches only after a spawned member becomes idle',
     dispatchedDynamic?.tasks[0]?.status === 'claimed'
@@ -729,34 +755,34 @@ try {
     (dynamicAnalyst.drainCount ?? 0) > drainedBeforeHalt && dynamicImplementer === undefined
       && !liveAgents.has(dynamicAnalyst.id))
   const deliveriesAfterHalt = deliveries.length
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   check('halted team does not redispatch cancelled graph',
     deliveries.length === deliveriesAfterHalt
       && (await readTeam(stateRoot, 'dynamic-demo'))?.tasks.every(item => item.status === 'cancelled'))
   let silentCreateUnhalted = false
   try {
-    await call('agent_teams_create_task', { subject: 'must stay halted' })
+    await call('ctf_teams_create_task', { subject: 'must stay halted' })
     silentCreateUnhalted = (await readTeam(stateRoot, 'dynamic-demo'))?.halted !== true
   } catch {
     silentCreateUnhalted = (await readTeam(stateRoot, 'dynamic-demo'))?.halted !== true
   }
   check('halted create_task does not silently resume',
     silentCreateUnhalted === false && (await readTeam(stateRoot, 'dynamic-demo'))?.halted === true)
-  const resume = await call('agent_teams_resume', { reason: 'continue after user answer' })
+  const resume = await call('ctf_teams_resume', { reason: 'continue after user answer' })
   check('explicit resume clears halt and keeps cancelled tasks cancelled',
     resume.status === 'resumed'
       && (await readTeam(stateRoot, 'dynamic-demo'))?.halted !== true
       && (await readTeam(stateRoot, 'dynamic-demo'))?.tasks.every(item => item.status === 'cancelled'))
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
   const haltedArchive = await readArchivedTeam(stateRoot, 'dynamic-demo')
   check('shutdown preserves cancelled task history in the archive',
     haltedArchive?.tasks.length === 3
       && haltedArchive.tasks.every(item => item.status === 'cancelled'))
 
-  await call('agent_teams_create', { name: 'Quality Loop', description: 'review loop' })
-  await call('agent_teams_add_member', { name: 'builder', role: 'implementer' })
-  await call('agent_teams_add_member', { name: 'critic', role: 'reviewer' })
-  const impl = await call('agent_teams_create_task', {
+  await call('ctf_teams_create', { name: 'Quality Loop', description: 'review loop' })
+  await call('ctf_teams_add_member', { name: 'builder', role: 'implementer' })
+  await call('ctf_teams_add_member', { name: 'critic', role: 'reviewer' })
+  const impl = await call('ctf_teams_create_task', {
     subject: 'implement parser',
     assignee: 'builder',
     kind: 'implementation',
@@ -767,7 +793,7 @@ try {
   })
   let missingContractRejected = false
   try {
-    await call('agent_teams_create_task', { subject: 'impl without contract', kind: 'implementation' })
+    await call('ctf_teams_create_task', { subject: 'impl without contract', kind: 'implementation' })
   } catch {
     missingContractRejected = true
   }
@@ -775,19 +801,19 @@ try {
   const qualityTeam = await readTeam(stateRoot, 'quality-loop')
   const builder = [...liveAgents.values()].find(agent => qualityTeam?.members.some(member => member.id === agent.id && member.name === 'builder'))
   let criticMember
-  const implClaim = await call('agent_teams_claim_task', { task_id: impl.task_id }, builder)
+  const implClaim = await call('ctf_teams_claim_task', { task_id: impl.task_id }, builder)
   for (const attempt_id of [undefined, '']) {
     let missingAttemptError = ''
-    try { await call('agent_teams_update_task', { task_id: impl.task_id, status: 'in_progress', ...(attempt_id === undefined ? {} : { attempt_id }) }, builder) }
+    try { await call('ctf_teams_update_task', { task_id: impl.task_id, status: 'in_progress', ...(attempt_id === undefined ? {} : { attempt_id }) }, builder) }
     catch (error) { missingAttemptError = String(error.message) }
     check('missing attempt_id is a correctable parameter error, not a revoked attempt',
       missingAttemptError.includes('missing attempt_id') && missingAttemptError.includes(implClaim.attempt_id)
         && (await readTeam(stateRoot, 'quality-loop')).tasks.find(t => t.id === impl.task_id).attemptId === implClaim.attempt_id)
   }
-  await call('agent_teams_update_task', { task_id: impl.task_id, status: 'in_progress', attempt_id: implClaim.attempt_id }, builder)
+  await call('ctf_teams_update_task', { task_id: impl.task_id, status: 'in_progress', attempt_id: implClaim.attempt_id }, builder)
   let illegalCompleteRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: impl.task_id,
       status: 'completed',
       attempt_id: implClaim.attempt_id,
@@ -797,7 +823,7 @@ try {
     illegalCompleteRejected = true
   }
   check('illegal completed without acceptance evidence is rejected', illegalCompleteRejected)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: impl.task_id,
     status: 'completed',
     attempt_id: implClaim.attempt_id,
@@ -808,22 +834,22 @@ try {
   }, builder)
   const finishedBeforeEvidence = (await readTeam(stateRoot, 'quality-loop')).tasks.find(t => t.id === impl.task_id)
   const supplement = { task_id: impl.task_id, attempt_id: implClaim.attempt_id, status: 'completed', commandsRun: [{ command: 'independent recheck', status: 'passed', exitCode: 0 }] }
-  await call('agent_teams_update_task', supplement, builder)
-  await call('agent_teams_update_task', supplement, builder)
+  await call('ctf_teams_update_task', supplement, builder)
+  await call('ctf_teams_update_task', supplement, builder)
   const supplemented = (await readTeam(stateRoot, 'quality-loop')).tasks.find(t => t.id === impl.task_id)
   check('issue159 terminal evidence is durable and duplicate submissions are idempotent', supplemented.supplementalEvidence?.length === 1 && supplemented.supplementalEvidence[0].commandsRun[0].command === 'independent recheck')
   check('issue159 supplementary evidence preserves the original result and completion timestamp', supplemented.output === finishedBeforeEvidence.output && supplemented.updatedAt === finishedBeforeEvidence.updatedAt && supplemented.commandsRun[0].command === 'pnpm test')
-  const captainSupplement = await call('agent_teams_update_task', { task_id: impl.task_id, evidence_note: 'Captain accepted independent evidence' })
+  const captainSupplement = await call('ctf_teams_update_task', { task_id: impl.task_id, evidence_note: 'Captain accepted independent evidence' })
   check('issue159 captain supplements terminal member work without takeover', captainSupplement.evidence_count === 2)
-  const visibleEvidence = await call('agent_teams_status', {})
+  const visibleEvidence = await call('ctf_teams_status', {})
   check('issue159 supplemental evidence is visible in status', visibleEvidence.tasks.find(t => t.id === impl.task_id).supplemental_evidence?.includes('Captain accepted'))
   let wrongEvidenceAttempt = false
-  try { await call('agent_teams_update_task', { ...supplement, attempt_id: 'revoked' }, builder) } catch { wrongEvidenceAttempt = true }
+  try { await call('ctf_teams_update_task', { ...supplement, attempt_id: 'revoked' }, builder) } catch { wrongEvidenceAttempt = true }
   check('issue159 stale capabilities cannot append terminal evidence', wrongEvidenceAttempt)
-  const report1 = await call('agent_teams_send_message', { to: 'captain', content: 'Verified parser completion', source_task_id: impl.task_id, source_attempt_id: implClaim.attempt_id }, builder)
-  const report2 = await call('agent_teams_send_message', { to: 'captain', content: 'Verified parser completion', source_task_id: impl.task_id, source_attempt_id: implClaim.attempt_id }, builder)
+  const report1 = await call('ctf_teams_send_message', { to: 'captain', content: 'Verified parser completion', source_task_id: impl.task_id, source_attempt_id: implClaim.attempt_id }, builder)
+  const report2 = await call('ctf_teams_send_message', { to: 'captain', content: 'Verified parser completion', source_task_id: impl.task_id, source_attempt_id: implClaim.attempt_id }, builder)
   check('issue159 identical report retries reuse one durable message', report1.message_id === report2.message_id && (await readMailbox(stateRoot, 'quality-loop', 'captain')).filter(m => m.content === 'Verified parser completion').length === 1)
-  const review = await call('agent_teams_create_task', {
+  const review = await call('ctf_teams_create_task', {
     subject: 'review parser',
     assignee: 'critic',
     kind: 'review',
@@ -833,16 +859,16 @@ try {
   })
   criticMember = liveAgents.get((await readTeam(stateRoot, 'quality-loop')).members.find(m => m.name === 'critic').id)
   let foreignEvidence = false
-  try { await call('agent_teams_update_task', supplement, criticMember) } catch { foreignEvidence = true }
+  try { await call('ctf_teams_update_task', supplement, criticMember) } catch { foreignEvidence = true }
   check('issue159 teammates cannot supplement another owners terminal work', foreignEvidence)
   let staleReport = false
-  try { await call('agent_teams_send_message', { to:'captain',content:'old report',source_task_id:impl.task_id,source_attempt_id:'revoked' },builder) } catch { staleReport = true }
+  try { await call('ctf_teams_send_message', { to:'captain',content:'old report',source_task_id:impl.task_id,source_attempt_id:'revoked' },builder) } catch { staleReport = true }
   check('issue159 stale explicit reports are rejected before entering the mailbox', staleReport && !(await readMailbox(stateRoot, 'quality-loop', 'captain')).some(m => m.content === 'old report'))
-  const reviewClaim = await call('agent_teams_claim_task', { task_id: review.task_id }, criticMember)
-  await call('agent_teams_update_task', { task_id: review.task_id, status: 'in_progress', attempt_id: reviewClaim.attempt_id }, criticMember)
+  const reviewClaim = await call('ctf_teams_claim_task', { task_id: review.task_id }, criticMember)
+  await call('ctf_teams_update_task', { task_id: review.task_id, status: 'in_progress', attempt_id: reviewClaim.attempt_id }, criticMember)
   let needsRevisionCompleteRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: review.task_id,
       status: 'completed',
       attempt_id: reviewClaim.attempt_id,
@@ -853,7 +879,7 @@ try {
     needsRevisionCompleteRejected = true
   }
   check('review needs_revision cannot complete', needsRevisionCompleteRejected)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: review.task_id,
     status: 'failed',
     attempt_id: reviewClaim.attempt_id,
@@ -870,14 +896,14 @@ try {
       && !repair.dependencies.includes(review.task_id)
       && nextReview.assignee === 'critic'
       && nextReview.assignee !== 'builder')
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
 
-  await call('agent_teams_create', { name: 'Lifecycle', description: 'adversarial DAG' })
-  const addedAlpha = await call('agent_teams_add_member', { name: 'alpha', role: 'slow implementer' })
-  const addedBeta = await call('agent_teams_add_member', { name: 'beta', role: 'researcher' })
-  const addedGamma = await call('agent_teams_add_member', { name: 'gamma', role: 'reviewer' })
+  await call('ctf_teams_create', { name: 'Lifecycle', description: 'adversarial DAG' })
+  const addedAlpha = await call('ctf_teams_add_member', { name: 'alpha', role: 'slow implementer' })
+  const addedBeta = await call('ctf_teams_add_member', { name: 'beta', role: 'researcher' })
+  const addedGamma = await call('ctf_teams_add_member', { name: 'gamma', role: 'reviewer' })
   check('adding members alone creates no child sessions', [addedAlpha, addedBeta, addedGamma].every(m => m.member_id === ''))
-  for (const name of ['alpha', 'beta', 'gamma']) await call('agent_teams_send_message', { to: name, content: 'Prepare for the concurrency regression and wait for assignment.' })
+  for (const name of ['alpha', 'beta', 'gamma']) await call('ctf_teams_send_message', { to: name, content: 'Prepare for the concurrency regression and wait for assignment.' })
   const roster = (await state()).members
   const alpha = liveAgents.get(roster.find(m => m.name === 'alpha').id)
   const beta = liveAgents.get(roster.find(m => m.name === 'beta').id)
@@ -889,7 +915,7 @@ try {
   publishStatus(beta, 'idle')
   publishStatus(gamma, 'idle')
 
-  const t1 = await call('agent_teams_create_task', { subject: 'slow branch', assignee: 'alpha' })
+  const t1 = await call('ctf_teams_create_task', { subject: 'slow branch', assignee: 'alpha' })
   const firstAttempt = await task(t1.task_id)
   check('idle assigned member is claimed and woken automatically',
     firstAttempt?.status === 'claimed' && firstAttempt.assignee === 'alpha'
@@ -898,25 +924,25 @@ try {
   const beforeCaptainClaim = JSON.stringify(await task(t1.task_id))
   const beforeCaptainClaimDeliveries = deliveries.length
   try {
-    await call('agent_teams_claim_task', { task_id: t1.task_id, assignee: 'alpha' })
+    await call('ctf_teams_claim_task', { task_id: t1.task_id, assignee: 'alpha' })
   } catch (error) {
     captainClaimRejected = /member|reassign_task/.test(String(error))
   }
   check('captain cannot mint a claim capability for a member; use reassign_task',
     captainClaimRejected && JSON.stringify(await task(t1.task_id)) === beforeCaptainClaim
       && deliveries.length === beforeCaptainClaimDeliveries)
-  const alphaClaim = await call('agent_teams_claim_task', { task_id: t1.task_id }, alpha)
+  const alphaClaim = await call('ctf_teams_claim_task', { task_id: t1.task_id }, alpha)
   check('member observes the scheduler attempt idempotently', alphaClaim.attempt_id === firstAttempt?.attemptId)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: t1.task_id, status: 'in_progress', attempt_id: alphaClaim.attempt_id,
   }, alpha)
 
-  const t2 = await call('agent_teams_create_task', { subject: 'parallel research', assignee: 'beta' })
-  const t3 = await call('agent_teams_create_task', {
+  const t2 = await call('ctf_teams_create_task', { subject: 'parallel research', assignee: 'beta' })
+  const t3 = await call('ctf_teams_create_task', {
     subject: 'integration gate', assignee: 'gamma', dependencies: [t1.task_id, t2.task_id],
   })
-  const betaClaim = await call('agent_teams_claim_task', { task_id: t2.task_id }, beta)
-  await call('agent_teams_update_task', {
+  const betaClaim = await call('ctf_teams_claim_task', { task_id: t2.task_id }, beta)
+  await call('ctf_teams_update_task', {
     task_id: t2.task_id, status: 'in_progress', attempt_id: betaClaim.attempt_id,
   }, beta)
   check('dependency gate stays pending before both branches complete', (await task(t3.task_id))?.status === 'pending')
@@ -936,7 +962,7 @@ try {
   // still open. Repeated scheduler/status kicks must park that capability
   // instead of minting a fresh attempt and inference request each time.
   for (let kick = 0; kick < 20; kick += 1) {
-    await call('agent_teams_status', {})
+    await call('ctf_teams_status', {})
   }
   await new Promise(resolve => setTimeout(resolve, 20))
   const parkedAlpha = await task(t1.task_id)
@@ -953,9 +979,9 @@ try {
   liveAgents.delete(alpha.id)
   const deliveriesBeforeDisposedParkedKicks = deliveries.length
   await Promise.all([
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
   ])
   await new Promise(resolve => setTimeout(resolve, 20))
   const disposedParkedAlpha = await task(t1.task_id)
@@ -969,27 +995,27 @@ try {
   // Unobserved recovery whose followup fails must restore the original open
   // capability and consume that generation's budget. Later status kicks must
   // not recast it into pending or a new attempt.
-  const tRecoverFail = await call('agent_teams_create_task', {
+  const tRecoverFail = await call('ctf_teams_create_task', {
     subject: 'unobserved recovery delivery failure', assignee: 'gamma',
   })
   const recoverFailDispatch = await task(tRecoverFail.task_id)
   check('idle assigned gamma is claimed for the recovery-failure fixture',
     recoverFailDispatch?.status === 'claimed' && recoverFailDispatch.assignee === 'gamma')
-  const recoverFailClaim = await call('agent_teams_claim_task', { task_id: tRecoverFail.task_id }, gamma)
-  await call('agent_teams_update_task', {
+  const recoverFailClaim = await call('ctf_teams_claim_task', { task_id: tRecoverFail.task_id }, gamma)
+  await call('ctf_teams_update_task', {
     task_id: tRecoverFail.task_id, status: 'in_progress', attempt_id: recoverFailClaim.attempt_id,
     output: 'partial progress', commandsRun: [{ command: 'partial-check', status: 'passed' }],
   }, gamma)
   liveAgents.delete(gamma.id)
   failNextDelivery.add(gamma.id)
   const deliveriesBeforeFailedRecovery = deliveries.length
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   await new Promise(resolve => setTimeout(resolve, 20))
   const rolledBackRecovery = await task(tRecoverFail.task_id)
   await Promise.all([
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
   ])
   await new Promise(resolve => setTimeout(resolve, 20))
   check('issue159 failed recovery restores partial evidence with the original capability', rolledBackRecovery?.output === 'partial progress' && rolledBackRecovery.commandsRun?.[0]?.command === 'partial-check')
@@ -1005,8 +1031,8 @@ try {
       && throttledFailedRecovery.attemptId === recoverFailClaim.attempt_id
       && deliveries.length === deliveriesBeforeFailedRecovery)
   liveAgents.set(gamma.id, gamma)
-  const recoverFailComplete = await call('agent_teams_claim_task', { task_id: tRecoverFail.task_id }, gamma)
-  await call('agent_teams_update_task', {
+  const recoverFailComplete = await call('ctf_teams_claim_task', { task_id: tRecoverFail.task_id }, gamma)
+  await call('ctf_teams_update_task', {
     task_id: tRecoverFail.task_id,
     status: 'completed',
     output: 'closed failed-recovery fixture',
@@ -1022,14 +1048,14 @@ try {
   // sticky even if the new AgentHandle is still absent on later status kicks.
   liveAgents.delete(beta.id)
   const deliveriesBeforeColdRecovery = deliveries.length
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   await new Promise(resolve => setTimeout(resolve, 20))
   const coldRecoveredBeta = await task(t2.task_id)
   const deliveriesAfterColdRecovery = deliveries.length
   await Promise.all([
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
-    call('agent_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
+    call('ctf_teams_status', {}),
   ])
   await new Promise(resolve => setTimeout(resolve, 20))
   const throttledRecoveredBeta = await task(t2.task_id)
@@ -1047,7 +1073,7 @@ try {
   publishStatus(beta, 'idle')
   await new Promise(resolve => setTimeout(resolve, 20))
   const deliveriesBeforeResume = deliveries.length
-  const resumedBeta = await call('agent_teams_send_message', {
+  const resumedBeta = await call('ctf_teams_send_message', {
     to: 'beta', content: 'Continue the same parked task and keep its current attempt id.',
   })
   const resumedBetaTask = await task(t2.task_id)
@@ -1059,7 +1085,7 @@ try {
 
   let unsafeCaptainTakeoverRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: t1.task_id, status: 'completed', output: 'captain bypassed handoff',
     })
   } catch (error) {
@@ -1067,7 +1093,7 @@ try {
   }
   check('captain cannot bypass the safe takeover protocol', unsafeCaptainTakeoverRejected)
 
-  const takeover = await call('agent_teams_reassign_task', {
+  const takeover = await call('ctf_teams_reassign_task', {
     task_id: t1.task_id, assignee: 'gamma', reason: 'alpha is stuck',
   })
   const reassigned = await task(t1.task_id)
@@ -1077,7 +1103,7 @@ try {
       && takeover.attempt === (disposedParkedAlpha?.attempt ?? 0) + 1)
   let staleRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: t1.task_id, status: 'completed', output: 'late alpha', attempt_id: alphaClaim.attempt_id,
     }, alpha)
   } catch (error) {
@@ -1085,18 +1111,18 @@ try {
   }
   check('old member cannot publish a late takeover result', staleRejected)
 
-  const gammaClaim = await call('agent_teams_claim_task', { task_id: t1.task_id }, gamma)
-  await call('agent_teams_update_task', {
+  const gammaClaim = await call('ctf_teams_claim_task', { task_id: t1.task_id }, gamma)
+  await call('ctf_teams_update_task', {
     task_id: t1.task_id, status: 'in_progress', attempt_id: gammaClaim.attempt_id,
   }, gamma)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: t1.task_id, status: 'completed', output: 'gamma result', attempt_id: gammaClaim.attempt_id,
   }, gamma)
-  const recoveredBetaClaim = await call('agent_teams_claim_task', { task_id: t2.task_id }, beta)
-  await call('agent_teams_update_task', {
+  const recoveredBetaClaim = await call('ctf_teams_claim_task', { task_id: t2.task_id }, beta)
+  await call('ctf_teams_update_task', {
     task_id: t2.task_id, status: 'in_progress', attempt_id: recoveredBetaClaim.attempt_id,
   }, beta)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: t2.task_id, status: 'completed', output: 'beta result', attempt_id: recoveredBetaClaim.attempt_id,
   }, beta)
   check('resumed recovered member completes with its throttled capability',
@@ -1124,36 +1150,36 @@ try {
   deliveryDelayMs = 0
   check('completing dependencies dispatches the downstream task before member execution', gateDelivered)
   if (!gateDelivered) throw new Error('Timed out waiting for the downstream task to reach gamma')
-  const gateClaim = await call('agent_teams_claim_task', { task_id: t3.task_id }, gamma)
-  await call('agent_teams_update_task', {
+  const gateClaim = await call('ctf_teams_claim_task', { task_id: t3.task_id }, gamma)
+  await call('ctf_teams_update_task', {
     task_id: t3.task_id, status: 'in_progress', attempt_id: gateClaim.attempt_id,
   }, gamma)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: t3.task_id, status: 'completed', output: 'integrated', attempt_id: gateClaim.attempt_id,
   }, gamma)
 
   publishStatus(alpha, 'idle')
   publishStatus(beta, 'idle')
   gamma.status = 'running'
-  const t4 = await call('agent_teams_create_task', { subject: 'later-round assigned work', assignee: 'alpha' })
+  const t4 = await call('ctf_teams_create_task', { subject: 'later-round assigned work', assignee: 'alpha' })
   const reused = await task(t4.task_id)
   check('previously interrupted member is reused in a later round', reused?.assignee === 'alpha' && reused.status === 'claimed')
 
-  const t5 = await call('agent_teams_create_task', { subject: 'must wait behind alpha', assignee: 'alpha' })
+  const t5 = await call('ctf_teams_create_task', { subject: 'must wait behind alpha', assignee: 'alpha' })
   let busyRejected = false
   try {
-    await call('agent_teams_claim_task', { task_id: t5.task_id }, alpha)
+    await call('ctf_teams_claim_task', { task_id: t5.task_id }, alpha)
   } catch (error) {
     busyRejected = /busy with/.test(String(error))
   }
   check('a member cannot claim a second unfinished task', busyRejected)
-  await call('agent_teams_reassign_task', {
+  await call('ctf_teams_reassign_task', {
     task_id: t5.task_id, assignee: 'captain', reason: 'close busy-check task',
   })
-  await call('agent_teams_update_task', { task_id: t5.task_id, status: 'in_progress' })
-  await call('agent_teams_update_task', { task_id: t5.task_id, status: 'completed', output: 'closed' })
+  await call('ctf_teams_update_task', { task_id: t5.task_id, status: 'in_progress' })
+  await call('ctf_teams_update_task', { task_id: t5.task_id, status: 'completed', output: 'closed' })
 
-  await call('agent_teams_remove_member', { name: 'alpha' })
+  await call('ctf_teams_remove_member', { name: 'alpha' })
   const afterRemoval = await state()
   const recovered = afterRemoval?.tasks.find(candidate => candidate.id === t4.task_id)
   check('removing a member revokes and redispatches its unfinished task',
@@ -1174,7 +1200,7 @@ try {
     removedFollowupRejected && deliveries.length === deliveriesBeforeRemovedFollowup)
   let removedRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: t4.task_id, status: 'completed', output: 'removed alpha', attempt_id: reused?.attemptId,
     }, alpha)
   } catch {
@@ -1187,35 +1213,35 @@ try {
     const current = await task(recoveredTaskId)
     if (!current?.assignee || current.status !== 'claimed') continue
     const owner = current.assignee === 'beta' ? beta : gamma
-    const claim = await call('agent_teams_claim_task', { task_id: recoveredTaskId }, owner)
-    await call('agent_teams_update_task', { task_id: recoveredTaskId, status: 'in_progress', attempt_id: claim.attempt_id }, owner)
-    await call('agent_teams_update_task', {
+    const claim = await call('ctf_teams_claim_task', { task_id: recoveredTaskId }, owner)
+    await call('ctf_teams_update_task', { task_id: recoveredTaskId, status: 'in_progress', attempt_id: claim.attempt_id }, owner)
+    await call('ctf_teams_update_task', {
       task_id: recoveredTaskId, status: 'completed', output: 'recovered', attempt_id: claim.attempt_id,
     }, owner)
   }
 
-  await call('agent_teams_status', {}, gamma)
+  await call('ctf_teams_status', {}, gamma)
   gamma.status = 'idle'
   failNextDelivery.add(gamma.id)
-  const fallback = await call('agent_teams_send_message', { to: 'gamma', content: 'durable fallback' })
+  const fallback = await call('ctf_teams_send_message', { to: 'gamma', content: 'durable fallback' })
   check('failed live message remains one unread durable fallback',
     fallback.delivered === 'mailbox' && (await readUnreadMailbox(stateRoot, teamId, 'gamma')).length === 1)
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   check('status kick accepts fallback without inventing consumption',
     (await readUnreadMailbox(stateRoot, teamId, 'gamma')).length === 1
       && (await readMailbox(stateRoot, teamId, 'gamma')).at(-1)?.deliveredAt !== undefined)
-  await call('agent_teams_status', {}, gamma)
+  await call('ctf_teams_status', {}, gamma)
   check('recipient status acknowledges the complete fallback actually displayed',
     (await readUnreadMailbox(stateRoot, teamId, 'gamma')).length === 0)
 
   beta.status = 'running'
   gamma.status = 'running'
-  const t6 = await call('agent_teams_create_task', { subject: 'concurrent claim' })
+  const t6 = await call('ctf_teams_create_task', { subject: 'concurrent claim' })
   beta.status = 'idle'
   gamma.status = 'idle'
   const race = await Promise.allSettled([
-    call('agent_teams_claim_task', { task_id: t6.task_id }, beta),
-    call('agent_teams_claim_task', { task_id: t6.task_id }, gamma),
+    call('ctf_teams_claim_task', { task_id: t6.task_id }, beta),
+    call('ctf_teams_claim_task', { task_id: t6.task_id }, gamma),
   ])
   check('concurrent claims serialize to exactly one owner',
     race.filter(result => result.status === 'fulfilled').length === 1
@@ -1225,13 +1251,13 @@ try {
   // A successful member claim is made from a running model turn. Preserve
   // that Harness status edge before unrelated kicks can retry an idle claim.
   winner.status = 'running'
-  await call('agent_teams_update_task', { task_id: t6.task_id, status: 'in_progress', attempt_id: won.attempt_id }, winner)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', { task_id: t6.task_id, status: 'in_progress', attempt_id: won.attempt_id }, winner)
+  await call('ctf_teams_update_task', {
     task_id: t6.task_id, status: 'completed', output: 'winner', attempt_id: won.attempt_id,
   }, winner)
   let terminalRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: t6.task_id, status: 'completed', output: 'late overwrite', attempt_id: won.attempt_id,
     }, winner)
   } catch (error) {
@@ -1240,19 +1266,19 @@ try {
   check('terminal output is immutable against late overwrite', terminalRejected)
 
   beta.status = 'idle'
-  const t7 = await call('agent_teams_create_task', { subject: 'captain takeover', assignee: 'beta' })
-  const betaTakeoverClaim = await call('agent_teams_claim_task', { task_id: t7.task_id }, beta)
-  await call('agent_teams_update_task', {
+  const t7 = await call('ctf_teams_create_task', { subject: 'captain takeover', assignee: 'beta' })
+  const betaTakeoverClaim = await call('ctf_teams_claim_task', { task_id: t7.task_id }, beta)
+  await call('ctf_teams_update_task', {
     task_id: t7.task_id, status: 'in_progress', attempt_id: betaTakeoverClaim.attempt_id,
   }, beta)
-  const captainAttempt = await call('agent_teams_reassign_task', {
+  const captainAttempt = await call('ctf_teams_reassign_task', {
     task_id: t7.task_id, assignee: 'captain', reason: 'deadline takeover',
   })
-  await call('agent_teams_update_task', { task_id: t7.task_id, status: 'in_progress' })
-  await call('agent_teams_update_task', { task_id: t7.task_id, status: 'completed', output: 'captain result' })
+  await call('ctf_teams_update_task', { task_id: t7.task_id, status: 'in_progress' })
+  await call('ctf_teams_update_task', { task_id: t7.task_id, status: 'completed', output: 'captain result' })
   let lateTakeoverRejected = false
   try {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: t7.task_id, status: 'completed', output: 'late beta', attempt_id: betaTakeoverClaim.attempt_id,
     }, beta)
   } catch {
@@ -1269,21 +1295,21 @@ try {
   // rows lost their tasks while two captain-owned attempts stayed parked.
   beta.status = 'idle'
   gamma.status = 'idle'
-  const t8 = await call('agent_teams_create_task', { subject: 'parallel captain takeover A', assignee: 'beta' })
-  const t9 = await call('agent_teams_create_task', { subject: 'parallel captain takeover B', assignee: 'gamma' })
-  const betaParallelClaim = await call('agent_teams_claim_task', { task_id: t8.task_id }, beta)
-  const gammaParallelClaim = await call('agent_teams_claim_task', { task_id: t9.task_id }, gamma)
-  await call('agent_teams_update_task', {
+  const t8 = await call('ctf_teams_create_task', { subject: 'parallel captain takeover A', assignee: 'beta' })
+  const t9 = await call('ctf_teams_create_task', { subject: 'parallel captain takeover B', assignee: 'gamma' })
+  const betaParallelClaim = await call('ctf_teams_claim_task', { task_id: t8.task_id }, beta)
+  const gammaParallelClaim = await call('ctf_teams_claim_task', { task_id: t9.task_id }, gamma)
+  await call('ctf_teams_update_task', {
     task_id: t8.task_id, status: 'in_progress', attempt_id: betaParallelClaim.attempt_id,
   }, beta)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: t9.task_id, status: 'in_progress', attempt_id: gammaParallelClaim.attempt_id,
   }, gamma)
   const captainTakeoverRace = await Promise.allSettled([
-    call('agent_teams_reassign_task', {
+    call('ctf_teams_reassign_task', {
       task_id: t8.task_id, assignee: 'captain', reason: 'parallel takeover guard A',
     }),
-    call('agent_teams_reassign_task', {
+    call('ctf_teams_reassign_task', {
       task_id: t9.task_id, assignee: 'captain', reason: 'parallel takeover guard B',
     }),
   ])
@@ -1324,18 +1350,18 @@ try {
   for (const recoveredTask of recoveredParallel) {
     const owner = recoveredTask.assignee === 'beta' ? beta : gamma
     owner.status = 'running'
-    const claim = await call('agent_teams_claim_task', { task_id: recoveredTask.id }, owner)
-    await call('agent_teams_update_task', {
+    const claim = await call('ctf_teams_claim_task', { task_id: recoveredTask.id }, owner)
+    await call('ctf_teams_update_task', {
       task_id: recoveredTask.id, status: 'in_progress', attempt_id: claim.attempt_id,
     }, owner)
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: recoveredTask.id, status: 'completed', output: 'member recovered captain work', attempt_id: claim.attempt_id,
     }, owner)
   }
 
   beta.status = 'running'
   gamma.status = 'idle'
-  const snapshot = await call('agent_teams_status', {})
+  const snapshot = await call('ctf_teams_status', {})
   check('activity refines residency through the live Agent registry',
     snapshot.members.find(member => member.name === 'beta')?.activity === 'running'
       && snapshot.members.find(member => member.name === 'gamma')?.activity === 'idle')
@@ -1345,27 +1371,18 @@ try {
   // Exercise the storage-only ready path: deletion must deny cold resume
   // without materializing the member or spending a model turn.
   liveAgents.delete(gamma.id)
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
   const archived = await readArchivedTeam(stateRoot, teamId)
   check('team shutdown archives the complete durable record',
     await readTeam(stateRoot, teamId) === undefined
       && archived !== undefined)
-  const archivedSnapshot = (await collectArchivedTeamsActivity(ctx, [{ workspace, stateRoot }]))
-    .find(candidate => candidate.teamId === teamId)
-  check('archived activity keeps every member after shutdown',
-    archivedSnapshot?.members.length === 3
-      && ['alpha', 'beta', 'gamma'].every(name => archivedSnapshot.members.some(member => member.name === name))
-      && archivedSnapshot.members.every(member => member.activity === 'idle'))
-  check('archived activity projects each member model onto assigned tasks',
-    archivedSnapshot?.members.every(member => member.provider === 'fake' && member.model === 'fake-model')
-      && archivedSnapshot.tasks
-        .filter(task => ['alpha', 'beta', 'gamma'].includes(task.assignee))
-        .every(task => task.model === 'fake/fake-model'))
+  // The archived-activity projection was part of the removed web panel; the
+  // durable archive check above covers what CTFTeams still serves from disk.
   check('team shutdown keeps retired members catalog-visible for historical transcripts',
     (await ctx.subagents.listChildren(captain.id))
       .filter(child => child.kind === 'child'
         && child.mode === 'continuable'
-        && child.label.startsWith('agent-teams:lifecycle:')).length === 3)
+        && child.label.startsWith('ctf-teams:lifecycle:')).length === 3)
   let coldFollowupRejected = false
   const deliveriesBeforeColdFollowup = deliveries.length
   try {
@@ -1389,19 +1406,19 @@ try {
     typeof foreignFollowup === 'string'
       && deliveries.some(delivery => delivery.childId === 'foreign-session'))
 
-  await call('agent_teams_create', {
+  await call('ctf_teams_create', {
     name: 'Atomic Approval',
     description: 'invalid route must not partially start',
     approval: 'required',
   })
-  await call('agent_teams_add_member', { name: 'valid', role: 'writer', provider: 'fake', model: 'fake-model' })
-  await call('agent_teams_add_member', { name: 'invalid', role: 'reviewer', provider: 'fake', model: 'typo-model' })
-  await call('agent_teams_create_task', { subject: 'must remain staged', assignee: 'valid' })
+  await call('ctf_teams_add_member', { name: 'valid', role: 'writer', provider: 'fake', model: 'fake-model' })
+  await call('ctf_teams_add_member', { name: 'invalid', role: 'reviewer', provider: 'fake', model: 'typo-model' })
+  await call('ctf_teams_create_task', { subject: 'must remain staged', assignee: 'valid' })
   const childrenBeforeRejectedApproval = children.length
   advertisedModels = ['fake-model']
   let invalidApprovalRejected = false
   try {
-    await call('agent_teams_approve', { confirmation: 'user clicked Approve & Run' })
+    await call('ctf_teams_approve', { confirmation: 'user clicked Approve & Run' })
   } catch (error) {
     invalidApprovalRejected = /unknown member model.*typo-model/i.test(String(error?.message ?? error))
   }
@@ -1413,10 +1430,10 @@ try {
       && rejectedApprovalTeam.members.every(member => member.id === '')
       && rejectedApprovalTeam.tasks.every(item => item.status === 'pending'))
   advertisedModels = []
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
 
-  await call('agent_teams_create', { name: 'Lifecycle', description: 'second generation' })
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_create', { name: 'Lifecycle', description: 'second generation' })
+  await call('ctf_teams_delete', {})
   const replacementArchive = await readArchivedTeam(stateRoot, teamId)
   check('same-name team can be recreated and archived again',
     await readTeam(stateRoot, teamId) === undefined
@@ -1428,13 +1445,13 @@ try {
   // durable record keeps the member "working". The plugin must bridge the
   // failure at the final agent/error boundary. A request error may still be
   // retried by Harness, and must not close the task prematurely.
-  await call('agent_teams_create', { name: 'Failure Bridge', description: 'turn failures must surface' })
-  await call('agent_teams_add_member', { name: 'flake', role: 'streaming worker' })
-  const flakeTask = await call('agent_teams_create_task', { subject: 'streaming work', assignee: 'flake' })
+  await call('ctf_teams_create', { name: 'Failure Bridge', description: 'turn failures must surface' })
+  await call('ctf_teams_add_member', { name: 'flake', role: 'streaming worker' })
+  const flakeTask = await call('ctf_teams_create_task', { subject: 'streaming work', assignee: 'flake' })
   const flakeTeam = await readTeam(stateRoot, 'failure-bridge')
   const flake = liveAgents.get(flakeTeam.members.find(member => member.name === 'flake').id)
-  const flakeClaim = await call('agent_teams_claim_task', { task_id: flakeTask.task_id }, flake)
-  await call('agent_teams_update_task', {
+  const flakeClaim = await call('ctf_teams_claim_task', { task_id: flakeTask.task_id }, flake)
+  await call('ctf_teams_update_task', {
     task_id: flakeTask.task_id, status: 'in_progress', attempt_id: flakeClaim.attempt_id,
   }, flake)
 
@@ -1442,7 +1459,7 @@ try {
   // live delivery is unavailable, so the message stays a durable fallback
   // that only the scheduler mailbox flush can hand over.
   failNextDelivery.add(flake.id)
-  await call('agent_teams_send_message', { to: 'flake', content: 'status update please' })
+  await call('ctf_teams_send_message', { to: 'flake', content: 'status update please' })
   const deliveriesBeforeFailure = deliveries.length
   const captainMailBeforeFailure = (await readMailbox(stateRoot, 'failure-bridge', 'captain')).length
   const captainSteersBeforeFailure = captain.steers.length
@@ -1495,7 +1512,7 @@ try {
     deliveries.length === deliveriesBeforeFailure
       && (await readUnreadMailbox(stateRoot, 'failure-bridge', 'flake')).length === 0
       && (await bridgeTask())?.status === 'failed')
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
 
   const batchPlan = { members: [{ name: 'worker' }, { name: 'verifier' }], tasks: [
     { id: 'verify', subject: 'Validate output', assignee: 'verifier', dependencies: ['work'] },
@@ -1503,32 +1520,32 @@ try {
   ] }
   const beforeBadPlan = children.length
   let badPlanRejected = false
-  try { await call('agent_teams_create', { name: 'Atomic Invalid', plan: { ...batchPlan, tasks: [{ id: 'x', subject: 'cycle', dependencies: ['x'] }] } }) } catch { badPlanRejected = true }
+  try { await call('ctf_teams_create', { name: 'Atomic Invalid', plan: { ...batchPlan, tasks: [{ id: 'x', subject: 'cycle', dependencies: ['x'] }] } }) } catch { badPlanRejected = true }
   check('invalid batch plan is rejected without any state or session side effect', badPlanRejected && children.length === beforeBadPlan && await readTeam(stateRoot, 'atomic-invalid') === undefined)
-  const batch = await call('agent_teams_create', { name: 'Batch Plan', description: 'One call builds roster and DAG', plan: batchPlan, approval: 'required' })
+  const batch = await call('ctf_teams_create', { name: 'Batch Plan', description: 'One call builds roster and DAG', plan: batchPlan, approval: 'required' })
   const stagedBatch = await readTeam(stateRoot, 'batch-plan')
   check('one atomic call creates the full roster and resolves forward dependency references', batch.members.length === 2 && batch.tasks.length === 2 && stagedBatch.members.every(m => m.id === '') && stagedBatch.tasks[1].dependencies[0] === stagedBatch.tasks[0].id)
-  const deliveryBeforeWork = await call('agent_teams_status', {})
+  const deliveryBeforeWork = await call('ctf_teams_status', {})
   check('ordinary pending work cannot be reported deliverable', !deliveryBeforeWork.deliverable && !deliveryBeforeWork.delivery.ok)
-  await call('agent_teams_approve', { confirmation: 'Run the accepted batch' })
+  await call('ctf_teams_approve', { confirmation: 'Run the accepted batch' })
   const workingBatch = await readTeam(stateRoot, 'batch-plan')
   const batchWorker = liveAgents.get(workingBatch.members.find(m => m.name === 'worker').id)
   const batchTask = workingBatch.tasks[0]
-  const details = await call('agent_teams_claim_task', { task_id: batchTask.id }, batchWorker)
+  const details = await call('ctf_teams_claim_task', { task_id: batchTask.id }, batchWorker)
   check('claim exposes the complete task contract without reading team files', details.task_details.includes('FULL_CONTRACT_BODY'))
   failNextDrain.add(batchWorker.id)
   let drainRejected = false
-  try { await call('agent_teams_reassign_task', { task_id: batchTask.id, assignee: 'worker' }) } catch { drainRejected = true }
+  try { await call('ctf_teams_reassign_task', { task_id: batchTask.id, assignee: 'worker' }) } catch { drainRejected = true }
   const failedHandoff = await readTeam(stateRoot, 'batch-plan')
   check('failed teardown keeps reassignment fenced and does not launch a new generation', drainRejected && failedHandoff.tasks[0].reassigning && failedHandoff.members.find(m => m.name === 'worker').stopping)
-  await call('agent_teams_reassign_task', { task_id: batchTask.id, assignee: 'worker' })
+  await call('ctf_teams_reassign_task', { task_id: batchTask.id, assignee: 'worker' })
   const retriedHandoff = await readTeam(stateRoot, 'batch-plan')
   check('the same failed handoff can be retried safely', !retriedHandoff.tasks[0].reassigning && !retriedHandoff.members.find(m => m.name === 'worker').stopping && retriedHandoff.tasks[0].status === 'claimed')
   failNextDrain.add(batchWorker.id)
   let archiveRejected = false
-  try { await call('agent_teams_delete', {}) } catch { archiveRejected = true }
+  try { await call('ctf_teams_delete', {}) } catch { archiveRejected = true }
   check('failed member drain never reports a successful archive', archiveRejected && await readTeam(stateRoot, 'batch-plan') !== undefined && await readArchivedTeam(stateRoot, 'batch-plan') === undefined)
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
   check('archive retries drain previously removed roster rows', await readTeam(stateRoot, 'batch-plan') === undefined && !liveAgents.has(batchWorker.id))
 } finally {
   await rm(workspace, { recursive: true, force: true })

@@ -1,5 +1,5 @@
 /**
- * Deterministic AgentTeams scheduler stress and restart verification.
+ * Deterministic CTFTeams scheduler stress and restart verification.
  *
  * The actual compiled production tools are driven through eight continuable
  * members and a 31-node fan-out/fan-in DAG. Faults include two interrupted
@@ -12,11 +12,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { registerAgentTeamsTools } from '../lib/tools.js'
+import { registerCTFTeamsTools } from '../lib/tools.js'
 import { readArchivedTeam, readTeam, readUnreadMailbox } from '../lib/state.js'
 
-const workspace = await mkdtemp(join(tmpdir(), 'dsh-agent-teams-stress-'))
-const stateRoot = join(workspace, '.agent-teams')
+const workspace = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-stress-'))
+const stateRoot = join(workspace, '.ctf-teams')
 const teamId = 'stress-matrix'
 const children = []
 const deliveries = []
@@ -165,8 +165,8 @@ function mountRuntime() {
     logger: { debug() {}, warn() {} },
   }
 
-  registerAgentTeamsTools(ctx, {
-    stateDir: '.agent-teams',
+  registerCTFTeamsTools(ctx, {
+    stateDir: '.ctf-teams',
     memberProvider: 'spawn',
     memberMaxDepth: 1,
     maxMembers: 8,
@@ -218,17 +218,17 @@ async function idle(subject) {
 async function completeClaimed(task, outputPrefix = 'stress') {
   const owner = task.assignee === 'captain' ? runtime.captain : await liveMember(task.assignee)
   if (owner === undefined) throw new Error(`no live owner for ${task.id}/${task.assignee}`)
-  const claim = await call('agent_teams_claim_task', { task_id: task.id }, owner)
+  const claim = await call('ctf_teams_claim_task', { task_id: task.id }, owner)
   if (task.assignee === 'captain') {
-    await call('agent_teams_update_task', { task_id: task.id, status: 'in_progress' }, owner)
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', { task_id: task.id, status: 'in_progress' }, owner)
+    await call('ctf_teams_update_task', {
       task_id: task.id, status: 'completed', output: `${outputPrefix}:${task.id}:${task.assignee}`,
     }, owner)
   } else {
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: task.id, status: 'in_progress', attempt_id: claim.attempt_id,
     }, owner)
-    await call('agent_teams_update_task', {
+    await call('ctf_teams_update_task', {
       task_id: task.id,
       status: 'completed',
       output: `${outputPrefix}:${task.id}:${task.assignee}:a${claim.attempt}`,
@@ -242,7 +242,7 @@ async function completeClaimed(task, outputPrefix = 'stress') {
 async function drain(holdIds = new Set(), requiredHeld = 0) {
   const held = new Map()
   for (let round = 0; round < 400; round += 1) {
-    await call('agent_teams_status', {})
+    await call('ctf_teams_status', {})
     await settle()
     const snapshot = await state()
     if (snapshot === undefined) throw new Error('team disappeared during drain')
@@ -251,8 +251,8 @@ async function drain(holdIds = new Set(), requiredHeld = 0) {
       if (!holdIds.has(task.id) || held.has(task.id) || task.status !== 'claimed') continue
       const owner = await liveMember(task.assignee)
       if (owner === undefined) throw new Error(`held task ${task.id} has no live owner`)
-      const claim = await call('agent_teams_claim_task', { task_id: task.id }, owner)
-      await call('agent_teams_update_task', {
+      const claim = await call('ctf_teams_claim_task', { task_id: task.id }, owner)
+      await call('ctf_teams_update_task', {
         task_id: task.id, status: 'in_progress', attempt_id: claim.attempt_id,
       }, owner)
       held.set(task.id, { owner, claim })
@@ -297,23 +297,23 @@ function dagSpecs() {
   return specs
 }
 
-console.log('dsh-agent-teams complex stress verification')
+console.log('dsh-ctf-teams complex stress verification')
 runtime = mountRuntime()
 try {
-  await call('agent_teams_create', { name: 'Stress Matrix', description: '8 members, 31-node DAG, injected failures and cold restart', approval: 'required' })
+  await call('ctf_teams_create', { name: 'Stress Matrix', description: '8 members, 31-node DAG, injected failures and cold restart', approval: 'required' })
   for (const name of memberNames) {
-    await call('agent_teams_add_member', { name, role: `${name}-specialist` })
+    await call('ctf_teams_add_member', { name, role: `${name}-specialist` })
   }
 
   for (const spec of dagSpecs()) {
-    await call('agent_teams_create_task', {
+    await call('ctf_teams_create_task', {
       subject: spec.subject,
       dependencies: spec.dependencies,
       ...spec.assignee === undefined ? {} : { assignee: spec.assignee },
     })
   }
 
-  await call('agent_teams_approve', { confirmation: 'Run the prepared stress graph' })
+  await call('ctf_teams_approve', { confirmation: 'Run the prepared stress graph' })
   await Promise.all(memberNames.map(async name => idle(await liveMember(name))))
   let snapshot = await state()
   let roots = snapshot.tasks.slice(0, 8)
@@ -324,7 +324,7 @@ try {
   for (let round = 0; round < 100; round += 1) {
     if (roots.every(task => task.status === 'claimed')
       && new Set(roots.map(task => task.assignee)).size === 8) break
-    await call('agent_teams_status', {})
+    await call('ctf_teams_status', {})
     await settle()
     snapshot = await state()
     roots = snapshot.tasks.slice(0, 8)
@@ -334,35 +334,35 @@ try {
 
   const alphaOld = await liveMember('alpha')
   const betaOld = await liveMember('beta')
-  const alphaClaim = await call('agent_teams_claim_task', { task_id: 't1' }, alphaOld)
-  const betaClaim = await call('agent_teams_claim_task', { task_id: 't2' }, betaOld)
-  await call('agent_teams_update_task', { task_id: 't1', status: 'in_progress', attempt_id: alphaClaim.attempt_id }, alphaOld)
-  await call('agent_teams_update_task', { task_id: 't2', status: 'in_progress', attempt_id: betaClaim.attempt_id }, betaOld)
+  const alphaClaim = await call('ctf_teams_claim_task', { task_id: 't1' }, alphaOld)
+  const betaClaim = await call('ctf_teams_claim_task', { task_id: 't2' }, betaOld)
+  await call('ctf_teams_update_task', { task_id: 't1', status: 'in_progress', attempt_id: alphaClaim.attempt_id }, alphaOld)
+  await call('ctf_teams_update_task', { task_id: 't2', status: 'in_progress', attempt_id: betaClaim.attempt_id }, betaOld)
 
   // Complete the other six roots concurrently while alpha hangs and beta is
   // about to disappear. Scheduler activity continues on any unlocked branch.
   await Promise.all(roots.slice(2).map(task => completeClaimed(task, 'root-wave')))
 
   const [takeover, removal] = await Promise.all([
-    call('agent_teams_reassign_task', {
+    call('ctf_teams_reassign_task', {
       task_id: 't1', assignee: 'captain', reason: 'alpha injected hang',
     }),
-    call('agent_teams_remove_member', { name: 'beta' }),
+    call('ctf_teams_remove_member', { name: 'beta' }),
   ])
   check('captain takeover and member removal serialize without losing either mutation',
     takeover.attempt === 2 && takeover.assignee === 'captain'
       && removal.requeued_tasks.includes('t2'))
   await completeClaimed((await state()).tasks.find(task => task.id === 't1'), 'captain-takeover')
 
-  const alphaReuse = await call('agent_teams_create_task', {
+  const alphaReuse = await call('ctf_teams_create_task', {
     subject: 'alpha-reuse-after-interrupt', assignee: 'alpha', dependencies: ['t1'],
   })
 
   const staleStorm = await Promise.allSettled([
-    ...Array.from({ length: 25 }, () => call('agent_teams_update_task', {
+    ...Array.from({ length: 25 }, () => call('ctf_teams_update_task', {
       task_id: 't1', status: 'completed', output: 'late alpha storm', attempt_id: alphaClaim.attempt_id,
     }, alphaOld)),
-    ...Array.from({ length: 25 }, () => call('agent_teams_update_task', {
+    ...Array.from({ length: 25 }, () => call('ctf_teams_update_task', {
       task_id: 't2', status: 'completed', output: 'late beta storm', attempt_id: betaClaim.attempt_id,
     }, betaOld)),
   ])
@@ -377,20 +377,20 @@ try {
 
   const held19 = secondFault.get('t19')
   const secondOwnerName = (await state()).tasks.find(task => task.id === 't19').assignee
-  const secondTakeover = await call('agent_teams_reassign_task', {
+  const secondTakeover = await call('ctf_teams_reassign_task', {
     task_id: 't19', assignee: 'captain', reason: 'second injected mid-DAG hang',
   })
   await completeClaimed((await state()).tasks.find(task => task.id === 't19'), 'second-takeover')
   check('second independent takeover advances exactly one execution attempt',
     secondTakeover.attempt === held19.claim.attempt + 1)
 
-  const secondReuse = await call('agent_teams_create_task', {
+  const secondReuse = await call('ctf_teams_create_task', {
     subject: 'second-owner-reuse', assignee: secondOwnerName, dependencies: ['t19'],
   })
 
   const coldProbes = []
   for (const [index, assignee] of ['gamma', 'epsilon', 'zeta', 'eta'].entries()) {
-    coldProbes.push(await call('agent_teams_create_task', {
+    coldProbes.push(await call('ctf_teams_create_task', {
       subject: `cold-restart-probe-${index + 1}`,
       assignee,
       dependencies: ['t19'],
@@ -408,7 +408,7 @@ try {
   for (const [taskId, held] of heldBeforeRestart) staleAgents.set(taskId, held.owner)
   const previousGeneration = runtime.generation
   runtime = mountRuntime()
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   await settle()
   const afterRestart = await state()
   check('cold runtime restart redelivers every durable open task with a fresh attempt',
@@ -422,7 +422,7 @@ try {
       }))
 
   const coldStaleStorm = await Promise.allSettled(openBeforeRestart.flatMap(old => (
-    Array.from({ length: 12 }, () => call('agent_teams_update_task', {
+    Array.from({ length: 12 }, () => call('ctf_teams_update_task', {
       task_id: old.id,
       status: 'completed',
       output: `late pre-restart ${old.id}`,
@@ -445,18 +445,18 @@ try {
   const activeNames = memberNames.filter(name => name !== 'beta')
   for (const name of activeNames) {
     if (await liveMember(name) === undefined) {
-      await call('agent_teams_send_message', { to: name, content: 'wake for claim-race verification' })
+      await call('ctf_teams_send_message', { to: name, content: 'wake for claim-race verification' })
       await settle()
     }
     const agent = await liveMember(name)
     if (agent === undefined) throw new Error(`failed to wake ${name} for claim race`)
     agent.status = 'running'
   }
-  const herdTask = await call('agent_teams_create_task', { subject: 'seven-way-claim-herd' })
+  const herdTask = await call('ctf_teams_create_task', { subject: 'seven-way-claim-herd' })
   const herdAgents = await Promise.all(activeNames.map(name => liveMember(name)))
   for (const agent of herdAgents) agent.status = 'idle'
   const herd = await Promise.allSettled(herdAgents.map(agent => (
-    call('agent_teams_claim_task', { task_id: herdTask.task_id }, agent)
+    call('ctf_teams_claim_task', { task_id: herdTask.task_id }, agent)
   )))
   const herdWinners = herd.filter(result => result.status === 'fulfilled')
   check('seven-way thundering herd produces exactly one owner',
@@ -466,10 +466,10 @@ try {
   // A successful real claim starts work immediately; model that running edge
   // before unrelated scheduler kicks can classify it as an abandoned idle claim.
   herdWinner.status = 'running'
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: herdTask.task_id, status: 'in_progress', attempt_id: herdClaim.attempt_id,
   }, herdWinner)
-  await call('agent_teams_update_task', {
+  await call('ctf_teams_update_task', {
     task_id: herdTask.task_id,
     status: 'completed',
     output: 'canonical herd result',
@@ -477,7 +477,7 @@ try {
   }, herdWinner)
 
   const terminalStorm = await Promise.allSettled(Array.from({ length: 40 }, (_, index) => (
-    call('agent_teams_update_task', {
+    call('ctf_teams_update_task', {
       task_id: herdTask.task_id,
       status: 'completed',
       output: `conflicting terminal ${index}`,
@@ -496,7 +496,7 @@ try {
     failDeliveryCount.set(record.id, 1)
   }
   const messageBurst = await Promise.all(Array.from({ length: 42 }, (_, index) => (
-    call('agent_teams_send_message', {
+    call('ctf_teams_send_message', {
       to: activeNames[index % activeNames.length],
       content: `burst-${index}`,
     })
@@ -508,9 +508,9 @@ try {
     const agent = await liveMember(name)
     if (agent !== undefined) await idle(agent)
   }
-  await call('agent_teams_status', {})
+  await call('ctf_teams_status', {})
   await settle()
-  for (const name of activeNames) await call('agent_teams_status', {}, await liveMember(name))
+  for (const name of activeNames) await call('ctf_teams_status', {}, await liveMember(name))
   const unreadCounts = await Promise.all(activeNames.map(name => readUnreadMailbox(stateRoot, teamId, name)))
   check('all failed message fallbacks are redelivered and acknowledged exactly once',
     unreadCounts.every(messages => messages.length === 0))
@@ -526,7 +526,7 @@ try {
       && new Set(snapshot.tasks.map(task => task.id)).size === 38
       && snapshot.tasks.every(task => task.status === 'completed'))
 
-  await call('agent_teams_delete', {})
+  await call('ctf_teams_delete', {})
   const archived = await readArchivedTeam(stateRoot, teamId)
   check('shutdown archives all 38 completed tasks after fault recovery',
     await readTeam(stateRoot, teamId) === undefined
@@ -536,7 +536,7 @@ try {
     (await runtime.ctx.subagents.listChildren(runtime.captain.id))
       .filter(child => child.kind === 'child'
         && child.mode === 'continuable'
-        && child.label.startsWith('agent-teams:')).length === 8)
+        && child.label.startsWith('ctf-teams:')).length === 8)
 } finally {
   await rm(workspace, { recursive: true, force: true })
 }

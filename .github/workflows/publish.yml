@@ -22,11 +22,11 @@ concurrency:
 
 jobs:
   verify:
-    if: github.repository == 'NanmiCoder/dsh-agent-teams'
+    if: github.repository == 'NanmiCoder/dsh-ctf-teams'
     uses: ./.github/workflows/verify.yml
 
   publish:
-    if: github.repository == 'NanmiCoder/dsh-agent-teams'
+    if: github.repository == 'NanmiCoder/dsh-ctf-teams'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -105,7 +105,7 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          CURRENT_LATEST="$(npm view @nanmicoder/dsh-agent-teams dist-tags.latest)"
+          CURRENT_LATEST="$(npm view @nanmicoder/dsh-ctf-teams dist-tags.latest)"
           export CURRENT_LATEST
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict'
@@ -137,7 +137,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.publish.outputs.version }}
-          name: AgentTeams v${{ needs.publish.outputs.version }}
+          name: CTFTeams v${{ needs.publish.outputs.version }}
           body_path: release-notes/v${{ needs.publish.outputs.version }}.md
           draft: false
           prerelease: ${{ needs.publish.outputs.prerelease == 'true' }}

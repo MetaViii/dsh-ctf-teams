@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runRuntimeScenarios, runtimeScenarios } from './harness-runtime-scenarios.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const pluginName = '@nanmicoder/dsh-agent-teams';
+const pluginName = '@nanmicoder/dsh-ctf-teams';
 const isDsh = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-');
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -186,7 +186,7 @@ export async function verifySource(argv) {
     copyFileSync(artifact, retainedArtifact);
     await extractArtifact(host, retainedArtifact, pluginDirectory);
     const plugin = readJson(join(pluginDirectory, 'package.json'));
-    if (plugin.name !== pluginName) throw Error('Artifact package identity does not match AgentTeams');
+    if (plugin.name !== pluginName) throw Error('Artifact package identity does not match CTFTeams');
     // Resolve external host identities from this prepared namespace, never from
     // the plugin checkout's development dependencies or another user profile.
     symlinkSync(modules, join(pluginDirectory, 'node_modules'), 'dir');

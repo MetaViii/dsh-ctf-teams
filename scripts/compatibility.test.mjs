@@ -30,7 +30,7 @@ test('source candidates pass the peer gate without entering the published downlo
 })
 
 test('doctor distinguishes source-preview acceptance from released host validation', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-source-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-source-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.0' }))
   const result = inspectInstallation(root, undefined, sourcePolicy)
@@ -43,13 +43,20 @@ test('doctor distinguishes source-preview acceptance from released host validati
 })
 
 test('doctor runs through an installed bin symlink and reports success or failure', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-bin-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-bin-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const host = join(root, 'host')
   mkdirSync(host)
   writeFileSync(join(host, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: policy.recommendedHost }))
-  const bin = join(root, 'dsh-agent-teams-doctor')
-  symlinkSync(fileURLToPath(new URL('./doctor.mjs', import.meta.url)), bin, 'file')
+  const bin = join(root, 'dsh-ctf-teams-doctor')
+  try {
+    symlinkSync(fileURLToPath(new URL('./doctor.mjs', import.meta.url)), bin, 'file')
+  } catch (error) {
+    // Creating symlinks on Windows needs developer mode or elevation; the
+    // symlink semantics themselves are exercised in the Linux CI matrix.
+    if (error?.code === 'EPERM' || error?.code === 'ENOENT') { t.skip('symlink creation is not permitted on this host'); return }
+    throw error
+  }
   // Unix executes the installed shebang directly. Windows does not implement
   // shebangs: invoke Node with the same symlink path, retaining the argv[1]
   // versus import.meta.url regression without relying on a command shell.
@@ -78,7 +85,7 @@ test('policy rejects floating targets, duplicates, and alpha recommendation', ()
 })
 
 test('doctor detects transitive cohort mixing even with an exact CLI version', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   function pkg(directory, name, version, dependencies = {}) {
     mkdirSync(directory, { recursive: true })
@@ -98,7 +105,7 @@ test('doctor detects transitive cohort mixing even with an exact CLI version', t
 })
 
 test('doctor follows profile peers and rejects duplicate runtime identities', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-profile-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-profile-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const write = (path, data) => {
     mkdirSync(path, { recursive: true })
@@ -107,8 +114,8 @@ test('doctor follows profile peers and rejects duplicate runtime identities', t 
   write(root, { name: '@deepseek-ai/dsh', version: '0.1.2-rc.1', dependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' } })
   write(join(root, 'node_modules/@deepseek-ai/dsh-agent'), { name: '@deepseek-ai/dsh-agent', version: '0.1.2-rc.1' })
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/@nanmicoder/dsh-agent-teams'), {
-    name: '@nanmicoder/dsh-agent-teams', version: '0.1.16-rc.1', peerDependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' },
+  write(join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), {
+    name: '@nanmicoder/dsh-ctf-teams', version: '0.1.16-rc.1', peerDependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' },
   })
   write(join(profile, 'node_modules/@deepseek-ai/dsh-agent'), { name: '@deepseek-ai/dsh-agent', version: '0.1.2-rc.1' })
   assert.match(inspectInstallation(root, profile).problems.join(), /Multiple resolved identities/)
@@ -141,7 +148,7 @@ test('policy rejects removed host peers and range-qualified or conditional DSH o
 })
 
 test('doctor reports missing nonoptional Cordis peers and required plugin imports even with optional metadata', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-required-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-required-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const write = (path, data) => {
     mkdirSync(path, { recursive: true })
@@ -151,8 +158,8 @@ test('doctor reports missing nonoptional Cordis peers and required plugin import
   assert.match(inspectInstallation(root).problems.join(), /Missing packages.*cordis/)
   write(join(root, 'node_modules/@deepseek-ai/cordis'), { name: '@deepseek-ai/cordis', version: '4.0.2' })
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/@nanmicoder/dsh-agent-teams'), {
-    name: '@nanmicoder/dsh-agent-teams', version: '0.1.16-rc.1',
+  write(join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), {
+    name: '@nanmicoder/dsh-ctf-teams', version: '0.1.16-rc.1',
     peerDependencies: { '@deepseek-ai/dsh-subagent': policy.recommendedHost },
     peerDependenciesMeta: { '@deepseek-ai/dsh-subagent': { optional: true } },
   })
@@ -160,7 +167,7 @@ test('doctor reports missing nonoptional Cordis peers and required plugin import
 })
 
 test('doctor detects peer-only drift and a mismatched installed plugin', t => {
-  const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-peer-'))
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-peer-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const write = (path, data) => {
     mkdirSync(path, { recursive: true })
@@ -175,7 +182,7 @@ test('doctor detects peer-only drift and a mismatched installed plugin', t => {
   write(join(root, 'node_modules/@deepseek-ai/dsh-session'), { name: '@deepseek-ai/dsh-session', version: '0.1.2-rc.1' })
   assert.equal(inspectInstallation(root).ok, true)
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/@nanmicoder/dsh-agent-teams'), { name: '@nanmicoder/dsh-agent-teams', version: '0.1.15' })
+  write(join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), { name: '@nanmicoder/dsh-ctf-teams', version: '0.1.15' })
   assert.match(inspectInstallation(root, profile).problems.join(), /0\.1\.15/)
 })
 

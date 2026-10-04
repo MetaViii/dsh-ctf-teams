@@ -14,8 +14,8 @@ import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 type Setup = (childCtx: Context, child: Agent) => () => void;
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
-        'agent-teams': {
-            readonly kind: 'agent-teams';
+        'ctf-teams': {
+            readonly kind: 'ctf-teams';
         };
     }
 }

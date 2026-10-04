@@ -1,11 +1,28 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { type UserMessage } from '@deepseek-ai/dsh-llm';
-import { type TeamProfileConfig, type AgentTeamsInvocation } from './profiles.ts';
-export declare const AGENT_TEAMS_COMMAND = "agent-teams";
+import { type TeamProfileConfig, type CTFTeamsInvocation } from './profiles.ts';
+export declare const CTF_TEAMS_COMMAND = "ctf-teams";
+/**
+ * Command names this plugin owns outright. A generated profile alias may never
+ * take one of these: `/ctf-teams` is the generic activation and
+ * `/ctf-teams-board` is the dashboard, so a team profile literally named
+ * `board` must not turn into a second dashboard row in the command menu.
+ */
+export declare const RESERVED_COMMAND_NAMES: readonly string[];
+/** Registration options for {@link registerCTFTeamsCommand}. */
+export interface CTFTeamsCommandOptions {
+    /**
+     * Profile the generic `/ctf-teams` command runs when it omits `--profile`.
+     * Its generated alias (`/ctf-teams-<name>`) would be the very same activation
+     * under a longer name, so it is left unregistered; profile aliases stay for
+     * the other profiles, which the generic command cannot select on its own.
+     */
+    defaultProfile?: string;
+}
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
-        'agent-teams-command': {
-            readonly kind: 'agent-teams-command';
+        'ctf-teams-command': {
+            readonly kind: 'ctf-teams-command';
             readonly goal?: string;
             readonly profile?: string;
         };
@@ -18,8 +35,9 @@ declare module '@deepseek-ai/dsh-llm' {
  * names such as `foo bar`, `foo_bar`, or non-ASCII keys.
  */
 export declare function profileCommandName(profileName: string): string | undefined;
-export declare function invokedAgentTeamsInvocation(messages: readonly UserMessage[], getProfiles?: () => Record<string, TeamProfileConfig>): AgentTeamsInvocation | undefined;
-export declare function invokedAgentTeamsGoal(messages: readonly UserMessage[]): string | undefined;
+export declare function invokedCTFTeamsInvocation(messages: readonly UserMessage[], getProfiles?: () => Record<string, TeamProfileConfig>): CTFTeamsInvocation | undefined;
+export declare function invokedCTFTeamsGoal(messages: readonly UserMessage[]): string | undefined;
 export declare function buildActivationDirective(goal: string, profile?: string, taskPlanning?: 'captain' | 'seed'): string;
-export declare function registerAgentTeamsCommand(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>): void;
-export declare function installAgentTeamsGestureBoundary(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>): void;
+export declare function registerCTFTeamsCommand(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>, options?: CTFTeamsCommandOptions): void;
+export declare function installCTFTeamsGestureBoundary(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>): void;
+export declare function registerCTFTeamsBoardCommand(ctx: Context, stateDir: string): void;

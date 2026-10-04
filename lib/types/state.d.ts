@@ -4,13 +4,13 @@
  * State lives on disk under `<workspace>/<stateDir>/<teamId>/`:
  * - `team.json` — the durable {@link TeamState} record
  * - `inbox/<agentKey>.jsonl` — one JSONL mailbox per agent (`captain` or a
- *   member name), mirroring the Claude Code AgentTeams mailbox layout
+ *   member name), mirroring the Claude Code CTFTeams mailbox layout
  *
  * All mutations run through an in-process per-team queue so read-modify-write
  * stays serial; `fs/promises` is used directly because the plugin owns this
  * bookkeeping (host-plane state, like session persistence) and the abstract
  * `fs` service offers no directory deletion.
- * @module dsh-agent-teams/state
+ * @module dsh-ctf-teams/state
  */
 import { type TaskStatus, type TeamMessage, type TeamState, type TeamTask } from './types.ts';
 export { amendTaskContract, buildCoverageMatrix, canDeclareDelivery, classifyChangedPath, collectChangedPaths, defaultQualityDeliveryGraph, describeQualityLoop, evaluateQualityCompletion, hasValidQualityTaskFields, isQualityKind, isTaskRevision, normalizeBlankOptionalTaskFields, pathMatchesScope, planQualityFollowUp, qualityPlanningPrompt, resumeTeamState, sanitizeReviewAcceptance, sanitizeReviewObjective, taskKindOf, validateCreateTask, } from './quality-gates.ts';

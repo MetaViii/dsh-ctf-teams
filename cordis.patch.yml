@@ -1,21 +1,55 @@
-# dsh-agent-teams bundle patch: mounts the agent-teams plugin into the host
-# composition of a dsh profile. The plugin registers its `agent_teams_*` tools
+# dsh-ctf-teams bundle patch: mounts the ctf-teams plugin into the host
+# composition of a dsh profile. The plugin registers its `ctf_teams_*` tools
 # into the shared `tools` registry and one usage section into the global
-# system prompt, so every session of the profile can drive AgentTeams through
-# natural language ("用 AgentTeams 做 X").
+# system prompt, so every session of the profile can drive CTFTeams through
+# natural language ("用 CTFTeams 做 X").
+#
+# The bundle's second patch layer, `presets/ctf-teams.patch.yml`, declares the
+# selectable AGENT PRESET that the Harness mode picker shows as "CTF 团队模式"
+# (`dsh.bundle.patch` lists both files in order). It is applied after this one
+# and leaves this host-plane row alone: the tools stay callable in every mode,
+# while the preset gives the CTF captain its own agent plane — persona, shell,
+# filesystem, skills, delegation, planning and compaction.
 #
 # Install: `dsh plugin --profile <name> add <this package>` (npm or a local
 # path). The `dsh plugin` command pnpm-installs the package into the profile
 # and reconciles it into the profile's `dsh.profile.bundles` layer list.
 - insert:
-    - id: agent-teams
+    - id: ctf-teams
       # Node-resolvable package name — must stay in sync with package.json
       # `name`. Quoted because `@` is a reserved indicator in YAML and cannot
       # open a plain scalar.
-      name: '@nanmicoder/dsh-agent-teams'
+      name: '@nanmicoder/dsh-ctf-teams'
       config:
         # Team state lives under `<session workspace>/<stateDir>/<teamId>/`
         # (team.json + inbox/*.jsonl mailboxes).
-        stateDir: .agent-teams
+        stateDir: .ctf-teams
         # Provider used to spawn member subagents ('spawn' or 'fork').
         memberProvider: spawn
+        # Squad assembled when ctf_teams_create omits profile/plan.
+        # The built-in 'ctf-teams' profile: four interchangeable full-stack
+        # CTF experts (agent-1..agent-4) racing the challenge in parallel.
+        defaultProfile: ctf-teams
+        # /ctf-teams <challenge> activation and the /ctf-teams-board
+        # dashboard command (renders the solving panel without a model turn).
+        slashCommand: true
+        boardCommand: true
+        # Toolchain service: ctf_teams_env detects the local CTF tools and
+        # installs missing ones (apt/pip/brew/gem). allowInstall=false keeps
+        # it dry-run only; heavy tools (sage, ghidra, pwndbg) always report
+        # their manual command instead of executing.
+        env:
+          allowInstall: true
+          probeTimeoutMs: 10000
+          installTimeoutMs: 300000
+        # References library: ctf_teams_references shallow-clones curated
+        # PoC/CVE/skill repos (ctf-skills, awesome-poc, exphub, pocindex,
+        # marcio-cve, trickest-cve, poc-in-github, cvelistv5) into
+        # <stateDir>/references/ for offline rg searches.
+        references:
+          # small repos (ctf-skills, awesome-poc) clone automatically at team
+          # creation; 'all' adds the GB-scale ones, 'off' disables.
+          autoSync: small
+          depth: 1
+          dirName: references
+          timeoutMs: 600000

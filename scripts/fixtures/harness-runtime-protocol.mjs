@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm';
 
-const businessNames = ['agent_teams_create', 'agent_teams_approve', 'agent_teams_edit_plan', 'agent_teams_add_member', 'agent_teams_remove_member', 'agent_teams_create_task', 'agent_teams_reassign_task', 'agent_teams_claim_task', 'agent_teams_update_task', 'agent_teams_send_message', 'agent_teams_status', 'agent_teams_resume', 'agent_teams_delete'];
-const goal = 'Use AgentTeams to prepare a plan, then wait for my approval.';
+const businessNames = ['ctf_teams_create', 'ctf_teams_approve', 'ctf_teams_edit_plan', 'ctf_teams_add_member', 'ctf_teams_remove_member', 'ctf_teams_create_task', 'ctf_teams_reassign_task', 'ctf_teams_claim_task', 'ctf_teams_update_task', 'ctf_teams_send_message', 'ctf_teams_status', 'ctf_teams_resume', 'ctf_teams_delete'];
+const goal = 'Use CTFTeams to prepare a plan, then wait for my approval.';
 const cases = new Map(), requests = [];
 const model = { provider: 'runtime-lab', id: 'fixture-model', name: 'Protocol compatibility fixture', context: { contextWindow: 262144 }, defaultMaxTokens: 8192, reasoning: { efforts: [{ id: 'low', name: 'low' }], defaultEffort: 'low' } };
 let callSequence = 0;
@@ -45,8 +45,8 @@ class ProtocolAdapter extends LlmAdapter {
         const scenario = cases.get(options.sessionId);
         assert.ok(scenario, 'Unexpected live agent request');
         assertProtocol(system);
-        assert.doesNotMatch(system ?? '', /agent_teams_open/);
-        assert.ok(!(options.tools ?? []).some(tool => tool.name === 'agent_teams_open'));
+        assert.doesNotMatch(system ?? '', /ctf_teams_open/);
+        assert.ok(!(options.tools ?? []).some(tool => tool.name === 'ctf_teams_open'));
         const blocks = options.messages.flatMap(message => message.role === 'tool' ? [{ type: 'tool-result', content: message.content, isError: message.isError, toolCallId: message.toolCallId }] : message.content ?? []);
         const failed = blocks.find(block => block.type === 'tool-result' && block.isError);
         assert.equal(failed, undefined, JSON.stringify(failed));
@@ -69,31 +69,31 @@ class ProtocolAdapter extends LlmAdapter {
         if (scenario.phase === 'revise') {
             if (scenario.step++ === 0) {
                 const args = { operations: [{ action: 'update_task', task_id: 't1', subject: 'Recovered task' }] };
-                yield* scenario.ptc ? call('run_code', { code: `return await tools.agent_teams_edit_plan(${JSON.stringify(args)});`, description: 'Revise the existing staged task after history compaction' }) : call('agent_teams_edit_plan', args);
+                yield* scenario.ptc ? call('run_code', { code: `return await tools.ctf_teams_edit_plan(${JSON.stringify(args)});`, description: 'Revise the existing staged task after history compaction' }) : call('ctf_teams_edit_plan', args);
             } else yield* textChunks('EXISTING_PLAN_REVISED');
             return;
         }
         if (scenario.phase === 'archive') {
-            if (scenario.step++ === 0) yield* scenario.ptc ? call('run_code', { code: 'return await tools.agent_teams_delete({});', description: 'Archive the team at the user request' }) : call('agent_teams_delete', {});
+            if (scenario.step++ === 0) yield* scenario.ptc ? call('run_code', { code: 'return await tools.ctf_teams_delete({});', description: 'Archive the team at the user request' }) : call('ctf_teams_delete', {});
             else yield* textChunks('TEAM_ARCHIVED');
             return;
         }
         if (scenario.ptc && scenario.step === 1) {
             scenario.step++;
-            yield* call('run_code', { code: 'await tools.agent_teams_status({}); return "STATUS_OUTPUT_DISCARDED\\n" + "historical-output ".repeat(1000);', description: 'Inspect current team status, retaining only a receipt' });
+            yield* call('run_code', { code: 'await tools.ctf_teams_status({}); return "STATUS_OUTPUT_DISCARDED\\n" + "historical-output ".repeat(1000);', description: 'Inspect current team status, retaining only a receipt' });
             return;
         }
         if (scenario.ptc && scenario.step === 2) {
             assert.match(resultText, /STATUS_OUTPUT_DISCARDED/);
-            assert.doesNotMatch(resultText, /AgentTeams captain protocol|Tasks carry attempt_id/);
-            record({ event: 'protocol-ptc-output-discarded', tool: 'agent_teams_status', sessionId: options.sessionId, systemRulesPresent: true });
+            assert.doesNotMatch(resultText, /CTFTeams captain protocol|Tasks carry attempt_id/);
+            record({ event: 'protocol-ptc-output-discarded', tool: 'ctf_teams_status', sessionId: options.sessionId, systemRulesPresent: true });
         }
         const rawStep = scenario.step++;
         const step = rawStep - (scenario.ptc && rawStep > 1 ? 1 : 0);
         const actions = [
-            ['agent_teams_create', { name: 'protocol-team', description: goal, approval: 'required', ...scenario.ptc ? {} : { profile: 'north' } }],
-            ...scenario.ptc ? [['agent_teams_add_member', { name: 'worker', role: 'Implement the assigned task', executionPrompt: 'Complete assigned work and report.' }]] : [],
-            ['agent_teams_create_task', { subject: 'Original task', description: 'A deterministic staged task', assignee: 'worker' }],
+            ['ctf_teams_create', { name: 'protocol-team', description: goal, approval: 'required', ...scenario.ptc ? {} : { profile: 'north' } }],
+            ...scenario.ptc ? [['ctf_teams_add_member', { name: 'worker', role: 'Implement the assigned task', executionPrompt: 'Complete assigned work and report.' }]] : [],
+            ['ctf_teams_create_task', { subject: 'Original task', description: 'A deterministic staged task', assignee: 'worker' }],
         ];
         if (step >= actions.length) { yield* textChunks('STAGED_PLAN_READY'); return; }
         const [name, args] = actions[step];
@@ -111,7 +111,7 @@ export function apply(ctx) {
             agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }));
             await agent.whenIdle();
         };
-        const usage = async agent => (await ctx.systemPrompt.assemble({ agent, scope: agent })).sections.find(section => section.name === 'agent-teams:usage')?.text ?? '';
+        const usage = async agent => (await ctx.systemPrompt.assemble({ agent, scope: agent })).sections.find(section => section.name === 'ctf-teams:usage')?.text ?? '';
         for (const ptc of [false, true]) {
             const label = ptc ? 'ptc-discard-and-compact' : 'legacy-allowlist-cold-compact';
             const cwd = join(process.cwd(), label); mkdirSync(cwd, { recursive: true });
@@ -124,10 +124,10 @@ export function apply(ctx) {
             if (!ptc) {
                 const exposed = (await ctx.systemPrompt.assemble({ agent, scope: agent })).tools.map(tool => tool.name);
                 assert.deepEqual(exposed.sort(), [...businessNames].sort());
-                assert.equal(agent.ctx.tools.get('agent_teams_open', agent), undefined);
+                assert.equal(agent.ctx.tools.get('ctf_teams_open', agent), undefined);
             }
             await send(agent, goal);
-            const file = join(cwd, '.agent-teams/protocol-team/team.json');
+            const file = join(cwd, '.ctf-teams/protocol-team/team.json');
             const state = () => JSON.parse(readFileSync(file, 'utf8'));
             assert.equal(state().phase, 'staged'); assert.equal(state().tasks.length, 1); assert.equal(state().members.length, 1);
             assert.equal(state().description, goal, 'The complete user goal must survive in durable team context');
@@ -139,7 +139,7 @@ export function apply(ctx) {
             assert.ok(!state().members[0].id, 'Staging must not spawn a member');
             assert.equal(await usage(agent), beforeUsage);
             if (ptc) {
-                assert.ok(sessionEvents(agent.session).some(event => ['tool/code-dispatch', 'tool/ptc-dispatch'].includes(event.type) && event.data.name === 'agent_teams_status'));
+                assert.ok(sessionEvents(agent.session).some(event => ['tool/code-dispatch', 'tool/ptc-dispatch'].includes(event.type) && event.data.name === 'ctf_teams_status'));
                 const pruned = ctx.toolResultPruner.pruneSession(agent.session);
                 assert.ok(sessionEvents(agent.session).some(event => event.type === 'compaction/prune'), 'Oversized PTC receipt must actually be pruned');
                 record({ event: 'protocol-pruned', label, result: pruned });
@@ -166,7 +166,7 @@ export function apply(ctx) {
             scenario.phase = 'archive'; scenario.step = 0;
             await send(agent, 'End and archive this team and its unfinished staged task.');
             assert.equal(existsSync(file), false, 'Archived team must leave active state');
-            assert.equal(existsSync(join(cwd, '.agent-teams/archive/protocol-team/team.json')), true);
+            assert.equal(existsSync(join(cwd, '.ctf-teams/archive/protocol-team/team.json')), true);
             assert.equal(await usage(agent), beforeUsage);
             const captured = requests.filter(request => request.sessionId === agent.id);
             assert.equal(new Set(captured.map(request => request.systemSha256)).size, 1, 'System prefix changed across planning, restore or compaction');

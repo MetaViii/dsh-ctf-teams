@@ -1,98 +1,93 @@
+/**
+ * The trust fence around this plugin's raw Web routes.
+ *
+ * The host `webServer` service registers handlers directly on the HTTP server,
+ * which is *outside* the Connection service's browser-trust fence — a route
+ * registered there answers any request the socket accepts, including one from
+ * another local process. Challenge state (remotes, attachment names, extracted
+ * flags) is exactly the kind of data that must not leak, so every route this
+ * plugin owns goes through {@link authenticatedWebRoutes}: the Connection
+ * service decides, per request, whether the caller is the trusted browser.
+ *
+ * Mirrors the upstream AgentTeams route gate (`dsh-agent-teams`), which is the
+ * tested shape of this fence for the same Harness generations.
+ * @module dsh-ctf-teams/web-routes
+ */
+
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 
-/** Public WebServer route surface used by the plugin. */
-export interface WebRouteHost {
-  register(route: {
-    kind: 'exact' | 'prefix'
-    path: string
-    handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
-  }): () => void
+/** One raw route as the host Web server accepts it. */
+export interface RawWebRoute {
+  kind: 'exact' | 'prefix'
+  path: string
+  handler: (request: IncomingMessage, response: ServerResponse) => void | Promise<void>
 }
 
-export type BrowserRequestGate = Pick<HostConnectionService, 'requestRejection'>
-
-export class RequestBodyError extends Error {
-  constructor(message: string, readonly status: 400 | 413) {
-    super(message)
-  }
+/** Structural view of the host Web server service (no host types imported). */
+export interface RawWebServer {
+  register(route: RawWebRoute): () => void
 }
 
-/** Bound memory while draining oversized requests so the route can return 413. */
-export async function readJsonRequest(req: IncomingMessage, maxBytes = 1_000_000): Promise<Record<string, unknown>> {
-  const raw = await new Promise<string>((resolve, reject) => {
-    let size = 0
-    let settled = false
-    const chunks: Buffer[] = []
-    const finish = (error?: Error): void => {
-      if (settled) return
-      settled = true
-      req.off('data', onData)
-      req.off('end', onEnd)
-      req.off('aborted', onAborted)
-      req.off('error', onError)
-      if (error) {
-        chunks.length = 0
-        // IncomingMessage may still receive data; discard it without buffering.
-        req.once('error', () => {})
-        req.resume()
-        reject(error)
-      } else {
-        resolve(Buffer.concat(chunks).toString('utf8'))
-      }
-    }
-    const onData = (chunk: Buffer | string): void => {
-      const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      size += part.length
-      if (size > maxBytes) finish(new RequestBodyError('request body is too large', 413))
-      else chunks.push(part)
-    }
-    const onEnd = (): void => finish()
-    const onAborted = (): void => finish(new RequestBodyError('request body was aborted', 400))
-    const onError = (): void => finish(new RequestBodyError('invalid request body', 400))
-    req.on('data', onData)
-    req.once('end', onEnd)
-    req.once('aborted', onAborted)
-    req.once('error', onError)
+/** Structural view of the Connection service's per-request trust decision. */
+export interface ConnectionFence {
+  /** An HTTP status when the request must be refused, or undefined to allow it. */
+  requestRejection(request: IncomingMessage): number | undefined
+}
+
+/** A Web server whose registered handlers are gated by the Connection fence. */
+export interface AuthenticatedWebServer {
+  register(route: RawWebRoute): () => void
+}
+
+/** JSON response helper: always explicitly uncacheable. */
+export function sendJson(response: ServerResponse, status: number, body: unknown): void {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
   })
-  let value: unknown
-  try {
-    value = raw.trim() === '' ? {} : JSON.parse(raw)
-  } catch {
-    throw new RequestBodyError('invalid JSON', 400)
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new RequestBodyError('body must be an object', 400)
-  }
-  return value as Record<string, unknown>
+  response.end(JSON.stringify(body))
 }
 
-/** Raw WebServer routes do not inherit Connection's authentication fence. */
+/**
+ * Wrap the host Web server so every handler runs behind the Connection fence.
+ * @param server - the raw host Web server service.
+ * @param connection - reads the live Connection service, or undefined while absent.
+ * @returns a registrable server that refuses untrusted callers before the handler runs.
+ */
 export function authenticatedWebRoutes(
-  server: WebRouteHost,
-  connection: () => BrowserRequestGate | undefined,
-): WebRouteHost {
+  server: RawWebServer,
+  connection: () => ConnectionFence | undefined,
+): AuthenticatedWebServer {
   return {
-    register(route) {
+    register(route: RawWebRoute): () => void {
       return server.register({
         ...route,
-        async handler(req, res) {
+        async handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
           const gate = connection()
-          // Missing/disposing Connection is an assembly failure, never an
-          // invitation to expose workspace state or accept plan mutations.
-          const rejection = gate === undefined ? 503 : gate.requestRejection(req)
+          // A missing or disposing Connection is an assembly failure, never an
+          // invitation to expose workspace state.
+          const rejection = gate === undefined ? 503 : gate.requestRejection(request)
           if (rejection !== undefined) {
-            res.writeHead(rejection, {
-              'content-type': 'application/json; charset=utf-8',
-              'cache-control': 'no-store',
+            sendJson(response, rejection, {
+              error: rejection === 503 ? 'authentication unavailable' : rejection === 401 ? 'unauthorized' : 'forbidden',
             })
-            res.end(JSON.stringify({ error: rejection === 503 ? 'authentication unavailable'
-              : rejection === 401 ? 'unauthorized' : 'forbidden' }))
             return
           }
-          await route.handler(req, res)
+          await route.handler(request, response)
         },
       })
     },
   }
+}
+
+/** The host service keys that can carry a Web server. */
+export const WEB_SERVER_KEYS: readonly string[] = ['webServer', 'httpServer']
+
+/** The host service keys that can carry the workspace registry. */
+export const WORKSPACE_KEYS: readonly string[] = ['workspaceRegistry', 'workspace']
+
+/** One workspace as the registry lists it. */
+export interface WorkspaceEntry {
+  title?: string
+  path: string
 }
