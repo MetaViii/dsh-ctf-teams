@@ -2,3 +2,21 @@ node_modules/
 *.tsbuildinfo
 .DS_Store
 .agent-teams/
+
+# Plugin runtime state (teams, inboxes, findings) and synced reference clones.
+.ctf-teams/
+
+# Challenge work: solve scripts, transcripts, payloads, writeups and platform
+# credentials belong to the workspace of the solve, never to this repository.
+ctf2-play/
+node4-*/
+challenge-description.md
+WRITEUP.md
+solve*.py
+blind*.py
+.ctf2-agent/
+
+# Build artifacts and ad-hoc archives.
+*.tgz
+*.zip
+__pycache__/

