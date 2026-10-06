@@ -44,7 +44,10 @@ async function mountCodeRuntime(host, workspace) {
 const { createScope } = await import(pathToFileURL(requireTools.resolve('@deepseek-ai/dsh-scope')).href)
 
 function assertCaptainProtocol(system) {
-  for (const rule of [/with the challenge as description/, /attempt_id/, /never approve in that planning turn/i, /Never approve your own implementation/, /depend on a failed task/, /Resume only on a later explicit user request/]) assert.match(system, rule)
+  // The shipped default runs the submitted plan immediately (autoApprove), so
+  // the protocol pins create-and-go plus the long-run rule; the staged wording
+  // is asserted where the two-phase text is exercised (verify.mjs).
+  for (const rule of [/with the challenge as description/, /attempt_id/, /approval="automatic"/, /never stage it/, /Run to the flag/, /Never approve your own implementation/, /depend on a failed task/, /Resume only on a later explicit user request/]) assert.match(system, rule)
 }
 
 test('stable tool presentation uses real scoped registry and prompt assembly', async t => {

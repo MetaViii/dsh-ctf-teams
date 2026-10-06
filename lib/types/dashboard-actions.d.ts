@@ -95,7 +95,7 @@ export declare function parseActionBody(raw: unknown): {
 export declare function prepareAction(body: DashboardActionBody, context: {
     profiles: readonly string[];
     team?: TeamState;
-    captainSessionId?: string;
+    autoApprove?: boolean;
 }): {
     ok: true;
     prepared: PreparedAction;
@@ -113,6 +113,7 @@ export declare function prepareAction(body: DashboardActionBody, context: {
 export declare function prepareRequest(body: DashboardActionBody, context: {
     profiles: readonly string[];
     team?: TeamState;
+    autoApprove?: boolean;
 }): {
     ok: true;
     request: PreparedRequest;

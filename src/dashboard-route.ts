@@ -55,6 +55,8 @@ export interface DashboardRouteOptions {
   stateDir: string
   /** Configured team profile names, offered by the panel's start form. */
   profiles?: readonly string[]
+  /** Whether a started solve runs immediately (the plugin default). */
+  autoApprove?: boolean
 }
 
 /** Structural view of the workspace registry service. */
@@ -224,6 +226,7 @@ export function installDashboardRoute(ctx: Context, options: DashboardRouteOptio
             ...scoped === undefined ? {} : { workspace: scoped.path },
             archived,
             profiles: [...profiles],
+            autoApprove: options.autoApprove ?? true,
             teams,
           }
           sendJson(response, 200, payload)
@@ -258,7 +261,7 @@ export function installDashboardRoute(ctx: Context, options: DashboardRouteOptio
           }
           const stateRoot = join(scoped.path, options.stateDir)
           const team = await findSessionTeam(stateRoot, parsed.body.teamId, parsed.body.sessionId)
-          const planned = prepareRequest(parsed.body, { profiles, team })
+          const planned = prepareRequest(parsed.body, { profiles, team, autoApprove: options.autoApprove })
           if (planned.ok !== true) {
             sendJson(response, planned.status, { error: planned.error })
             return

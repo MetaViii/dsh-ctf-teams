@@ -205,6 +205,19 @@ check(
 )
 check('usage section teaches the round-sync protocol', usageSectionText('x').includes('ctf_teams_report_finding') && usageSectionText('x').includes('ctf_teams_mark_flag'))
 check('usage section pins the writeup completion contract', usageSectionText('x').includes('WRITEUP.md'))
+// Auto-run is the shipped default: the captain must create-and-go without ever
+// asking for a plan approval, and the two-phase wording must come back when the
+// profile sets autoApprove=false.
+check('usage section defaults to running the submitted plan immediately',
+  usageSectionText('x').includes('approval="automatic"')
+  && usageSectionText('x').includes('never stage it')
+  && usageSectionText('x').includes('Run to the flag')
+  && !usageSectionText('x').includes('approval="required"'),
+  'the default protocol still asks for a staged approval')
+check('usage section restores the staged gate on request',
+  usageSectionText('x', '', { autoApprove: false }).includes('approval="required"')
+  && usageSectionText('x', '', { autoApprove: false }).includes('two-phase')
+  && !usageSectionText('x', '', { autoApprove: false }).includes('approval="automatic"'))
 
 console.log('2/6 pure rules')
 check("sanitizeKey('My Team!') -> 'my-team'", sanitizeKey('My Team!') === 'my-team')

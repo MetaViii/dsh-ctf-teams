@@ -87,22 +87,50 @@ export function invokedCTFTeamsGoal(messages: readonly UserMessage[]): string | 
   return invokedCTFTeamsInvocation(messages)?.goal
 }
 
-export function buildActivationDirective(goal: string, profile?: string, taskPlanning: 'captain' | 'seed' = 'captain'): string {
+/**
+ * The directive injected when the user triggers `/ctf-teams`.
+ * @param goal - the challenge text the user supplied.
+ * @param profile - a team profile the user named, when any.
+ * @param taskPlanning - the profile's planning mode.
+ * @param autoApprove - true when teams run without a review step (the default):
+ *   the directive then asks for `approval="automatic"` and tells the captain not
+ *   to stop for approval.
+ */
+export function buildActivationDirective(
+  goal: string,
+  profile?: string,
+  taskPlanning: 'captain' | 'seed' = 'captain',
+  autoApprove = true,
+): string {
   const lines = [
     'The user invoked a CTFTeams slash command. Follow the CTFTeams protocol already in your system instructions. Inspect existing team state with ctf_teams_status when needed.',
-    'Respect the current team state. Continue an existing plan or team without recreating it. Only when no current team exists, call ctf_teams_create with approval="required". Build the complete staged roster and DAG, then stop and ask the user to review the staged plan. Do not approve or start it in this same turn.',
+    'Respect the current team state. Continue an existing plan or team without recreating it.',
   ]
+  if (autoApprove) {
+    lines.push(
+      'Only when no current team exists, call ctf_teams_create with approval="automatic" — the user has asked to be left out of the approval step, so the plan you submit IS the plan that runs. Do not stage it, do not ask for review, and do not wait for a confirmation turn.',
+      'Build the complete roster and DAG in that one call, then immediately dispatch: work through ready tasks and member reports until a flag is verified and the writeup exists. Never end the solve while open tasks or live lanes remain.',
+    )
+  } else {
+    lines.push(
+      'Only when no current team exists, call ctf_teams_create with approval="required". Build the complete staged roster and DAG, then stop and ask the user to review the staged plan. Do not approve or start it in this same turn.',
+    )
+  }
   if (profile === undefined) {
     lines.push(
       'No profile was named: the configured default profile (the built-in ctf-teams squad) applies automatically — do not pass plan={members,tasks} for the roster it already supplies.',
-      'Derive the smallest useful task graph from the goal while the team is staged: one recon/triage task first, then parallel per-domain tasks for what recon finds, then flag verification and the writeup.',
+      autoApprove
+        ? 'Derive the smallest useful task graph from the goal in the same call as create: one recon/triage task first, then parallel per-domain tasks for what recon finds, then flag verification and the writeup.'
+        : 'Derive the smallest useful task graph from the goal while the team is staged: one recon/triage task first, then parallel per-domain tasks for what recon finds, then flag verification and the writeup.',
     )
   } else {
     lines.push(`Use profile="${profile}" when creating a new team.`)
     if (taskPlanning === 'captain') {
       lines.push(
         'This profile supplies the roster and guardrails. After create, do not recreate members.',
-        'Derive the smallest useful task graph from the goal while the team is staged; do not ask the user whether to split, merge, serialize, or parallelize.',
+        autoApprove
+          ? 'Derive the smallest useful task graph from the goal in the same call as create; do not ask the user whether to split, merge, serialize, or parallelize.'
+          : 'Derive the smallest useful task graph from the goal while the team is staged; do not ask the user whether to split, merge, serialize, or parallelize.',
         'Independent supplemental work must become separate ready tasks so idle members can run in parallel. Add dependencies only for genuine prerequisites and later synthesis.',
       )
     } else {
@@ -160,7 +188,12 @@ export function registerCTFTeamsCommand(
   }, 'ctf-teams: slash commands')
 }
 
-export function installCTFTeamsGestureBoundary(ctx: Context, getProfiles: () => Record<string, TeamProfileConfig> = () => ({})): void {
+export function installCTFTeamsGestureBoundary(
+  ctx: Context,
+  getProfiles: () => Record<string, TeamProfileConfig> = () => ({}),
+  options: { autoApprove?: boolean } = {},
+): void {
+  const autoApprove = options.autoApprove ?? true
   ctx.on('agent/pre-step', async ({ messages, signal }, next): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
@@ -175,7 +208,7 @@ export function installCTFTeamsGestureBoundary(ctx: Context, getProfiles: () => 
     const known = invocation.profile === undefined || matched !== undefined
     const text = !known
       ? `CTFTeams profile "${invocation.profile}" does not exist. Available profiles: ${Object.keys(profiles).join(', ') || '(none)'}. Do not create a team.`
-      : buildActivationDirective(invocation.goal, invocation.profile, resolveProfileTaskPlanning(matched?.[1]))
+      : buildActivationDirective(invocation.goal, invocation.profile, resolveProfileTaskPlanning(matched?.[1]), autoApprove)
     return { kind: 'enter', messages: [...decision.messages, createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'ctf-teams-command', ...invocation.goal === '' ? {} : { goal: invocation.goal }, ...invocation.profile === undefined ? {} : { profile: invocation.profile } } })] }
   })
 }

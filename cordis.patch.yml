@@ -34,6 +34,11 @@
         # dashboard command (renders the solving panel without a model turn).
         slashCommand: true
         boardCommand: true
+        # Hand over the challenge and the solve runs: the captain creates with
+        # approval="automatic" and dispatches immediately, so nothing waits for
+        # a plan-review click. Set false to restore the two-phase gate where the
+        # Web plan card is approved before any member spawns.
+        autoApprove: true
         # Toolchain service: ctf_teams_env detects the local CTF tools and
         # installs missing ones (apt/pip/brew/gem). allowInstall=false keeps
         # it dry-run only; heavy tools (sage, ghidra, pwndbg) always report

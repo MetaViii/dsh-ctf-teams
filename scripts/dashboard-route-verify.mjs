@@ -141,14 +141,14 @@ try {
     ['session-member', { header: { cwd: workspace } }],
     ['session-looker', { header: { cwd: workspace } }],
   ])
-  const createCtx = (registryRoots) => {
+  const createCtx = (registryRoots, sessionMap = sessions) => {
     const routes = new Map()
     return {
       routes,
       ctx: {
         agents: {
           get: (id) => {
-            const session = sessions.get(id)
+            const session = sessionMap.get(id)
             return session === undefined ? undefined : {
               session,
               followup: (message) => { sent.push({ sessionId: id, message }) },
@@ -430,7 +430,8 @@ try {
   const missingWorkspace = await mkdtemp(join(tmpdir(), 'dsh-ctf-teams-nowriteup-'))
   try {
     await mkdir(join(missingWorkspace, '.ctf-teams'), { recursive: true })
-    const empty = createCtx([missingWorkspace])
+    const emptySessions = new Map([['session-captain', { header: { cwd: missingWorkspace } }]])
+    const empty = createCtx([missingWorkspace], emptySessions)
     installDashboardRoute(empty.ctx, { stateDir: '.ctf-teams' })
     const missing = recorder()
     // A cold session id (unknown to the agent registry) scopes the request to
@@ -438,6 +439,34 @@ try {
     await empty.routes.get(DASHBOARD_EXPORT_PATH).handler(request(`${DASHBOARD_EXPORT_PATH}?session=session-cold`), missing)
     check('a missing writeup is reported, never invented',
       missing.status === 404 && JSON.parse(missing.body).error.includes('WRITEUP.md'), missing.body)
+
+    // Starting a solve is the one flow the user asked to be hands-off: the
+    // default prompt must create-and-run, and the two-phase wording must come
+    // back when the profile disables autoApprove.
+    const started = recorder()
+    await empty.routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+      sessionId: 'session-captain', action: 'start', goal: '解 http://chal.local:8000',
+    }), started)
+    const startPrompt = sent.at(-1)?.message?.content?.[0]?.text ?? ''
+    check('starting from the panel asks for an immediate run, not a staged plan',
+      started.status === 200
+      && startPrompt.includes('approval="automatic"')
+      && startPrompt.includes('不要提交 staged 计划')
+      && !startPrompt.includes('approval="required"'),
+      startPrompt.slice(-200))
+
+    const twoPhase = createCtx([missingWorkspace], emptySessions)
+    installDashboardRoute(twoPhase.ctx, { stateDir: '.ctf-teams', autoApprove: false })
+    const stagedStart = recorder()
+    await twoPhase.routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+      sessionId: 'session-captain', action: 'start', goal: '解 http://chal.local:8000',
+    }), stagedStart)
+    const stagedPrompt = sent.at(-1)?.message?.content?.[0]?.text ?? ''
+    check('autoApprove=false restores the staged plan prompt',
+      stagedStart.status === 200
+      && stagedPrompt.includes('approval="required"')
+      && stagedPrompt.includes('等我在面板上批准'),
+      stagedPrompt.slice(-200))
   } finally {
     await rm(missingWorkspace, { recursive: true, force: true })
   }

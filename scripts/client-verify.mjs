@@ -466,6 +466,8 @@ const formText = textOf(formTree).join(' ')
 check('the start form asks for the challenge facts',
   ['题目描述 / 目标（必填）', '模板', '远程目标', '分类', '分值', 'flag 格式（正则）'].every((label) => formText.includes(label)),
   formText.slice(0, 200))
+check('the start form says the solve runs without an approval click',
+  formText.includes('建队并立刻开跑') && formText.includes('不需要你点批准'), formText.slice(-200))
 
 // Type into the form and submit: the panel must post exactly what was typed.
 const goalInput = findElement(formTree, 'textarea')

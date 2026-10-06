@@ -46,7 +46,7 @@ Then, in a session of that profile:
 /ctf-teams-board          # print the solving dashboard without waking the model
 ```
 
-or in natural language: "Use CTFTeams to solve this pwn challenge." The captain stages the plan (roster + task graph), you approve, and the squad starts racing the challenge. With the squad running, open the **`解题面板` tab** next to 对话 / 轨迹 and watch it live.
+or in natural language: "Use CTFTeams to solve this pwn challenge." **Nothing to approve**: with the shipped `autoApprove: true` the captain records the challenge, submits the roster + task graph and starts dispatching in the same turn, then keeps working through reports until the flag is verified and the writeup exists. Open the **`解题面板` tab** next to 对话 / 轨迹 and watch it live. Set `autoApprove: false` in the plugin config (see [Configuration](#configuration)) to get the old two-phase flow back: the plan is staged, the Web plan card asks for approval, and 批准并运行 starts it.
 
 ## Commands
 
@@ -79,7 +79,7 @@ Every control queues **one user turn** and nothing else — the tab never writes
 | Button | When | What it sends |
 |---|---|---|
 | 开始解题 | no team | a challenge form (goal, profile, remote, category, points, flag format) → `/ctf-teams …` + the facts |
-| 批准并运行 | plan staged (captain) | `ctf_teams_approve` + dispatch ready tasks |
+| 批准并运行 | a staged plan exists (captain) | `ctf_teams_approve` + dispatch ready tasks — only needed with `autoApprove: false`, or for a team staged before this release |
 | 推进一轮 | running | `ctf_teams_status`, dispatch ready work, wake lanes that are behind |
 | 暂停 / 继续 | running / halted (captain) | halt, or `ctf_teams_resume` with a reason |
 | 核对 flag fN | a candidate exists (captain) | platform check, then `ctf_teams_mark_flag` |
@@ -199,6 +199,7 @@ maxMembers: 8
 defaultProfile: ctf-teams     # applied when create omits profile/plan ('' disables)
 slashCommand: true            # /ctf-teams + gesture boundary
 boardCommand: true            # /ctf-teams-board dashboard command
+autoApprove: true             # create-and-run: no plan-review click (false = two-phase)
 profiles: {}                  # your own profiles; override the builtin by name
 env:
   allowInstall: true          # false keeps ctf_teams_env install dry-run only

@@ -25,6 +25,8 @@ export interface DashboardRouteOptions {
     stateDir: string;
     /** Configured team profile names, offered by the panel's start form. */
     profiles?: readonly string[];
+    /** Whether a started solve runs immediately (the plugin default). */
+    autoApprove?: boolean;
 }
 /** The session's team: the named one, else the team this session belongs to. */
 export declare function findSessionTeam(stateRoot: string, teamId: string | undefined, sessionId: string): Promise<TeamState | undefined>;

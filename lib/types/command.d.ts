@@ -37,7 +37,18 @@ declare module '@deepseek-ai/dsh-llm' {
 export declare function profileCommandName(profileName: string): string | undefined;
 export declare function invokedCTFTeamsInvocation(messages: readonly UserMessage[], getProfiles?: () => Record<string, TeamProfileConfig>): CTFTeamsInvocation | undefined;
 export declare function invokedCTFTeamsGoal(messages: readonly UserMessage[]): string | undefined;
-export declare function buildActivationDirective(goal: string, profile?: string, taskPlanning?: 'captain' | 'seed'): string;
+/**
+ * The directive injected when the user triggers `/ctf-teams`.
+ * @param goal - the challenge text the user supplied.
+ * @param profile - a team profile the user named, when any.
+ * @param taskPlanning - the profile's planning mode.
+ * @param autoApprove - true when teams run without a review step (the default):
+ *   the directive then asks for `approval="automatic"` and tells the captain not
+ *   to stop for approval.
+ */
+export declare function buildActivationDirective(goal: string, profile?: string, taskPlanning?: 'captain' | 'seed', autoApprove?: boolean): string;
 export declare function registerCTFTeamsCommand(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>, options?: CTFTeamsCommandOptions): void;
-export declare function installCTFTeamsGestureBoundary(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>): void;
+export declare function installCTFTeamsGestureBoundary(ctx: Context, getProfiles?: () => Record<string, TeamProfileConfig>, options?: {
+    autoApprove?: boolean;
+}): void;
 export declare function registerCTFTeamsBoardCommand(ctx: Context, stateDir: string): void;

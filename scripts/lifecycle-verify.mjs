@@ -450,11 +450,16 @@ check('profile-only activation asks for the goal',
   buildActivationDirective('', 'demo-delivery').includes('The goal was not given')
     && buildActivationDirective('', 'demo-delivery').includes('Use profile="demo-delivery" when creating a new team')
     && buildActivationDirective('', 'demo-delivery').includes('Inspect existing team state with ctf_teams_status'))
-check('captain-planning activation requires a staged user-reviewed graph',
-  buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('approval="required"')
-    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('review the staged plan')
-    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('run in parallel')
-    && !buildActivationDirective('ship it', 'dynamic-delivery', 'captain').includes('seed tasks'))
+check('captain-planning activation requires a staged user-reviewed graph in two-phase mode',
+  buildActivationDirective('ship it', 'dynamic-delivery', 'captain', false).includes('approval="required"')
+    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain', false).includes('review the staged plan')
+    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain', false).includes('run in parallel')
+    && !buildActivationDirective('ship it', 'dynamic-delivery', 'captain', false).includes('seed tasks'))
+check('the default activation directive runs the submitted plan without an approval step',
+  buildActivationDirective('ship it', 'dynamic-delivery', 'captain', true).includes('approval="automatic"')
+    && buildActivationDirective('ship it', 'dynamic-delivery', 'captain', true).includes('do not ask for review')
+    && buildActivationDirective('ship it').includes('approval="automatic"')
+    && !buildActivationDirective('ship it').includes('approval="required"'))
 const unknownProfile = command.handler({
   agent: captain, rawInput: '--profile missing 做X', signal: new AbortController().signal, commandId: 'cmd-unknown',
 })

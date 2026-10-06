@@ -125,6 +125,8 @@ export interface DashboardPayload {
   archived: boolean
   /** Configured team profile names the panel's start form can select. */
   profiles: string[]
+  /** True when a started solve runs without a review step. */
+  autoApprove: boolean
   teams: DashboardTeamSnapshot[]
 }
 

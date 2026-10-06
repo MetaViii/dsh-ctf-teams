@@ -46,7 +46,7 @@ dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
 /ctf-teams-board          # 直接打印解题看板，不消耗模型轮次
 ```
 
-或者自然语言："用 CTFTeams 解出这道 pwn。" 队长先给出分阶段计划（阵容 + 任务图），你批准之后全员开始并行解题。战队跑起来后，切到**「解题面板」页签**（就在「对话 / 轨迹」旁边）实时看着它推进。
+或者自然语言："用 CTFTeams 解出这道 pwn。" **不需要你批准**：出厂配置 `autoApprove: true`，队长在同一次回复里记录题目、提交阵容 + 任务图并立刻派发，之后一路处理成员汇报，直到 flag 验证通过、writeup 写完。切到**「解题面板」页签**（就在「对话 / 轨迹」旁边）实时看它推进。想要回旧的两阶段流程，把插件配置里的 `autoApprove` 设为 `false`：计划会停在 staged，Web 计划卡询问批准，点「批准并运行」才开跑。
 
 ## 命令
 
@@ -79,7 +79,7 @@ dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
 | 按钮 | 出现条件 | 发出的内容 |
 |---|---|---|
 | 开始解题 | 还没有战队 | 题目表单（目标、模板、远程、分类、分值、flag 格式）→ `/ctf-teams …` + 这些事实 |
-| 批准并运行 | 计划 staged（队长） | `ctf_teams_approve` + 派发就绪任务 |
+| 批准并运行 | 存在 staged 计划（队长） | `ctf_teams_approve` + 派发就绪任务——只有 `autoApprove: false`，或本次升级前就已 staged 的战队才需要 |
 | 推进一轮 | 进行中 | `ctf_teams_status`、派发就绪任务、唤醒落后成员 |
 | 暂停 / 继续 | 进行中 / 已暂停（队长） | halt，或带理由 `ctf_teams_resume` |
 | 核对 flag fN | 存在候选（队长） | 核对平台 → `ctf_teams_mark_flag` |
@@ -198,6 +198,7 @@ maxMembers: 8
 defaultProfile: ctf-teams     # create 未指定 profile/plan 时生效（空串关闭）
 slashCommand: true            # /ctf-teams 命令 + 手势边界
 boardCommand: true            # /ctf-teams-board 看板命令
+autoApprove: true             # 建队即开跑：不需要人工点批准（false = 两阶段计划审批）
 profiles: {}                  # 自定义 profiles；同名覆盖内置模板
 env:
   allowInstall: true          # false 时 ctf_teams_env 安装仅支持 dry-run

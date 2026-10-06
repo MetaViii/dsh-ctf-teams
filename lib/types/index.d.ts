@@ -91,8 +91,17 @@ export interface Config {
      * model (default on).
      */
     boardCommand?: boolean;
+    /**
+     * Run a created team immediately instead of staging it for review
+     * (default `true`): the user hands over the challenge and follows the solve
+     * on the panel without approving anything. Set `false` to restore the
+     * two-phase gate where the Web plan card is approved before anything spawns.
+     */
+    autoApprove?: boolean;
 }
 export declare const Config: z<Config>;
 /** The model-facing usage policy: when and how to drive CTFTeams. */
-export declare function usageSectionText(toolNames: string, profilesText?: string): string;
+export declare function usageSectionText(toolNames: string, profilesText?: string, options?: {
+    autoApprove?: boolean;
+}): string;
 export declare function apply(ctx: Context, config: Config): void;
