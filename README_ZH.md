@@ -78,7 +78,7 @@ dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
 
 | 按钮 | 出现条件 | 发出的内容 |
 |---|---|---|
-| 开始解题 | 还没有战队 | 题目表单（目标、模板、远程、分类、分值、flag 格式）→ `/ctf-teams …` + 这些事实 |
+| 开始解题 | 还没有战队 | 题目表单（目标、模板、远程、分类、分值、flag 格式、**附件**）→ `/ctf-teams …` + 这些事实 |
 | 批准并运行 | 存在 staged 计划（队长） | `ctf_teams_approve` + 派发就绪任务——只有 `autoApprove: false`，或本次升级前就已 staged 的战队才需要 |
 | 推进一轮 | 进行中 | `ctf_teams_status`、派发就绪任务、唤醒落后成员 |
 | 暂停 / 继续 | 进行中 / 已暂停（队长） | halt，或带理由 `ctf_teams_resume` |

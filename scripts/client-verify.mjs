@@ -461,6 +461,9 @@ check('an empty session offers the start button and explains the flow',
   emptyText.includes('开始解题') && emptyText.includes('这个会话还没有 CTFTeams 战队'), emptyText.slice(0, 160))
 
 findButton(emptyTree, '开始解题').props.onClick()
+// Walk once so the form mounts (its file listing starts), then let it land.
+textOf(render())
+await settle()
 const formTree = render()
 const formText = textOf(formTree).join(' ')
 check('the start form asks for the challenge facts',
@@ -468,18 +471,34 @@ check('the start form asks for the challenge facts',
   formText.slice(0, 200))
 check('the start form says the solve runs without an approval click',
   formText.includes('建队并立刻开跑') && formText.includes('不需要你点批准'), formText.slice(-200))
+check('the start form offers attachment picking',
+  formText.includes('题目附件') && formText.includes('选择附件') && formText.includes('个可选文件'),
+  formText.slice(-260))
+
+// Expand the picker, tick a workspace file, and submit: the start action must
+// carry the picked path.
+findButton(render(), '选择附件').props.onClick()
+const startPickerText = textOf(render()).join(' ')
+check('expanding the start form picker lists workspace files',
+  startPickerText.includes('dist/rsa.pem') && startPickerText.includes('out.txt'), startPickerText.slice(-260))
+findElement(render(), 'input', (props) => props.type === 'checkbox').props.onChange()
+// The picked path shows as a removable chip above the list.
+check('picking a file in the start form shows it as a chip',
+  textOf(render()).join(' ').includes('dist/rsa.pem ×'), textOf(render()).join(' ').slice(-200))
 
 // Type into the form and submit: the panel must post exactly what was typed.
-const goalInput = findElement(formTree, 'textarea')
+const goalInput = findElement(render(), 'textarea')
 goalInput.props.onChange({ target: { value: '解 http://chal.local:8000' } })
-const remoteInput = findElement(formTree, 'input')
+const remoteInput = findElement(render(), 'input')
 remoteInput.props.onChange({ target: { value: 'http://chal.local:8000' } })
 posts.length = 0
 findElement(render(), 'form').props.onSubmit({ preventDefault() {} })
 await settle()
-check('submitting the form posts a start action with the typed goal',
+check('submitting the form posts a start action with the typed goal and attachments',
   posts.length === 1 && posts[0].body.action === 'start' && posts[0].body.goal === '解 http://chal.local:8000'
-  && posts[0].body.remote === 'http://chal.local:8000', JSON.stringify(posts))
+  && posts[0].body.remote === 'http://chal.local:8000'
+  && Array.isArray(posts[0].body.attachments) && posts[0].body.attachments.includes('dist/rsa.pem'),
+  JSON.stringify(posts))
 
 /* ── interaction: attachment picker ─────────────────────────────────────── */
 

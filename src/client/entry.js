@@ -540,6 +540,13 @@ function StartForm(props) {
   var pointsState = REACT.useState('')
   var formatState = REACT.useState('')
   var profileState = REACT.useState('')
+  // The challenge usually arrives with files: pick them here instead of
+  // attaching after the team exists.
+  var workspace = useWorkspaceFiles(props.sessionId)
+  var filterState = REACT.useState('')
+  var pickedState = REACT.useState([])
+  var openState = REACT.useState(false)
+  var picked = pickedState[0]
   return h('form', {
     onSubmit: function (event) {
       event.preventDefault()
@@ -550,6 +557,7 @@ function StartForm(props) {
         category: categoryState[0].trim() === '' ? undefined : categoryState[0].trim(),
         points: pointsState[0].trim() === '' || isNaN(Number(pointsState[0])) ? undefined : Number(pointsState[0]),
         flagFormat: formatState[0].trim() === '' ? undefined : formatState[0].trim(),
+        attachments: picked.length === 0 ? undefined : picked,
       })
     },
   }, [
@@ -582,29 +590,88 @@ function StartForm(props) {
       key: 'format', value: formatState[0], placeholder: 'flag\\{[^}]+\\}',
       style: INPUT_STYLE, onChange: function (event) { formatState[1](event.target.value) },
     })),
+    h('div', { key: 'attach', style: { marginBottom: 10 } }, [
+      h('div', { key: 'head', style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } }, [
+        h('span', { key: 'label', style: { fontSize: 12, color: TONE.muted } }, '题目附件'),
+        h(ActionButton, {
+          key: 'toggle', id: 'toggle',
+          label: openState[0] ? '收起文件列表' : (picked.length === 0 ? '选择附件' : '选择附件 (' + picked.length + ')'),
+          disabled: workspace.loading,
+          onClick: function () { openState[1](!openState[0]) },
+        }),
+        workspace.loading
+          ? h('span', { key: 'loading', style: { fontSize: 12, color: TONE.muted } }, '正在列出工作区文件…')
+          : workspace.error !== undefined
+            ? h('span', { key: 'error', style: { fontSize: 12, color: TONE.bad } }, '读取文件列表失败：' + workspace.error)
+            : h('span', { key: 'count', style: { fontSize: 12, color: TONE.muted } },
+              workspace.files.length === 0 ? '工作区里没有可选的题目文件' : workspace.files.length + ' 个可选文件'),
+      ]),
+      picked.length === 0
+        ? null
+        : h('div', { key: 'picked', style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 } }, picked.map(function (path) {
+          return h('span', {
+            key: path,
+            style: {
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px', borderRadius: 999,
+              border: '1px solid ' + TONE.line, fontSize: 11.5,
+            },
+          }, [
+            mono(path, { key: 'path' }),
+            h('button', {
+              key: 'remove', type: 'button', 'aria-label': '移除 ' + path,
+              onClick: function () {
+                pickedState[1](picked.filter(function (item) { return item !== path }))
+              },
+              style: { border: 'none', background: 'transparent', color: TONE.muted, cursor: 'pointer', padding: 0 },
+            }, '×'),
+          ])
+        })),
+      openState[0]
+        ? h('div', { key: 'picker' }, [
+          field('过滤', h('input', {
+            key: 'filter', value: filterState[0], placeholder: '输入路径片段，例如 rsa / dist / src',
+            style: INPUT_STYLE, onChange: function (event) { filterState[1](event.target.value) },
+          })),
+          h(FilePickerList, {
+            key: 'files',
+            files: workspace.files,
+            filter: filterState[0],
+            picked: picked,
+            maxHeight: '26vh',
+            onToggle: function (path) {
+              pickedState[1](picked.indexOf(path) >= 0
+                ? picked.filter(function (item) { return item !== path })
+                : picked.concat([path]))
+            },
+          }),
+        ])
+        : null,
+    ]),
     h('div', { key: 'actions', style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 } }, [
       h(ActionButton, { key: 'cancel', id: 'cancel', label: '取消', onClick: props.onClose }),
       h(ActionButton, { key: 'ok', id: 'ok', label: props.busy ? '发送中…' : '开始解题', primary: true, disabled: props.busy === true || goalState[0].trim() === '' }),
     ]),
     h('p', { key: 'note', style: { color: TONE.muted, fontSize: 12, marginTop: 8 } },
       props.autoApprove === false
-        ? '面板只负责把这条指令作为你自己的一条消息发给会话：队长记录题目信息、提交 staged 计划，等你在面板上点「批准并运行」。附件可以在战队建立后用「附件」按钮加入。'
-        : '面板只负责把这条指令作为你自己的一条消息发给会话：队长记录题目信息、建队并立刻开跑，不需要你点批准；跑起来后可以随时「暂停」，或用「附件」补文件。'),
+        ? '面板只负责把这条指令作为你自己的一条消息发给会话：队长记录题目信息、提交 staged 计划，等你在面板上点「批准并运行」。附件可以在上面直接选，也可以之后用「附件」按钮补。'
+        : '面板只负责把这条指令作为你自己的一条消息发给会话：队长记录题目信息、建队并立刻开跑，不需要你点批准；附件在上面选好会一起交出去，之后也能用「附件」按钮补。'),
   ])
 }
 
-function AttachmentPicker(props) {
+/**
+ * Load the workspace file list once per mount. Shared by the standalone
+ * 附件 action and the 开始解题 form, so both offer the same real paths.
+ */
+function useWorkspaceFiles(sessionId) {
   var filesState = REACT.useState(undefined)
   var errorState = REACT.useState(undefined)
-  var filterState = REACT.useState('')
-  var pickedState = REACT.useState([])
   var loadingState = REACT.useState(true)
 
   REACT.useEffect(function () {
     var cancelled = false
     void (async function () {
       try {
-        var response = await fetch(FILES_PATH + '?session=' + encodeURIComponent(props.sessionId), { cache: 'no-store' })
+        var response = await fetch(FILES_PATH + '?session=' + encodeURIComponent(sessionId), { cache: 'no-store' })
         if (!response.ok) throw new Error('HTTP ' + response.status)
         var body = await response.json()
         if (!cancelled) filesState[1](Array.isArray(body.files) ? body.files : [])
@@ -615,11 +682,42 @@ function AttachmentPicker(props) {
       }
     })()
     return function () { cancelled = true }
-  }, [props.sessionId])
+  }, [sessionId])
 
-  var files = filesState[0] === undefined ? [] : filesState[0]
-  var filter = filterState[0].trim().toLowerCase()
+  return { files: filesState[0] === undefined ? [] : filesState[0], error: errorState[0], loading: loadingState[0] }
+}
+
+/** Filter box + checkbox list of workspace files (no footer of its own). */
+function FilePickerList(props) {
+  var files = props.files
+  var filter = props.filter.trim().toLowerCase()
   var shown = filter === '' ? files : files.filter(function (file) { return file.path.toLowerCase().indexOf(filter) >= 0 })
+  return h('div', {
+    key: 'list',
+    style: { maxHeight: props.maxHeight || '38vh', overflowY: 'auto', border: '1px solid ' + TONE.line, borderRadius: 8 },
+  }, shown.length === 0
+    ? h('div', { key: 'empty', style: { padding: '10px 12px', color: TONE.muted } }, props.emptyText || '没有匹配的文件')
+    : shown.slice(0, 200).map(function (file) {
+      var checked = props.picked.indexOf(file.path) >= 0
+      return h('label', {
+        key: file.path,
+        style: { display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 10px', borderBottom: '1px solid ' + TONE.soft, cursor: 'pointer' },
+      }, [
+        h('input', {
+          key: 'box', type: 'checkbox', checked: checked,
+          onChange: function () { props.onToggle(file.path) },
+        }),
+        h('span', { key: 'path', style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, mono(file.path)),
+        h('span', { key: 'size', style: { color: TONE.muted, fontSize: 11, whiteSpace: 'nowrap' } }, humanSize(file.size)),
+      ])
+    }))
+}
+
+/** The standalone 附件 dialog: pick files for an existing team. */
+function AttachmentPicker(props) {
+  var workspace = useWorkspaceFiles(props.sessionId)
+  var filterState = REACT.useState('')
+  var pickedState = REACT.useState([])
   var picked = pickedState[0]
 
   return h('div', {}, [
@@ -629,31 +727,21 @@ function AttachmentPicker(props) {
       key: 'filter', value: filterState[0], placeholder: '输入路径片段，例如 rsa / dist / src',
       style: INPUT_STYLE, onChange: function (event) { filterState[1](event.target.value) },
     })),
-    loadingState[0]
+    workspace.loading
       ? h('p', { key: 'loading', style: { color: TONE.muted } }, '正在列出工作区文件…')
-      : errorState[0] !== undefined
-        ? h('p', { key: 'error', style: { color: TONE.bad } }, '读取文件列表失败：' + errorState[0])
-        : h('div', {
-          key: 'list',
-          style: { maxHeight: '38vh', overflowY: 'auto', border: '1px solid ' + TONE.line, borderRadius: 8 },
-        }, shown.length === 0
-          ? h('div', { key: 'empty', style: { padding: '10px 12px', color: TONE.muted } }, '没有匹配的文件')
-          : shown.slice(0, 200).map(function (file) {
-            var checked = picked.indexOf(file.path) >= 0
-            return h('label', {
-              key: file.path,
-              style: { display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 10px', borderBottom: '1px solid ' + TONE.soft, cursor: 'pointer' },
-            }, [
-              h('input', {
-                key: 'box', type: 'checkbox', checked: checked,
-                onChange: function () {
-                  pickedState[1](checked ? picked.filter(function (item) { return item !== file.path }) : picked.concat([file.path]))
-                },
-              }),
-              h('span', { key: 'path', style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, mono(file.path)),
-              h('span', { key: 'size', style: { color: TONE.muted, fontSize: 11, whiteSpace: 'nowrap' } }, humanSize(file.size)),
-            ])
-          })),
+      : workspace.error !== undefined
+        ? h('p', { key: 'error', style: { color: TONE.bad } }, '读取文件列表失败：' + workspace.error)
+        : h(FilePickerList, {
+          key: 'files',
+          files: workspace.files,
+          filter: filterState[0],
+          picked: picked,
+          onToggle: function (path) {
+            pickedState[1](picked.indexOf(path) >= 0
+              ? picked.filter(function (item) { return item !== path })
+              : picked.concat([path]))
+          },
+        }),
     h('div', { key: 'actions', style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 } }, [
       h(ActionButton, { key: 'cancel', id: 'cancel', label: '取消', onClick: props.onClose }),
       h(ActionButton, {
@@ -889,6 +977,7 @@ function DashboardView(props) {
   var dialogs = []
   if (dialog === 'start') {
     dialogs.push(h(Modal, { key: 'start', title: '开始解题', onClose: function () { dialogState[1](undefined) } }, h(StartForm, {
+      sessionId: sessionId,
       profiles: payload === undefined || !Array.isArray(payload.profiles) ? [] : payload.profiles,
       autoApprove: payload === undefined ? true : payload.autoApprove !== false,
       busy: busy,

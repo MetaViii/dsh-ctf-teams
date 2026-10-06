@@ -78,7 +78,7 @@ Every control queues **one user turn** and nothing else — the tab never writes
 
 | Button | When | What it sends |
 |---|---|---|
-| 开始解题 | no team | a challenge form (goal, profile, remote, category, points, flag format) → `/ctf-teams …` + the facts |
+| 开始解题 | no team | a challenge form (goal, profile, remote, category, points, flag format, **attachments**) → `/ctf-teams …` + the facts |
 | 批准并运行 | a staged plan exists (captain) | `ctf_teams_approve` + dispatch ready tasks — only needed with `autoApprove: false`, or for a team staged before this release |
 | 推进一轮 | running | `ctf_teams_status`, dispatch ready work, wake lanes that are behind |
 | 暂停 / 继续 | running / halted (captain) | halt, or `ctf_teams_resume` with a reason |
