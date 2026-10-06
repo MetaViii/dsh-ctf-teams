@@ -200,6 +200,21 @@ export declare function isTeamTask(value: unknown): value is TeamTask;
  * @param teamId - the team id.
  */
 export declare function removeTeamDir(stateRoot: string, teamId: string): Promise<void>;
+/** How much disk one team directory occupies. */
+export interface DirectoryUsage {
+    files: number;
+    bytes: number;
+}
+/**
+ * Sum the files under one team directory.
+ *
+ * The dashboard shows what a delete would free, and reports the bytes it did
+ * free, so the number has to come from the files rather than an estimate.
+ * A missing directory is 0/0 — deleting an already-deleted team is not an error.
+ * @param directory - absolute team directory.
+ * @returns file count and total bytes.
+ */
+export declare function directoryUsage(directory: string): Promise<DirectoryUsage>;
 /**
  * Archive a team instead of deleting it: the whole directory (team.json with
  * tasks and dependency graph, plus the mailboxes) moves under

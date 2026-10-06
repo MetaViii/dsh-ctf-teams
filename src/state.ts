@@ -15,7 +15,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { TERMINAL_TASK_STATUSES, type TaskStatus, type TeamMember, type TeamMessage, type TeamProfileSnapshot, type TeamState, type TeamTask } from './types.ts'
 import { hasValidQualityTaskFields, isReviewPolicy, normalizeBlankOptionalTaskFields } from './quality-gates.ts'
@@ -907,6 +907,54 @@ function isTeamMessage(value: unknown): value is TeamMessage {
  */
 export async function removeTeamDir(stateRoot: string, teamId: string): Promise<void> {
   await rm(join(stateRoot, teamId), { recursive: true, force: true })
+}
+
+/** How much disk one team directory occupies. */
+export interface DirectoryUsage {
+  files: number
+  bytes: number
+}
+
+const USAGE_SCAN_MAX_FILES = 5000
+
+/**
+ * Sum the files under one team directory.
+ *
+ * The dashboard shows what a delete would free, and reports the bytes it did
+ * free, so the number has to come from the files rather than an estimate.
+ * A missing directory is 0/0 — deleting an already-deleted team is not an error.
+ * @param directory - absolute team directory.
+ * @returns file count and total bytes.
+ */
+export async function directoryUsage(directory: string): Promise<DirectoryUsage> {
+  let files = 0
+  let bytes = 0
+  async function walk(current: string): Promise<void> {
+    if (files >= USAGE_SCAN_MAX_FILES) return
+    let entries
+    try {
+      entries = await readdir(current, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (files >= USAGE_SCAN_MAX_FILES) return
+      const absolute = join(current, entry.name)
+      if (entry.isDirectory()) {
+        await walk(absolute)
+        continue
+      }
+      if (!entry.isFile()) continue
+      try {
+        bytes += (await stat(absolute)).size
+        files += 1
+      } catch {
+        // A file that vanished mid-scan does not make the panel wrong.
+      }
+    }
+  }
+  await walk(directory)
+  return { files, bytes }
 }
 
 /**

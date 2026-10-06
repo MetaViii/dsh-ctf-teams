@@ -28,6 +28,7 @@ import { memberActivity } from './members.ts'
 import { challengeOf } from './findings.ts'
 import { readCursor } from './findings.ts'
 import { dashboardInputFromTeam, nextStepHint } from './dashboard.ts'
+import { directoryUsage } from './state.ts'
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts'
 
 /** One lane as the dashboard renders it. */
@@ -84,6 +85,10 @@ export interface DashboardTeamSnapshot {
   role: 'captain' | 'member' | 'bystander'
   /** True for a team read from `archive/`: its history is final. */
   archived: boolean
+  /** Files under the team directory (what a delete would remove). */
+  fileCount: number
+  /** Bytes under the team directory (what a delete would free). */
+  diskBytes: number
   phase: string
   halted: boolean
   escalated: boolean
@@ -246,6 +251,7 @@ export async function assembleDashboardTeam(
     captainUnread,
     openTaskByMember,
   })
+  const usage = await directoryUsage(join(stateRoot, team.id))
 
   return {
     teamId: team.id,
@@ -256,6 +262,8 @@ export async function assembleDashboardTeam(
     captainSessionId: team.captainSessionId,
     role: roleOf(team, options.sessionId),
     archived: options.archived === true,
+    fileCount: usage.files,
+    diskBytes: usage.bytes,
     phase,
     halted: team.halted === true,
     escalated: team.escalated === true,

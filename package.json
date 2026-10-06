@@ -1,6 +1,6 @@
 {
   "name": "@nanmicoder/dsh-ctf-teams",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "CTFTeams for DeepSeek Harness: a multi-agent CTF squad (captain + recon/web/binary/crypto/forensics lanes) that solves challenges together with round-based progress sync, a shared findings & flag board, a shipped knowledge base (kali, pwntools, vol3, sage, fresh PoC/CVE hunting), and a terminal dashboard",
   "type": "module",
   "main": "lib/index.js",

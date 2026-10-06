@@ -670,6 +670,70 @@ function humanSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
+/** What a delete would touch, so the confirm is about facts, not a vibe. */
+function usageLine(team) {
+  var parts = []
+  if (typeof team.fileCount === 'number') parts.push(team.fileCount + ' 个文件')
+  if (typeof team.diskBytes === 'number') parts.push(humanSize(team.diskBytes))
+  return parts.join(' · ')
+}
+
+/**
+ * Team cleanup. Archiving keeps the record reviewable under 「已归档」; purging
+ * frees the space. Both are one click away, but never zero clicks — and an
+ * unsolved team says out loud what gets lost.
+ */
+function DeleteDialog(props) {
+  var team = props.team
+  var unsolved = team.solved !== true
+  return h('div', {}, [
+    h('p', { key: 'facts', style: { marginTop: 0, fontSize: 12.5 } }, [
+      h('span', { key: 'id', style: { marginRight: 10 } }, ['战队 ', mono(team.teamId)]),
+      h('span', { key: 'usage', style: { color: TONE.muted } }, usageLine(team)),
+    ]),
+    h('p', { key: 'path', style: { fontSize: 12, color: TONE.muted, wordBreak: 'break-all' } }, mono(team.workspace)),
+    h('p', {
+      key: 'warning',
+      style: { fontSize: 12.5, color: unsolved ? TONE.warn : TONE.muted },
+    }, unsolved
+      ? '该队尚未解出：删除会丢失成员、任务、findings 与 flag 看板的全部状态（工作区里的文件与 writeup 不受影响）。'
+      : '已解出：writeup 与解题产物都在工作区里，删除只影响队伍状态本身。'),
+    h('div', { key: 'actions', style: { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 10 } }, [
+      h(ActionButton, { key: 'cancel', id: 'cancel', label: '取消', onClick: props.onClose }),
+      h(ActionButton, {
+        key: 'archive', id: 'archive', label: props.busy ? '处理中…' : '移到归档', disabled: props.busy === true,
+        title: '保留记录，面板的「已归档」里还能回看',
+        onClick: function () { props.onConfirm('archive') },
+      }),
+      h(ActionButton, {
+        key: 'purge', id: 'purge', label: props.busy ? '处理中…' : '彻底删除', disabled: props.busy === true,
+        title: '从磁盘删除该战队目录，不可恢复',
+        onClick: function () { props.onConfirm('purge') },
+      }),
+    ]),
+  ])
+}
+
+/** Bulk cleanup: finished teams pile up under `archive/`. */
+function PurgeDialog(props) {
+  var bytes = props.teams.reduce(function (sum, team) {
+    return sum + (typeof team.diskBytes === 'number' ? team.diskBytes : 0)
+  }, 0)
+  return h('div', {}, [
+    h('p', { key: 'facts', style: { marginTop: 0, fontSize: 12.5, wordBreak: 'break-all' } },
+      '将永久删除归档目录里的全部战队记录：' + props.teams.map(function (team) { return team.teamId; }).join('、')),
+    h('p', { key: 'usage', style: { fontSize: 12, color: TONE.muted } },
+      '共 ' + props.teams.length + ' 个 · ' + humanSize(bytes) + '，不可恢复。工作区里的文件与 writeup 不受影响。'),
+    h('div', { key: 'actions', style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 } }, [
+      h(ActionButton, { key: 'cancel', id: 'cancel', label: '取消', onClick: props.onClose }),
+      h(ActionButton, {
+        key: 'purge', id: 'purge', label: props.busy ? '清理中…' : '清空归档', disabled: props.busy === true,
+        onClick: props.onConfirm,
+      }),
+    ]),
+  ])
+}
+
 /**
  * The action bar: every button is one user turn in this session, labelled by
  * what the captain will do with it. Buttons that only the captain session may
@@ -687,9 +751,14 @@ function ActionBar(props) {
   if (team === undefined) {
     buttons.push(h(ActionButton, { key: 'start', id: 'start', label: '开始解题', primary: true, disabled: busy, onClick: function () { props.onDialog('start') } }))
   } else if (team.archived === true) {
-    // An archived solve is history: it can be exported, never driven.
+    // An archived solve is history: export it, or free the space it occupies.
     buttons.push(h(ActionButton, { key: 'wp', id: 'wp', label: '导出 WP', onClick: function () { props.onExport('writeup') } }))
     buttons.push(h(ActionButton, { key: 'report', id: 'report', label: '导出复盘', primary: true, onClick: function () { props.onExport('report') } }))
+    buttons.push(h(ActionButton, {
+      key: 'purge-archive', id: 'purge-archive', label: '清空归档 (' + props.archivedCount + ')',
+      disabled: busy || !isCaptain, title: isCaptain ? '永久删除归档目录里的全部战队记录' : '只有队长会话可以清理',
+      onClick: function () { props.onDialog('purge') },
+    }))
     buttons.push(h('span', { key: 'note', style: { fontSize: 11.5, color: TONE.muted } }, '已归档战队 · 只读'))
   } else if (team.phase === 'staged') {
     buttons.push(h(ActionButton, {
@@ -699,6 +768,11 @@ function ActionBar(props) {
     }))
     buttons.push(h(ActionButton, { key: 'files', id: 'files', label: '附件', disabled: busy || !isCaptain, onClick: function () { props.onDialog('files') } }))
     buttons.push(h(ActionButton, { key: 'report', id: 'report', label: '导出复盘', onClick: function () { props.onExport('report') } }))
+    buttons.push(h(ActionButton, {
+      key: 'delete', id: 'delete', label: '删除战队', disabled: busy || !isCaptain,
+      title: isCaptain ? '放弃这份计划：归档或彻底删除' : '只有队长会话可以清理战队',
+      onClick: function () { props.onDialog('delete') },
+    }))
   } else {
     if (team.phase === 'halted') {
       buttons.push(h(ActionButton, { key: 'resume', id: 'resume', label: '继续', primary: true, disabled: busy || !isCaptain, onClick: function () { props.onAction({ action: 'resume' }) } }))
@@ -717,6 +791,11 @@ function ActionBar(props) {
     buttons.push(h(ActionButton, { key: 'writeup', id: 'writeup', label: '写 WRITEUP', disabled: busy || !participates, onClick: function () { props.onAction({ action: 'writeup' }) } }))
     buttons.push(h(ActionButton, { key: 'wp', id: 'wp', label: '导出 WP', disabled: busy, onClick: function () { props.onExport('writeup') } }))
     buttons.push(h(ActionButton, { key: 'report', id: 'report', label: '导出复盘', disabled: busy, onClick: function () { props.onExport('report') } }))
+    buttons.push(h(ActionButton, {
+      key: 'delete', id: 'delete', label: '删除战队', disabled: busy || !isCaptain,
+      title: isCaptain ? '归档保留记录，或彻底删除释放磁盘' : '只有队长会话可以清理战队',
+      onClick: function () { props.onDialog('delete') },
+    }))
   }
   // Deliberately no one-click "archive/delete" here: discarding team work is a
   // captain-only, protocol-governed decision (`ctf_teams_delete`), and the
@@ -817,6 +896,28 @@ function DashboardView(props) {
       },
     })))
   }
+  if (dialog === 'delete' && selected !== undefined) {
+    dialogs.push(h(Modal, { key: 'delete', title: '清理战队', onClose: function () { dialogState[1](undefined) } }, h(DeleteDialog, {
+      team: selected,
+      busy: busy,
+      onClose: function () { dialogState[1](undefined) },
+      onConfirm: function (mode) {
+        dialogState[1](undefined)
+        runAction({ action: 'delete-team', mode: mode })
+      },
+    })))
+  }
+  if (dialog === 'purge') {
+    dialogs.push(h(Modal, { key: 'purge', title: '清空归档', onClose: function () { dialogState[1](undefined) } }, h(PurgeDialog, {
+      teams: archived,
+      busy: busy,
+      onClose: function () { dialogState[1](undefined) },
+      onConfirm: function () {
+        dialogState[1](undefined)
+        runAction({ action: 'purge-archive' })
+      },
+    })))
+  }
   if (dialog === 'files' && selected !== undefined) {
     dialogs.push(h(Modal, { key: 'files', title: '选择题目附件', onClose: function () { dialogState[1](undefined) } }, h(AttachmentPicker, {
       sessionId: sessionId,
@@ -857,6 +958,7 @@ function DashboardView(props) {
       key: 'actionbar',
       team: selected,
       busy: busy,
+      archivedCount: archived.length,
       onAction: runAction,
       onDialog: function (which) { dialogState[1](which) },
       onExport: runExport,

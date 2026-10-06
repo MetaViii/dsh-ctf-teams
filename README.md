@@ -84,10 +84,30 @@ Every control queues **one user turn** and nothing else — the tab never writes
 | 暂停 / 继续 | running / halted (captain) | halt, or `ctf_teams_resume` with a reason |
 | 核对 flag fN | a candidate exists (captain) | platform check, then `ctf_teams_mark_flag` |
 | 附件 | not archived (captain) | workspace file picker → `ctf_teams_set_challenge` with the picked paths |
-| 写 WRITEUP | participant | write the reproducible chain to `WRITEUP.md` |
+| 写 WRITEUP | participant | write the solve record to `WRITEUP.md` (see below) |
 | 导出 WP / 导出复盘 | always | download `WRITEUP.md`, or a generated markdown review report |
+| 删除战队 | captain | confirm dialog showing the team's file count and size → 移到归档 (still reviewable under 「已归档」) or 彻底删除 (frees the space) |
+| 清空归档 (N) | archived roster (captain) | permanently removes every archived team |
 
-Captain-only buttons are disabled (not silently failing) in a member's session; an archived team is read-only with exports only; there is deliberately no one-click archive/delete, because discarding unfinished work stays a captain decision. The endpoints behind these controls are method-whitelisted, body-limited and authority-checked against durable state, and they sit behind the same browser-trust fence as the read path.
+Every control above queues **one user turn**, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked. The two cleanup buttons are the exception: deleting files needs no model turn, so the host performs them directly under the team lock — still gated (captain session for a team, a live session for the archive), still two clicks, and the response reports the bytes that were actually freed.
+
+Captain-only buttons are disabled (not silently switched off) in a member's session, and an archived team is read-only except for exports and cleanup. The endpoints behind these controls are method-whitelisted, body-limited and authority-checked against durable state, and they sit behind the same browser-trust fence as the read path.
+
+### The writeup
+
+`写 WRITEUP` sends the CTF solving-record spec that lives in `src/writeup.ts` — the same text the captain protocol and the completion criterion use. It is a normal CTF writeup:
+
+```
+# <题目名> — <分类>
+## 题目信息   平台/分类/分值、附件、远程地址
+## 侦察      真正跑过的命令与真实输出
+## 漏洞分析   漏洞点、成因、触发条件、关键代码片段
+## 利用过程   从侦察到 flag 的完整步骤；payload 原始形式 + 编码形式；原始 HTTP 报文
+## flag      平台返回的原始响应与 flag 原文
+## 参考      公开资料/CVE（没有就删掉）
+```
+
+No mention of the tooling, the agent, the model or the framework, and no 修复建议/缓解措施 section: a CTF writeup records how the box was popped, not how to patch it. Output must be what actually ran, every command copy-pasteable, and an existing writeup is extended rather than rewritten.
 
 The **terminal panel** is the same state for surfaces without the tab (`ctf_teams_status` for the model and the human, `/ctf-teams-board` for the human with zero model turns). Every section bar carries its own live counter and the `Next` line is computed by the same helper the tab uses, so the two can never disagree:
 

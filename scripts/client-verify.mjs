@@ -266,6 +266,8 @@ const baseTeam = {
   captainSessionId: 'session-1',
   role: 'captain',
   archived: false,
+  fileCount: 12,
+  diskBytes: 4096,
   phase: 'running',
   halted: false,
   escalated: false,
@@ -378,6 +380,39 @@ check('export downloads through the browser',
   && fetched.some((url) => url.includes('/export?session=session-1&kind=writeup')),
   JSON.stringify({ downloads, tail: fetched.slice(-1) }))
 
+/* ── interaction: cleanup ───────────────────────────────────────────────── */
+
+check('a live team offers cleanup', runningText.includes('删除战队'))
+findButton(runningTree, '删除战队').props.onClick()
+const deleteDialogText = textOf(render()).join(' ')
+check('cleanup asks first, with the size it would free',
+  deleteDialogText.includes('清理战队') && deleteDialogText.includes('移到归档')
+  && deleteDialogText.includes('彻底删除') && /\d+(\.\d+)? ?(B|KB|MB)/.test(deleteDialogText),
+  deleteDialogText.slice(-240))
+
+posts.length = 0
+findButton(render(), '移到归档').props.onClick()
+await settle()
+check('archiving posts a housekeeping action for this team',
+  posts.length === 1 && posts[0].body.action === 'delete-team'
+  && posts[0].body.mode === 'archive' && posts[0].body.teamId === 'baby-rsa-solve',
+  JSON.stringify(posts))
+
+withTeam({ phase: 'running' })
+await settle()
+findButton(render(), '删除战队').props.onClick()
+posts.length = 0
+findButton(render(), '彻底删除').props.onClick()
+await settle()
+check('purging posts the destructive mode explicitly',
+  posts.length === 1 && posts[0].body.action === 'delete-team' && posts[0].body.mode === 'purge',
+  JSON.stringify(posts))
+
+withTeam({ phase: 'staged' })
+await settle()
+check('a staged plan can be dropped from the panel',
+  textOf(render()).join(' ').includes('删除战队'))
+
 withTeam({ phase: 'halted' })
 await settle()
 const haltedText = textOf(render()).join(' ')
@@ -389,6 +424,32 @@ const archivedText = textOf(render()).join(' ')
 check('an archived team is read-only and exportable',
   archivedText.includes('已归档') && archivedText.includes('导出复盘') && !archivedText.includes('推进一轮'),
   archivedText.slice(0, 200))
+
+// The archive is where finished teams pile up: offer the bulk cleanup, and
+// route it through the confirm dialog like every other destructive action.
+servedPayload = { ...servedPayload, teams: [servedPayload.teams[0]] }
+store.toggleArchived()
+await settle()
+const archivedView = render()
+const archivedViewText = textOf(archivedView).join(' ')
+check('the archived roster offers a bulk cleanup',
+  archivedViewText.includes('清空归档 (1)') && archivedViewText.includes('已归档战队 · 只读'),
+  archivedViewText.slice(0, 240))
+findButton(archivedView, '清空归档 (1)').props.onClick()
+const purgeDialogText = textOf(render()).join(' ')
+check('bulk cleanup asks first and names what it frees',
+  purgeDialogText.includes('将永久删除归档目录里的全部战队记录')
+  && purgeDialogText.includes('共 1 个') && /\d+(\.\d+)? ?(B|KB|MB)/.test(purgeDialogText),
+  purgeDialogText.slice(-240))
+posts.length = 0
+findButton(render(), '清空归档').props.onClick()
+await settle()
+check('bulk cleanup posts the archive purge',
+  posts.length === 1 && posts[0].body.action === 'purge-archive', JSON.stringify(posts))
+
+// Leave the archived view before the empty-session case.
+store.toggleArchived()
+await settle()
 
 /* ── interaction: start form ────────────────────────────────────────────── */
 

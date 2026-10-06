@@ -19,6 +19,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import type { TeamState } from './types.ts'
 import type { DashboardTeamSnapshot } from './dashboard-snapshot.ts'
+import { WRITEUP_PATH, WRITEUP_SPEC } from './writeup.ts'
 
 /** Actions the panel may request. */
 export type DashboardActionName =
@@ -31,14 +32,19 @@ export type DashboardActionName =
   | 'attachments'
   | 'writeup'
 
+/** Actions the host performs itself, because they only touch durable files. */
+export type DashboardMutationName = 'delete-team' | 'purge-archive'
+
 /** What the action needs before it may be sent. */
 export type ActionAuthority = 'none' | 'participant' | 'captain'
 
 /** The validated request payload. */
 export interface DashboardActionBody {
   sessionId: string
-  action: DashboardActionName
+  action: DashboardRequestAction
   teamId?: string
+  /** `delete-team`: archive (recoverable) or purge (frees the disk space). */
+  mode?: 'archive' | 'purge'
   goal?: string
   profile?: string
   remote?: string
@@ -50,6 +56,9 @@ export interface DashboardActionBody {
   reason?: string
 }
 
+/** Every action name the panel endpoint accepts. */
+export type DashboardRequestAction = DashboardActionName | DashboardMutationName
+
 /** A validated action, ready to become one user turn. */
 export interface PreparedAction {
   action: DashboardActionName
@@ -60,14 +69,33 @@ export interface PreparedAction {
   requires: ActionAuthority
 }
 
+/** A housekeeping action the host performs itself (no model turn). */
+export interface PreparedMutation {
+  action: DashboardMutationName
+  label: string
+  /** `delete-team` only. */
+  mode?: 'archive' | 'purge'
+  /**
+   * `captain` for removing a team (its owner decides); `live` for clearing the
+   * archive directory, which already holds retired teams.
+   */
+  requires: 'captain' | 'live'
+}
+
+/** A validated request: one user turn, or one direct housekeeping mutation. */
+export type PreparedRequest =
+  | { kind: 'prompt'; prepared: PreparedAction }
+  | { kind: 'mutation'; mutation: PreparedMutation }
+
 /** A rejected request: the HTTP status and the reason to surface. */
 export interface ActionRejection {
   status: number
   error: string
 }
 
-const ACTIONS: readonly DashboardActionName[] = [
+const ACTIONS: readonly DashboardRequestAction[] = [
   'start', 'approve', 'halt', 'resume', 'verify-flag', 'nudge', 'attachments', 'writeup',
+  'delete-team', 'purge-archive',
 ]
 
 const LIMITS = {
@@ -106,10 +134,11 @@ export function parseActionBody(raw: unknown): { ok: true; body: DashboardAction
   const record = raw as Record<string, unknown>
   const sessionId = clip(record.sessionId, LIMITS.short)
   if (sessionId === undefined) return { ok: false, status: 400, error: 'sessionId is required' }
-  const action = clip(record.action, LIMITS.tiny) as DashboardActionName | undefined
+  const action = clip(record.action, LIMITS.tiny) as DashboardRequestAction | undefined
   if (action === undefined || !ACTIONS.includes(action)) {
     return { ok: false, status: 400, error: `unknown action; expected one of ${ACTIONS.join(', ')}` }
   }
+  const mode = record.mode === 'purge' ? 'purge' : record.mode === 'archive' ? 'archive' : undefined
   const pointsRaw = record.points
   const points = typeof pointsRaw === 'number' && Number.isFinite(pointsRaw) && pointsRaw >= 0
     ? Math.floor(pointsRaw)
@@ -117,6 +146,7 @@ export function parseActionBody(raw: unknown): { ok: true; body: DashboardAction
   const body: DashboardActionBody = {
     sessionId,
     action,
+    ...mode === undefined ? {} : { mode },
     ...clip(record.teamId, LIMITS.tiny) === undefined ? {} : { teamId: clip(record.teamId, LIMITS.tiny)! },
     ...clip(record.goal, LIMITS.text) === undefined ? {} : { goal: clip(record.goal, LIMITS.text)! },
     ...clip(record.profile, LIMITS.tiny) === undefined ? {} : { profile: clip(record.profile, LIMITS.tiny)! },
@@ -280,8 +310,10 @@ export function prepareAction(
         prepared: {
           action: 'writeup', label: '写 WRITEUP', requires: 'participant',
           prompt: panelBlock([
-            `用户在解题面板要求产出可复现的 writeup（战队 ${team.id}）。`,
-            '把解题链写入工作区根目录的 WRITEUP.md：环境与依赖、每一步的原始命令与输出、失败的死胡同、最终 payload 与 flag、修复建议。已经写过的内容要更新而不是重写。',
+            `用户在解题面板要求产出 writeup（战队 ${team.id}）。`,
+            `把解题记录写入工作区根目录的 ${WRITEUP_PATH}。`,
+            '',
+            WRITEUP_SPEC,
           ]),
         },
       }
@@ -290,6 +322,48 @@ export function prepareAction(
       return { ok: false, status: 400, error: 'unknown action' }
     }
   }
+}
+
+/**
+ * Validate one panel request and decide how it is carried out: a prompt turn
+ * for anything that needs the captain, or a direct housekeeping mutation for
+ * the two actions that only touch durable files.
+ * @param body - the validated body.
+ * @param context - durable facts the decision depends on.
+ * @returns the prepared request, or a rejection.
+ */
+export function prepareRequest(
+  body: DashboardActionBody,
+  context: { profiles: readonly string[]; team?: TeamState },
+): { ok: true; request: PreparedRequest } | { ok: false } & ActionRejection {
+  if (body.action === 'delete-team') {
+    const team = context.team
+    if (team === undefined) return { ok: false, status: 404, error: 'no team to delete' }
+    return {
+      ok: true,
+      request: {
+        kind: 'mutation',
+        mutation: {
+          action: 'delete-team',
+          label: body.mode === 'purge' ? '彻底删除' : '移到归档',
+          mode: body.mode ?? 'archive',
+          requires: 'captain',
+        },
+      },
+    }
+  }
+  if (body.action === 'purge-archive') {
+    return {
+      ok: true,
+      request: {
+        kind: 'mutation',
+        mutation: { action: 'purge-archive', label: '清空归档', requires: 'live' },
+      },
+    }
+  }
+  const prepared = prepareAction(body as DashboardActionBody & { action: DashboardActionName }, context)
+  if (prepared.ok !== true) return prepared
+  return { ok: true, request: { kind: 'prompt', prepared: prepared.prepared } }
 }
 
 /** One selectable workspace file for the attachment picker. */
@@ -402,7 +476,7 @@ export function renderTeamReport(snapshot: DashboardTeamSnapshot, generatedAt: n
       ? ['(没有候选 flag)']
       : snapshot.flags.map((flag) => `- \`${flag.id}\` ${flag.status === 'verified' ? '✓' : flag.status === 'rejected' ? '✗' : '?'} \`${flag.flag}\` — ${flag.submittedBy}${flag.note === undefined ? '' : ` (${flag.note})`}`),
     '',
-    '> 本报告由 CTFTeams 解题面板从磁盘上的队伍状态生成；可复现的漏洞利用细节以工作区的 `WRITEUP.md` 为准。',
+    '> 本报告是队伍内部的状态快照（题目、成员、任务、findings、flag 看板）。对外发布的 writeup 见工作区的 `WRITEUP.md`。',
     '',
   ]
   return lines.join('\n')

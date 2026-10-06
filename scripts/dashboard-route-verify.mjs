@@ -21,6 +21,7 @@
  * Usage: node scripts/dashboard-route-verify.mjs
  */
 
+import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -249,8 +250,21 @@ try {
   await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
     sessionId: 'session-member', action: 'writeup',
   }), writeup)
+  const writeupPrompt = sent.at(-1)?.message?.content?.[0]?.text ?? ''
+  // Only the deliverable template must be free of a remediation section and of
+  // product names; the rules below it legitimately name what to avoid.
+  const writeupTemplate = writeupPrompt.split('Rules:')[0]
   check('a participating member may ask for the writeup',
-    writeup.status === 200 && (sent.at(-1)?.message?.content?.[0]?.text ?? '').includes('WRITEUP.md'), writeup.body)
+    writeup.status === 200 && writeupPrompt.includes('WRITEUP.md'), writeup.body)
+  check('the writeup prompt reads like a CTF writeup, not a bug report',
+    ['## 题目信息', '## 侦察', '## 漏洞分析', '## 利用过程', '## flag'].every((section) => writeupTemplate.includes(section))
+    && !writeupTemplate.includes('修复建议')
+    && !writeupTemplate.includes('缓解措施')
+    && !/CTFTeams|DeepSeek|harness/i.test(writeupPrompt.replace('【解题面板】', '')),
+    writeupTemplate.slice(0, 200))
+  check('the writeup rules forbid inventing output and require replayability',
+    writeupPrompt.includes('不要凭记忆编造') && writeupPrompt.includes('原样复制执行'),
+    writeupPrompt.slice(-200))
 
   const queued = sent.length
 
@@ -297,6 +311,74 @@ try {
     sessionId: 'session-captain', action: 'rm -rf /',
   }), unknownAction)
   check('an unknown action is refused', unknownAction.status === 400, unknownAction.body)
+
+  /* ── cleanup: archive / purge ─────────────────────────────────────────── */
+
+  const beforeCleanup = sent.length
+
+  const outsiderDelete = recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+    sessionId: 'session-looker', action: 'delete-team', teamId: 'baby-rsa-solve', mode: 'purge',
+  }), outsiderDelete)
+  check('a session outside the team cannot delete it', outsiderDelete.status === 403, outsiderDelete.body)
+  check('a refused delete leaves the files alone', existsSync(join(stateRoot, 'baby-rsa-solve')))
+
+  const missingTeamDelete = recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+    sessionId: 'session-captain', action: 'delete-team', teamId: 'never-existed',
+  }), missingTeamDelete)
+  check('deleting an unknown team is a 404', missingTeamDelete.status === 404, missingTeamDelete.body)
+
+  const archiveResponse = recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+    sessionId: 'session-captain', action: 'delete-team', teamId: 'baby-rsa-solve', mode: 'archive',
+  }), archiveResponse)
+  const archiveBody = JSON.parse(archiveResponse.body)
+  check('archiving moves the team out of the live roster and reports the space',
+    archiveResponse.status === 200 && archiveBody.ok === true && archiveBody.removed === 1
+    && archiveBody.freedBytes > 0
+    && !existsSync(join(stateRoot, 'baby-rsa-solve'))
+    && existsSync(join(stateRoot, 'archive', 'baby-rsa-solve', 'team.json')),
+    archiveResponse.body)
+  check('housekeeping is not a model turn', sent.length === beforeCleanup, `sent=${sent.length}`)
+
+  const archivedState = recorder()
+  await routes.get(DASHBOARD_STATE_PATH).handler(request(`${DASHBOARD_STATE_PATH}?session=session-captain&archived=1`), archivedState)
+  const archivedTeam = JSON.parse(archivedState.body).teams[0]
+  check('the archived roster reports the team as archived with its size',
+    archivedTeam?.teamId === 'baby-rsa-solve' && archivedTeam?.archived === true
+    && archivedTeam?.diskBytes > 0 && archivedTeam?.fileCount >= 1,
+    JSON.stringify({ archived: archivedTeam?.archived, bytes: archivedTeam?.diskBytes, files: archivedTeam?.fileCount }))
+
+  const purgeResponse = recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+    sessionId: 'session-captain', action: 'purge-archive',
+  }), purgeResponse)
+  const purgeBody = JSON.parse(purgeResponse.body)
+  check('purging the archive frees the space and reports it',
+    purgeResponse.status === 200 && purgeBody.removed === 1 && purgeBody.freedBytes > 0
+    && !existsSync(join(stateRoot, 'archive', 'baby-rsa-solve')),
+    purgeResponse.body)
+
+  const emptyPurge = recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', {
+    sessionId: 'session-captain', action: 'purge-archive',
+  }), emptyPurge)
+  check('purging an empty archive is a no-op, not an error',
+    emptyPurge.status === 200 && JSON.parse(emptyPurge.body).removed === 0, emptyPurge.body)
+
+  // Restore the fixture so the export/files checks keep their subject.
+  await createTeamDir(stateRoot, team)
+  const restored = await readTeam(stateRoot, team.id)
+  await writeTeam(stateRoot, {
+    ...restored,
+    round: 4,
+    challenge: { title: 'baby_rsa', category: 'crypto', points: 500, remote: 'nc chal.local:9999', attachments: ['rsa.pem'], flagFormat: 'flag\\{[^}]+\\}' },
+    findings: [{ id: 'fd1', from: 'agent-1', category: 'recon', content: '两个附件 rsa.pem + out.txt', round: 1, ts: now - 9 * 60_000 }],
+    flags: [{ id: 'f1', flag: 'flag{w13n3r_4ttack}', submittedBy: 'agent-1', status: 'candidate', ts: now - 60_000 }],
+    findingSeq: 1,
+    flagSeq: 1,
+  })
 
   const noSession = recorder()
   await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH, 'POST', { action: 'approve' }), noSession)
@@ -407,7 +489,7 @@ check('panel actions become user turns',
   routeSource.includes('createUserMessage') && routeSource.includes("source: { kind: 'user' }"),
   'action prompts must be user-authored turns')
 check('authority is validated against durable state',
-  routeSource.includes('team.captainSessionId !== parsed.body.sessionId'), 'captain check missing')
+  routeSource.includes('team.captainSessionId === parsed.body.sessionId'), 'captain check missing')
 const actionSource = await readFile(new URL('../src/dashboard-actions.ts', import.meta.url), 'utf8')
 check('action prompts are composed server-side from a closed action set',
   actionSource.includes('ACTIONS') && !actionSource.includes('record.prompt'),

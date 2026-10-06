@@ -220,7 +220,7 @@ export function nextStepHint(input: DashboardInput): string {
   if (input.phase === 'staged') return 'the plan is staged — approve & run to dispatch the squad'
   if (input.phase === 'halted') return 'team halted — ctf_teams_resume with a reason to continue'
   if (input.phase === 'escalated') return 'review loop hit its ceiling — escalate to the user or amend the contract'
-  if (challenge.solved === true) return 'solved — write WRITEUP.md, then archive the team'
+  if (challenge.solved === true) return 'solved — finish WRITEUP.md, then clean the team up (归档 / 删除) from the panel'
   if (candidates.length > 0) return `verify ${candidates.map((flag) => flag.id).join(', ')} against the platform, then ctf_teams_mark_flag`
   if (input.tasks.length === 0) return 'no task graph yet — create the team plan (recon first, then one task per angle)'
   if (working.length === 0 && pending.length > 0) return `${pending.length} pending task(s) and nobody working — dispatch or reassign`

@@ -33,11 +33,11 @@ import {
 import {
   listWorkspaceFiles,
   parseActionBody,
-  prepareAction,
+  prepareRequest,
   renderTeamReport,
   type PreparedAction,
 } from './dashboard-actions.ts'
-import { readTeam } from './state.ts'
+import { archiveTeamDir, directoryUsage, listArchivedTeamIds, readTeam, removeTeamDir, withTeamLock } from './state.ts'
 import type { TeamState } from './types.ts'
 
 /** The exact path the dashboard tab polls. */
@@ -139,6 +139,14 @@ async function readJsonBody(request: IncomingMessage, maxBytes = ACTION_BODY_LIM
 function statusOf(error: unknown, fallback: number): number {
   const status = (error as { status?: unknown } | undefined)?.status
   return typeof status === 'number' ? status : fallback
+}
+
+/** `12 KB` / `1.4 MB` — what a delete actually freed. */
+function humanBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 /** The session's team: the named one, else the team this session belongs to. */
@@ -250,21 +258,68 @@ export function installDashboardRoute(ctx: Context, options: DashboardRouteOptio
           }
           const stateRoot = join(scoped.path, options.stateDir)
           const team = await findSessionTeam(stateRoot, parsed.body.teamId, parsed.body.sessionId)
-          const prepared = prepareAction(parsed.body, { profiles, team })
-          if (prepared.ok !== true) {
-            sendJson(response, prepared.status, { error: prepared.error })
+          const planned = prepareRequest(parsed.body, { profiles, team })
+          if (planned.ok !== true) {
+            sendJson(response, planned.status, { error: planned.error })
             return
           }
-          const action: PreparedAction = prepared.prepared
+          const isCaptain = team !== undefined && team.captainSessionId === parsed.body.sessionId
+          const participates = team !== undefined && (isCaptain || team.members.some((member) => member.id === parsed.body.sessionId))
+
+          // Housekeeping actions touch durable files and need no model turn.
+          if (planned.request.kind === 'mutation') {
+            const mutation = planned.request.mutation
+            if (mutation.requires === 'captain' && !isCaptain) {
+              sendJson(response, 403, { error: 'only the captain session may remove this team' })
+              return
+            }
+            const teamId = parsed.body.teamId ?? team?.id
+            let freed = 0
+            let removed = 0
+            if (mutation.action === 'delete-team') {
+              if (teamId === undefined) {
+                sendJson(response, 404, { error: 'no team to delete' })
+                return
+              }
+              await withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
+                freed = (await directoryUsage(join(stateRoot, teamId))).bytes
+                if (mutation.mode === 'purge') await removeTeamDir(stateRoot, teamId)
+                else await archiveTeamDir(stateRoot, teamId)
+                removed = 1
+              })
+            } else {
+              await withTeamLock(`team:${stateRoot}:archive`, async () => {
+                const archiveRoot = join(stateRoot, 'archive')
+                for (const archivedId of await listArchivedTeamIds(stateRoot)) {
+                  freed += (await directoryUsage(join(archiveRoot, archivedId))).bytes
+                  await removeTeamDir(archiveRoot, archivedId)
+                  removed += 1
+                }
+              })
+            }
+            sendJson(response, 200, {
+              ok: true,
+              action: mutation.action,
+              label: mutation.label,
+              removed,
+              freedBytes: freed,
+              message: mutation.action === 'purge-archive'
+                ? `已清空归档：移除 ${removed} 个战队，释放 ${humanBytes(freed)}`
+                : mutation.mode === 'purge'
+                  ? `已彻底删除战队，释放 ${humanBytes(freed)}`
+                  : `已把战队移到归档，释放 ${humanBytes(freed)}`,
+            })
+            return
+          }
+
+          const action: PreparedAction = planned.request.prepared
           // Authority is enforced against durable state, never the caller's claim.
           if (action.requires === 'captain') {
-            if (team === undefined || team.captainSessionId !== parsed.body.sessionId) {
+            if (!isCaptain) {
               sendJson(response, 403, { error: 'only the captain session may perform this action' })
               return
             }
           } else if (action.requires === 'participant') {
-            const participates = team !== undefined && (team.captainSessionId === parsed.body.sessionId
-              || team.members.some((member) => member.id === parsed.body.sessionId))
             if (!participates) {
               sendJson(response, 403, { error: 'this session does not participate in the team' })
               return

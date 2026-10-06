@@ -65,6 +65,10 @@ export interface DashboardTeamSnapshot {
     role: 'captain' | 'member' | 'bystander';
     /** True for a team read from `archive/`: its history is final. */
     archived: boolean;
+    /** Files under the team directory (what a delete would remove). */
+    fileCount: number;
+    /** Bytes under the team directory (what a delete would free). */
+    diskBytes: number;
     phase: string;
     halted: boolean;
     escalated: boolean;

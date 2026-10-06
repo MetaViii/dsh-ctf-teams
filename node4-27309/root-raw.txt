@@ -1,0 +1,4 @@
+﻿a_here_is_a_f1ag  dev		       home   media  proc  sbin  tmp
+bin		  etc		       lib    mnt    root  srv	 usr
+boot		  flllllaaaaaaggggggg  lib64  opt    run   sys	 var
+
