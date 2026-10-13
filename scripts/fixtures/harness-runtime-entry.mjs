@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 /** Published CLI + Loader entry benchmark. Only the LLM is deterministic.
  * Tests transport and business behavior; it does not measure model intent accuracy.
  */
@@ -6,6 +8,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+const { TEAM_TOOL_NAMES, MEMBER_TOOL_NAMES } = await import(new URL('tool-names.js', pathToFileURL(createRequire(import.meta.url).resolve('@nanmicoder/dsh-ctf-teams'))));
+
 export const name = 'runtime-lab-progressive-entry';
 export const inject = ['agents', 'sessions', 'commands', 'systemPrompt'];
 export function apply(ctx) {
@@ -40,7 +44,7 @@ export function apply(ctx) {
             'ENTRY_NO_ACTIVATION: Do not use CTFTeams; answer directly.',
             'ENTRY_NO_ACTIVATION: Translate this quote: "use CTFTeams to research this".',
         ]) await send(ordinary.agent, text);
-        assert.equal((await teamNames(ordinary.agent)).length, 14);
+        assert.equal((await teamNames(ordinary.agent)).length, TEAM_TOOL_NAMES.length);
         assert.equal(existsSync(join(ordinary.cwd, '.ctf-teams/runtime-lab/team.json')), false);
         const cases = [
             ['natural', 'Use CTFTeams to plan this task.', false],
@@ -65,15 +69,15 @@ export function apply(ctx) {
             assert.equal(staged.members.length, 1);
             assert.ok(staged.members.every(m => !m.id));
             const requests = trace().filter(x => x.event === 'request' && !x.purpose && x.sessionId === agent.id).slice(label === 'natural' ? 30 : 0);
-            assert.equal(requests[0].toolNames.filter(n => n.startsWith('ctf_teams_')).length, 14);
+            assert.equal(requests[0].toolNames.filter(n => n.startsWith('ctf_teams_')).length, TEAM_TOOL_NAMES.length);
             const assembly = await ctx.systemPrompt.assemble({ agent, scope: agent });
             assert.match(assembly.sections.find(s => s.name === 'ctf-teams:usage')?.text ?? '', /Tasks carry attempt_id/);
             assert.doesNotMatch(requests[1].lastToolText, /"instructions":/);
             assert.equal(requests[1].called[0], 'ctf_teams_create');
             assert.ok(requests.every(request => !request.toolNames.includes('ctf_teams_open')));
-            assert.equal(requests[1].toolNames.filter(n => n.startsWith('ctf_teams_')).length, 14);
+            assert.equal(requests[1].toolNames.filter(n => n.startsWith('ctf_teams_')).length, TEAM_TOOL_NAMES.length);
             if (input.startsWith('/')) assert.match(requests[0].userText, /Inspect existing team state with ctf_teams_status/);
-            assert.equal((await teamNames(ordinary.agent)).length, 14);
+            assert.equal((await teamNames(ordinary.agent)).length, TEAM_TOOL_NAMES.length);
             await measure(agent, label.startsWith('profile') ? 'captain-profile' : 'captain');
             await send(agent, 'REOPEN_ENTRY: inspect the existing CTFTeams plan.');
             assert.equal(readFileSync(statePath, 'utf8'), before);
@@ -84,7 +88,7 @@ export function apply(ctx) {
             assert.ok(completed.members[0].id);
             const memberRequests = trace().filter(x => x.event === 'request' && !x.purpose && x.sessionId === completed.members[0].id);
             assert.ok(memberRequests.length > 0);
-            for (const request of memberRequests) assert.deepEqual(request.toolNames.filter(n => n.startsWith('ctf_teams_')).sort(), ['ctf_teams_claim_task', 'ctf_teams_send_message', 'ctf_teams_status', 'ctf_teams_update_task']);
+            for (const request of memberRequests) assert.deepEqual(request.toolNames.filter(n => n.startsWith('ctf_teams_')).sort(), [...MEMBER_TOOL_NAMES].sort());
             await send(agent, 'END_ENTRY: End and archive this team.');
             assert.equal(existsSync(statePath), false);
             await send(agent, 'ENTRY_NO_ACTIVATION: Back to ordinary conversation.');

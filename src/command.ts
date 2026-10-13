@@ -109,7 +109,7 @@ export function buildActivationDirective(
   if (autoApprove) {
     lines.push(
       'Only when no current team exists, call ctf_teams_create with approval="automatic" — the user has asked to be left out of the approval step, so the plan you submit IS the plan that runs. Do not stage it, do not ask for review, and do not wait for a confirmation turn.',
-      'Build the complete roster and DAG in that one call, then immediately dispatch: work through ready tasks and member reports until a flag is verified and the writeup exists. Never end the solve while open tasks or live lanes remain.',
+      'For an inline plan, build the roster and DAG in one call (every task requires id and subject). For a configured profile, create its roster then add create_task rows. Dispatch ready work and handle reports until a flag is verified and the writeup exists. Never end the solve while open tasks or live lanes remain.',
     )
   } else {
     lines.push(
@@ -118,9 +118,9 @@ export function buildActivationDirective(
   }
   if (profile === undefined) {
     lines.push(
-      'No profile was named: the configured default profile (the built-in ctf-teams squad) applies automatically — do not pass plan={members,tasks} for the roster it already supplies.',
+      'For a one-step decode or attachment challenge, use create(mode="solo") then set_challenge, solve directly, submit_flag, check the platform, mark_flag and archive. Solo creates no members or task graph. Otherwise the configured default squad applies unless you supply a custom inline plan; do not duplicate its roster.',
       autoApprove
-        ? 'Derive the smallest useful task graph from the goal in the same call as create: one recon/triage task first, then parallel per-domain tasks for what recon finds, then flag verification and the writeup.'
+        ? 'In squad mode, derive the smallest useful graph with create_task after profile creation: recon/triage, parallel attack angles, then flag verification and the writeup. A custom inline plan can submit its whole roster and graph atomically.'
         : 'Derive the smallest useful task graph from the goal while the team is staged: one recon/triage task first, then parallel per-domain tasks for what recon finds, then flag verification and the writeup.',
     )
   } else {
@@ -129,7 +129,7 @@ export function buildActivationDirective(
       lines.push(
         'This profile supplies the roster and guardrails. After create, do not recreate members.',
         autoApprove
-          ? 'Derive the smallest useful task graph from the goal in the same call as create; do not ask the user whether to split, merge, serialize, or parallelize.'
+          ? 'Derive the smallest useful task graph from the goal with create_task after profile creation; do not ask the user whether to split, merge, serialize, or parallelize.'
           : 'Derive the smallest useful task graph from the goal while the team is staged; do not ask the user whether to split, merge, serialize, or parallelize.',
         'Independent supplemental work must become separate ready tasks so idle members can run in parallel. Add dependencies only for genuine prerequisites and later synthesis.',
       )

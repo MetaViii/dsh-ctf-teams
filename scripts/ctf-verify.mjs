@@ -103,10 +103,9 @@ check('broken regex falls back to the default shape', flagMatchesFormat('flag{x}
   const { candidate, duplicate } = appendFlagCandidate(team, { flag: 'flag{v1ct0ry}', submittedBy: 'crypto', evidence: 'decrypted rsa output' })
   check('first candidate is appended as candidate', candidate.status === 'candidate' && !duplicate)
   const again = appendFlagCandidate(team, { flag: ' FLAG{V1CT0RY} ', submittedBy: 'web' })
-  check('resubmissions are detected case-insensitively', again.duplicate && again.candidate.id === candidate.id)
-  check('bad-format submissions are rejected', (() => {
-    try { appendFlagCandidate(team, { flag: 'garbage', submittedBy: 'web' }); return false } catch (error) { return String(error).includes('challenge format') }
-  })())
+  check('case-distinct flags remain separate candidates', !again.duplicate && again.candidate.id !== candidate.id)
+  check('exact resubmissions reuse the stable id', appendFlagCandidate(team, { flag: 'flag{v1ct0ry}', submittedBy: 'web' }).duplicate)
+  check('bad-format submissions are recorded with a warning', !!appendFlagCandidate(team, { flag: 'CTF2{original}', submittedBy: 'web' }).candidate.formatWarning)
   const reviewed = reviewFlagCandidate(team, candidate.id, 'verified', { by: 'captain', note: 'platform accepted' })
   check('verified flag marks the challenge solved', reviewed.solved && team.challenge.solved === true && team.challenge.solvedBy === 'crypto')
   check('rejected verdict keeps hunting', (() => {

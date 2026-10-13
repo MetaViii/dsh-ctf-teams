@@ -212,8 +212,10 @@ export interface ChallengeInfo {
     attachments?: string[];
     /** Remote endpoint (URL or `host:port`) the challenge runs on. */
     remote?: string;
-    /** Regex source a flag must match; defaults to the standard `flag{...}` shape. */
-    flagFormat?: string;
+    /** Advisory regex source(s); null delegates format entirely to the platform. */
+    flagFormat?: string | string[] | null;
+    /** Platform environment to release after the solve; never destroyed by the plugin. */
+    environmentId?: string;
     /** Set once a flag candidate is marked verified. */
     solved?: boolean;
     solvedAt?: number;
@@ -236,6 +238,12 @@ export interface FlagCandidate {
     note?: string;
     /** Who reviewed it (`captain`), when reviewed. */
     reviewedBy?: string;
+    reviewedAt?: number;
+    /** Exact string accepted by the platform, kept separate from the submitted claim. */
+    verifiedFlag?: string;
+    formatWarning?: string;
+    /** Sequence of the latest review, so verdicts participate in round sync. */
+    updateSeq?: number;
     ts: number;
 }
 /** One shared progress finding on the team-wide findings board (append-only). */
@@ -247,6 +255,18 @@ export interface TeamFinding {
     /** Free tag, e.g. `recon`, `web`, `crypto`, `dead-end`. */
     category?: string;
     content: string;
+    evidenceKind?: 'raw_output' | 'inference' | 'guess';
+    confidence?: 'low' | 'medium' | 'high';
+    /** Optional path/command/raw output needed to reproduce the claim. */
+    evidence?: string;
+    /** Captain-owned verification history; reports start unverified. */
+    verifications?: {
+        by: string;
+        method: string;
+        result: 'confirmed' | 'refuted' | 'inconclusive';
+        note?: string;
+        ts: number;
+    }[];
     /** Team round the finding belongs to; rounds advance with each board beat. */
     round: number;
     ts: number;
@@ -281,11 +301,15 @@ export interface TeamState {
     /** Session id of the captain agent that owns this team. */
     captainSessionId: string;
     createdAt: number;
+    /** Immutable board generation: same-name recreated teams must not accept stale refs. */
+    boardId?: string;
     /** Teammates only; the captain is implicit (the owning session). */
     members: TeamMember[];
     tasks: TeamTask[];
     /** Monotonic task id counter. */
     taskSeq: number;
+    /** Solo keeps the same durable board without spawning members or tasks. */
+    mode?: 'solo' | 'squad';
     /**
      * Two-phase execution lifecycle. Missing means `running` for durable
      * compatibility with teams created before staging existed.

@@ -43,6 +43,7 @@ export interface DashboardMember {
 /** Everything the dashboard needs; derived from team state plus live activity. */
 export interface DashboardInput {
     teamName: string;
+    mode?: 'solo' | 'squad';
     description?: string;
     /** `staged` | `running` | `halted` | `escalated`. */
     phase: string;

@@ -1,3 +1,4 @@
+import { MEMBER_TOOL_NAMES } from '../lib/tool-names.js';
 /** Shared built-product scenarios for registry releases and explicitly identified source checkouts. */
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, symlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -5,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const json = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 
-export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability'];
+export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability', 'ctf2-regression'];
 
 /** Run the same fixture and persisted-state assertions against an already prepared runtime. */
 export async function runRuntimeScenarios({ report, runtime, command, environment, selectedScenarios = runtimeScenarios, linkWorkspacePackages = false }) {
@@ -15,11 +16,11 @@ for (const scenario of selectedScenarios) {
     mkdirSync(profile, { recursive: true });
     mkdirSync(workspace, { recursive: true });
     mkdirSync(join(profile, 'node_modules/@nanmicoder'), { recursive: true });
-    if (linkWorkspacePackages) symlinkSync(join(runtime, 'node_modules/@deepseek-ai'), join(profile, 'node_modules/@deepseek-ai'), 'dir');
-    symlinkSync(join(runtime, 'node_modules/@nanmicoder/dsh-ctf-teams'), join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), 'dir');
+    if (linkWorkspacePackages) symlinkSync(join(runtime, 'node_modules/@deepseek-ai'), join(profile, 'node_modules/@deepseek-ai'), process.platform === 'win32' ? 'junction' : 'dir');
+    symlinkSync(join(runtime, 'node_modules/@nanmicoder/dsh-ctf-teams'), join(profile, 'node_modules/@nanmicoder/dsh-ctf-teams'), process.platform === 'win32' ? 'junction' : 'dir');
     json(join(profile, 'package.json'), { name: 'runtime-test-profile', version: '0.0.0', private: true, type: 'module', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@nanmicoder/dsh-ctf-teams'], patchReload: 'startup' } } });
     copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-llm.mjs'), join(profile, 'fixture-llm.mjs'));
-    writeFileSync(join(profile, 'cordis.patch.yml'), `- id: llm-deepseek\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: agent-default-model\n  config:\n    provider: runtime-lab\n    model: fixture-model\n- insert:\n    - id: runtime-lab-fixture\n      name: './fixture-llm.mjs'\n`);
+    writeFileSync(join(profile, 'cordis.patch.yml'), `- id: llm-deepseek\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: agent-default-model\n  config:\n    provider: runtime-lab\n    model: fixture-model\n- id: ctf-teams\n  config:\n    defaultProfile: ""\n    references:\n      autoSync: off\n- insert:\n    - id: runtime-lab-fixture\n      name: './fixture-llm.mjs'\n`);
     if (scenario === 'lifecycle')
         // Regression for #163/#164: rename the delegation tool so no global
         // tool named `subagent` exists, mirroring compositions where the
@@ -29,7 +30,7 @@ for (const scenario of selectedScenarios) {
         // full dsh-base configuration and change only the tool name.
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: tool-subagent\n  name: \'@deepseek-ai/dsh-tool-subagent\'\n  config:\n    provider: spawn\n    toolName: subagent_legacy\n    backgroundMode: continuable\n');
     if (scenario === 'fallback')
-        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: ctf-teams\n  config:\n    stateDir: .ctf-teams\n    memberProvider: spawn\n    fallback:\n      provider: runtime-lab\n      model: fixture-fallback\n');
+        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: ctf-teams\n  config:\n    stateDir: .ctf-teams\n    defaultProfile: ""\n    memberProvider: spawn\n    fallback:\n      provider: runtime-lab\n      model: fixture-fallback\n');
     if (scenario === 'captain-idle-wakeup') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-idle.mjs'), join(profile, 'fixture-idle.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: headless-startup\n  disabled: true\n- id: headless-runner\n  disabled: true\n- insert:\n    - id: runtime-lab-idle-captain\n      name: ./fixture-idle.mjs\n');
@@ -42,6 +43,7 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: ctf-teams
   config:
+    defaultProfile: ""
     profiles:
       demo-profile:
         description: Entry benchmark roster
@@ -88,6 +90,8 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: ctf-teams
   config:
+    defaultProfile: ""
+    autoApprove: false
     profiles:
       north:
         protocol: Investigate an existing codebase and design a goal-specific task DAG.
@@ -110,6 +114,10 @@ for (const scenario of selectedScenarios) {
       name: ./fixture-protocol.mjs
 `);
     }
+    if (scenario === 'ctf2-regression') {
+        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-ctf2.mjs'), join(profile, 'fixture-ctf2.mjs'));
+        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: runtime-lab-fixture\n  disabled: true\n- id: headless-startup\n  disabled: true\n- id: headless-runner\n  disabled: true\n- id: ctf-teams\n  config:\n    references:\n      autoSync: off\n- insert:\n    - id: runtime-lab-ctf2-regression\n      name: ./fixture-ctf2.mjs\n');
+    }
     if (scenario === 'stability') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-stability.mjs'), join(profile, 'fixture-stability.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + `- id: runtime-lab-fixture
@@ -120,6 +128,7 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: ctf-teams
   config:
+    defaultProfile: ""
     memberMaxDepth: 1
 - insert:
     - id: runtime-lab-stability
@@ -129,6 +138,11 @@ for (const scenario of selectedScenarios) {
     const tracePath = join(report, scenario, 'trace.jsonl');
     const result = await command([process.execPath, join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'headless', 'Run the authorized deterministic CTFTeams fixture immediately.'], workspace, environment({ DSH_HOME: home, DSH_PERMISSION_MODE: 'danger-full-access', DSH_TELEMETRY_DISABLED: '1', LAB_TRACE: tracePath, LAB_TEAMS: '1', LAB_SCENARIO: scenario }), scenario, 90000);
     const trace = existsSync(tracePath) ? readFileSync(tracePath, 'utf8').trim().split('\n').filter(Boolean).map(s => JSON.parse(s)) : [];
+    if (scenario === 'ctf2-regression') {
+        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('CTF2_REGRESSION_PASSED'), durableEvidence: trace.some(x => x.event === 'ctf2-regression-passed') };
+        runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
+        continue;
+    }
     if (scenario === 'stability') {
         const checks = ['lazy-start', 'running-plan-correction', 'steering', 'read-receipt-continuation', 'reassign', 'archive', 'batch-plan', 'terminal-evidence', 'report-retry', 'settlement-dedup'];
         const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('STABILITY_OK'), ...Object.fromEntries(checks.map(check => [check, trace.some(x => x.event === `stability-${check}-passed`)])) };
@@ -156,7 +170,7 @@ for (const scenario of selectedScenarios) {
         const evidence = trace.find(x => x.event === 'web-approval-passed');
         const invalid = trace.find(x => x.event === 'web-http-invalid-team-rejected'), repeated = trace.find(x => x.event === 'web-http-repeat-rejected');
         const stable = trace.find(x => x.event === 'web-headers-stable');
-        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('WEB_APPROVAL_OK'), driverCompleted: Boolean(evidence), stagedBeforeApproval: Boolean(staged?.status === 'idle' && approved?.status === 200 && staged.order < approved.order), independentApprovalWake: Boolean(approvalWake && yielded?.status === 'idle' && released && approvalWake.order < yielded.order && yielded.order < released.order), reportWakeAfterYield: Boolean(released && reportWake && released.order < reportWake.order && reportWake.sessionId === staged?.sessionId), noPollingOrDuplicateApproval: !trace.some(x => x.event === 'web-model-tool-call' && ['ctf_teams_approve', 'ctf_teams_status'].includes(x.name)), oneUserMessageAndHttpApproval: trace.filter(x => x.event === 'web-driver-user-message').length === 1 && trace.filter(x => x.event === 'web-http-approval-start').length === 1, invalidTeamRejected: Boolean(invalid?.status === 404 && approved && invalid.order < approved.order), repeatApprovalRejected: Boolean(repeated?.status === 409 && yielded && released && yielded.order < repeated.order && repeated.order < released.order), stableCaptainHeaders: Boolean(stable?.systemSha256 && stable?.toolsSha256), memberFourTools: stable?.memberTeamToolCount === 4 && stable.memberRequests > 0, taskCompleted: evidence?.taskStatus === 'completed' };
+        const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('WEB_APPROVAL_OK'), driverCompleted: Boolean(evidence), stagedBeforeApproval: Boolean(staged?.status === 'idle' && approved?.status === 200 && staged.order < approved.order), independentApprovalWake: Boolean(approvalWake && yielded?.status === 'idle' && released && approvalWake.order < yielded.order && yielded.order < released.order), reportWakeAfterYield: Boolean(released && reportWake && released.order < reportWake.order && reportWake.sessionId === staged?.sessionId), singleCaptainApprovalAndNoPolling: trace.filter(x => x.event === 'web-model-tool-call' && x.name === 'ctf_teams_approve').length === 1 && !trace.some(x => x.event === 'web-model-tool-call' && x.name === 'ctf_teams_status'), oneUserMessageAndHttpApproval: trace.filter(x => x.event === 'web-driver-user-message').length === 1 && trace.filter(x => x.event === 'web-http-approval-start').length === 1, invalidTeamRejected: Boolean(invalid?.status === 404 && approved && invalid.order < approved.order), repeatApprovalRejected: Boolean(repeated?.status === 409 && yielded && released && yielded.order < repeated.order && repeated.order < released.order), stableCaptainHeaders: Boolean(stable?.systemSha256 && stable?.toolsSha256), memberToolContract: stable?.memberTeamToolCount === MEMBER_TOOL_NAMES.length && JSON.stringify(stable.memberTeamToolNames) === JSON.stringify([...MEMBER_TOOL_NAMES].sort()) && stable.memberRequests > 0, taskCompleted: evidence?.taskStatus === 'completed' };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, evidence, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
         continue;
     }

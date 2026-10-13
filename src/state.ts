@@ -228,6 +228,7 @@ export function invalidateTaskAttempt(
  * @param state - the initial team record.
  */
 export async function createTeamDir(stateRoot: string, state: TeamState): Promise<void> {
+  state.boardId ??= randomUUID()
   const dir = join(stateRoot, state.id)
   await mkdir(join(dir, 'inbox'), { recursive: true })
   await atomicWriteText(join(dir, 'team.json'), JSON.stringify(state, null, 2))
@@ -843,12 +844,14 @@ function isTeamState(value: unknown, expectedId: string): value is TeamState {
     && typeof value['captainSessionId'] === 'string'
     && value['captainSessionId'] !== ''
     && isFiniteNumber(value['createdAt'])
+    && isOptionalString(value['boardId'])
     && Array.isArray(value['members'])
     && value['members'].every(isTeamMember)
     && Array.isArray(value['tasks'])
     && value['tasks'].every(isTeamTask)
     && Number.isSafeInteger(value['taskSeq'])
     && (value['taskSeq'] as number) >= 0
+    && (value['mode'] === undefined || value['mode'] === 'solo' || value['mode'] === 'squad')
     && (value['phase'] === undefined || value['phase'] === 'staged' || value['phase'] === 'running')
     && (value['planReviewState'] === undefined
       || value['planReviewState'] === 'awaiting_review'

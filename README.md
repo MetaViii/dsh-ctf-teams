@@ -17,7 +17,7 @@ A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-t
 - **A selectable agent mode** — the bundle also declares the `ctf-teams` Harness **agent preset** (`CTF 团队模式`), so the squad is a mode you pick in the app (session mode picker / Settings → General default preset) rather than a tool set you have to remember. The mode composes a full agent plane (shell, filesystem, skills, delegation, plan mode, compaction) plus a CTF captain persona; the `ctf_teams_*` tools come from the profile-wide host row and stay callable in every mode.
 - **`ctf-teams` team profile** — a built-in, zero-config squad definition: `/ctf-teams <challenge>` dispatches four interchangeable full-stack experts at the challenge and the captain plans the attack graph.
 - **Round-sync protocol** — every meaningful result is published to a shared findings board; members pull their delta with one call, the scheduler attaches new findings to every task assignment and pushes digests to idle members. A round with no new progress costs nothing.
-- **Evidence-gated flags** — candidates are submitted with reproducible evidence, validated against the challenge's flag format, deduplicated, and only the captain records the platform verdict. A verified flag flips the whole team into writeup mode.
+- **Evidence-gated flags** — candidates are submitted with reproducible evidence, retained with advisory format warnings, deduplicated by exact case-sensitive content, and only the captain records the platform verdict. A verified flag flips the whole team into writeup mode.
 - **Shipped knowledge base** — kali toolbox, pwntools, SageMath, Volatility 3, per-domain playbooks (web / pwn / reverse / crypto / forensics / misc), and a fresh-PoC/CVE hunting workflow, readable in-session via `ctf_teams_knowledge`.
 - **Toolchain service** — `ctf_teams_env` probes the machine for every managed tool (pwntools, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions, then installs the missing ones from a curated apt/pip/brew/gem map — argv-by-argv, no shell. Heavy tools (sage, ghidra, pwndbg) report their manual command instead.
 - **Reference library, pre-provisioned** — the small PoC/skill repos (ctf-skills, Awesome-POC) clone automatically when a team is created; `ctf_teams_references` syncs the rest (exphub, 0xMarcio pocindex/cve, trickest/cve, PoC-in-GitHub, cvelistV5) on demand into `<workspace>/.ctf-teams/references/` and hands each agent the absolute paths + `rg` hints, so N-day hunting works offline before any web search.
@@ -181,13 +181,40 @@ The reference manifest ships curated entries — the collections stay on GitHub 
 1. Members publish every real result as a finding (`ctf_teams_report_finding`) — including dead ends, tagged `dead-end`.
 2. `ctf_teams_sync` returns everything a member has not seen yet and advances their cursor; an empty sync means "nobody has new progress — continue or yield".
 3. The scheduler rides along: task assignments carry the newest findings, and idle members with unseen board content get a digest pushed to them. Cursors are durable — nothing is repeated, nothing is lost.
-4. Flags are a board too: `ctf_teams_submit_flag` validates against the challenge flag format and de-duplicates; the captain verifies against the platform and records the verdict with `ctf_teams_mark_flag`. `verified` marks the challenge solved and redirects every agent to the writeup.
+4. Flags are a board too: `ctf_teams_submit_flag` records original strings with advisory format warnings and exact, case-sensitive de-duplication; the captain verifies against the platform and records the verdict with `ctf_teams_mark_flag`. `verified` marks the challenge solved and redirects every agent to the writeup.
 
 ## Tools
 
-Captain-only: `ctf_teams_create`, `ctf_teams_approve`, `ctf_teams_edit_plan`, `ctf_teams_add_member`, `ctf_teams_remove_member`, `ctf_teams_create_task`, `ctf_teams_reassign_task`, `ctf_teams_amend_task`, `ctf_teams_set_challenge`, `ctf_teams_mark_flag`, `ctf_teams_resume`, `ctf_teams_delete`
+Captain-only: `ctf_teams_create`, `ctf_teams_approve`, `ctf_teams_edit_plan`, `ctf_teams_add_member`, `ctf_teams_remove_member`, `ctf_teams_create_task`, `ctf_teams_reassign_task`, `ctf_teams_amend_task`, `ctf_teams_set_challenge`, `ctf_teams_mark_flag`, `ctf_teams_verify_finding`, `ctf_teams_archive_summary`, `ctf_teams_resume`, `ctf_teams_delete`
 
 Shared with members: `ctf_teams_claim_task`, `ctf_teams_update_task`, `ctf_teams_send_message`, `ctf_teams_status`, `ctf_teams_submit_flag`, `ctf_teams_report_finding`, `ctf_teams_sync`, `ctf_teams_knowledge`, `ctf_teams_env`, `ctf_teams_references`
+
+## Evidence, platform flags and solo solves
+
+For a one-step attachment or decoding challenge, use `ctf_teams_create({name:"quick-solve",mode:"solo"})`. This creates a durable board without members, tasks, model sessions or reference downloads. Continue with `set_challenge` → solve directly → `submit_flag` → check the platform → `mark_flag` → `delete`. Squad mode remains the default.
+
+Inline plans require **both** `members` and `tasks` arrays. Each task requires **`id` and `subject`**; each member can include `executionPrompt`. Errors distinguish missing, undeclared and invalid fields and show a compact received structure. For a large or evolving plan, use `create` → `add_member` → `create_task` so errors stay local to one row.
+
+An unprofiled squad create uses the configured default roster. To build a custom roster step by step, start with a minimal inline plan (`members:[{name:"first-worker"}], tasks:[]`), then add the other rows.
+
+```js
+await tools.ctf_teams_set_challenge({
+  flag_format: ["flag\\{[^}]+\\}", "CTF2\\{[^}]+\\}"],
+  environment_id: "platform-environment-id"
+});
+// Alternation works too; null means the platform alone determines the format.
+const candidate = await tools.ctf_teams_submit_flag({flag:"CTF2{EaSyRe}", evidence:"python solve.py; original output"});
+// Only after checking the competition's actual response:
+await tools.ctf_teams_mark_flag({flag_id:candidate.flag_ref, team_id:candidate.team_id, verdict:"verified", note:"platform accepted"});
+```
+
+Format mismatches are recorded with a warning, preserving the candidate's wrapper and case. Exact duplicates reuse their ID; different letter case creates a separate candidate. `flag_ref` includes the board generation, so a recreated same-name team rejects an old reference. Local IDs (`f1`) still work on the current board; `mark_flag({flag:"exact original",…})` also locates by content. `verified_flag` optionally records a different string actually accepted by the platform; both registered and accepted strings appear on the board. Verdict updates reach round sync even after a member has seen the original candidate.
+
+Findings start **unverified**, including legacy reports and high-confidence raw output. `report_finding` accepts `evidence_kind` (`raw_output`, `inference`, `guess`), `confidence` (`low`, `medium`, `high`) and `evidence`. The captain records an independent check with `verify_finding({finding_id,method,result,note})`; `result` is `confirmed`, `refuted` or `inconclusive`. Verification history stays on disk and is published as a new sync beat. The terminal uses `?` / `✓` / `✗`; the Web view and exports show evidence and verification details.
+
+`create({replaceExisting:true,…})` explicitly archives your prior solve after validating the new draft. `delete` returns `archive_path`; both actions remind you to check a recorded environment ID and release its platform slot. The plugin does not control platform containers. `archive_summary({team_id:"quick-solve",archived:true})` retrieves all findings, checks, tasks and platform verdicts as writeup source material.
+
+Board storage and HTTP/model text use UTF-8. Windows persistence and Chinese dashboard rendering have regression coverage. If an external command produces GBK bytes, configure that command/session for UTF-8 (for Python, `PYTHONUTF8=1`); the board cannot recover text already corrupted before it was reported.
 
 ## Configuration
 

@@ -20,6 +20,7 @@ import { join, relative, sep } from 'node:path'
 import type { TeamState } from './types.ts'
 import type { DashboardTeamSnapshot } from './dashboard-snapshot.ts'
 import { WRITEUP_PATH, WRITEUP_SPEC } from './writeup.ts'
+import { flagFormatLabel, formatFinding, formatFlag } from './findings.ts'
 
 /** Actions the panel may request. */
 export type DashboardActionName =
@@ -210,8 +211,8 @@ export function prepareAction(
               '用户在 CTF 解题面板点击了「开始解题」，题目信息如下：',
               ...facts,
               autoApprove
-                ? '按 CTFTeams 协议执行：先用 ctf_teams_set_challenge 记录以上题目信息，再用 ctf_teams_create(approval="automatic") 在同一次调用里提交完整阵容与任务 DAG 并立刻开跑——用户已经明确不要人工批准这一步，不要提交 staged 计划、不要停下来等确认。随后按调度派发就绪任务，盯到 flag 验证通过且 writeup 写完为止；中途不要把控制权交回给用户。'
-                : '按 CTFTeams 协议执行：先用 ctf_teams_set_challenge 记录以上题目信息，再用 ctf_teams_create(approval="required") 提交完整的 staged 计划（阵容 + 任务 DAG），然后停下等我在面板上批准。不要在本轮批准或启动。',
+                ? '按 CTFTeams 协议执行：简单的一步解码/附件题用 ctf_teams_create(mode="solo",approval="automatic")，直接解题并通过 set_challenge、submit_flag、mark_flag 留存证据。需要并行角度时，先用 ctf_teams_create(approval="automatic") 提交阵容与 DAG，再用 ctf_teams_set_challenge 记录以上信息——用户已经明确不要人工批准这一步，不要提交 staged 计划、不要停下来等确认。按调度派发就绪任务，推进到平台验证 flag 且 writeup 写完。'
+                : '按 CTFTeams 协议执行：先用 ctf_teams_create(approval="required") 提交 staged 计划（阵容 + 任务 DAG），再用 ctf_teams_set_challenge 记录以上信息，然后停下等我在面板上批准。不要在本轮批准或启动。',
             ]),
           ].join('\n'),
         },
@@ -453,7 +454,8 @@ export function renderTeamReport(snapshot: DashboardTeamSnapshot, generatedAt: n
     `- 分值: ${challenge.points ?? '(未记录)'}`,
     `- 远程: ${challenge.remote ?? '(无)'}`,
     `- 附件: ${challenge.attachments === undefined || challenge.attachments.length === 0 ? '(无)' : challenge.attachments.join(', ')}`,
-    `- flag 格式: ${challenge.flagFormat ?? '(默认)'}`,
+    `- flag 格式: ${flagFormatLabel(challenge)}`,
+    ...challenge.environmentId ? [`- 环境: ${challenge.environmentId}（请在平台检查是否需要释放）`] : [],
     '',
     `## 成员 (${snapshot.members.length})`,
     '',
@@ -471,13 +473,13 @@ export function renderTeamReport(snapshot: DashboardTeamSnapshot, generatedAt: n
     '',
     ...snapshot.findings.length === 0
       ? ['(没有上报任何进展)']
-      : snapshot.findings.map((finding) => `- **r${finding.round} ${finding.id}** [${finding.from}${finding.category === undefined ? '' : `/${finding.category}`}] ${finding.content}`),
+      : snapshot.findings.flatMap((finding) => [`- **r${finding.round}** ${formatFinding(finding)}`, ...(finding.verifications ?? []).map(check => `  - ${check.result}: ${check.method}; ${check.note ?? ''}`)]),
     '',
     `## Flag 看板 (${snapshot.counts.verified}/${snapshot.counts.flags} 已验证)`,
     '',
     ...snapshot.flags.length === 0
       ? ['(没有候选 flag)']
-      : snapshot.flags.map((flag) => `- \`${flag.id}\` ${flag.status === 'verified' ? '✓' : flag.status === 'rejected' ? '✗' : '?'} \`${flag.flag}\` — ${flag.submittedBy}${flag.note === undefined ? '' : ` (${flag.note})`}`),
+      : snapshot.flags.map((flag) => `- ${formatFlag(flag)}`),
     '',
     '> 本报告是队伍内部的状态快照（题目、成员、任务、findings、flag 看板）。对外发布的 writeup 见工作区的 `WRITEUP.md`。',
     '',

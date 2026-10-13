@@ -16,7 +16,7 @@ let callSequence = 0;
 const hash = value => createHash('sha256').update(value).digest('hex');
 function record(value) { appendFileSync(process.env.LAB_TRACE, JSON.stringify(value) + '\n'); }
 function assertProtocol(system) {
-    for (const rule of [/the user's goal as description/, /attempt_id/, /never approve in that planning turn/i, /Never approve your own implementation/, /depend on a failed task/, /Resume only on a later explicit user request/]) assert.match(system ?? '', rule);
+    for (const rule of [/with the challenge as description/, /attempt_id/, /never approve in that planning turn/i, /Never approve your own implementation/, /depend on a failed task/, /Resume only on a later explicit user request/]) assert.match(system ?? '', rule);
 }
 function sessionEvents(session) {
     // Alpha.2 exposes the immutable events property; later supported hosts

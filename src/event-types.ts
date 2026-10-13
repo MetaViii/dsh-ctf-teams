@@ -108,7 +108,7 @@ export interface CTFTeamsChallengeUpdatedData {
   /** Challenge title/category after the update. */
   readonly title?: string
   readonly category?: string
-  readonly flagFormat?: string
+  readonly flagFormat?: string | string[] | null
 }
 
 /** Records one finding appended to the round-sync board. */

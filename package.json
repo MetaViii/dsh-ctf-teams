@@ -86,7 +86,7 @@
     "update:skills": "node scripts/update-skills.mjs",
     "test:skills-updater": "node --test scripts/update-skills.test.mjs",
     "verify:skill": "node scripts/sync-skill.mjs --check",
-    "verify": "node scripts/verify.mjs && node scripts/ctf-verify.mjs && node scripts/fallback-tdd.mjs && node scripts/member-failure-tdd.mjs && pnpm verify:quality-gates && node scripts/lifecycle-verify.mjs && node scripts/stress-verify.mjs && node --test scripts/issue-159.test.mjs && pnpm verify:client && pnpm verify:dashboard && pnpm verify:release && pnpm verify:readme && pnpm verify:skill && pnpm verify:harness-contract && pnpm verify:compatibility && pnpm verify:capabilities && pnpm verify:member-spawn-recovery && pnpm test:git-install && pnpm verify:source-runner && pnpm verify:git-artifact",
+    "verify": "node scripts/verify.mjs && pnpm verify:ctf && node scripts/fallback-tdd.mjs && node scripts/member-failure-tdd.mjs && pnpm verify:quality-gates && node scripts/lifecycle-verify.mjs && node scripts/stress-verify.mjs && node --test scripts/issue-159.test.mjs && pnpm verify:client && pnpm verify:dashboard && pnpm verify:release && pnpm verify:readme && pnpm verify:skill && pnpm verify:harness-contract && pnpm verify:compatibility && pnpm verify:capabilities && pnpm verify:member-spawn-recovery && pnpm test:git-install && pnpm verify:source-runner && pnpm verify:git-artifact",
     "prepublishOnly": "pnpm build && pnpm verify",
     "verify:quality-gates": "node scripts/quality-gates-tdd.mjs && node --test scripts/quality-gates-repair-scope.test.mjs scripts/quality-gates-amend.test.mjs",
     "verify:release": "node --test scripts/release-metadata.test.mjs",
@@ -101,7 +101,8 @@
     "verify:git-artifact": "node scripts/git-artifacts.mjs",
     "verify:client": "node scripts/build-client.mjs --check && node scripts/client-verify.mjs",
     "verify:dashboard": "node scripts/dashboard-route-verify.mjs",
-    "verify:ctf": "node scripts/ctf-verify.mjs"
+    "verify:ctf": "node scripts/ctf-verify.mjs && node --test scripts/ctf2-regression.test.mjs",
+    "verify:ctf:harness": "node scripts/ctf2-harness-smoke.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

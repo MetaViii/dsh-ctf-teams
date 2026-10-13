@@ -29,6 +29,14 @@ export declare function normalizeFlag(raw: string): string;
 export declare function flagFormatRegex(challenge: ChallengeInfo | undefined): RegExp;
 /** True when the flag string matches the challenge's configured format. */
 export declare function flagMatchesFormat(flag: string, challenge: ChallengeInfo | undefined): boolean;
+/** Human-readable format hint shared by the tools and dashboards. */
+export declare function flagFormatLabel(challenge: ChallengeInfo | undefined): string;
+/** Infer only the wrapper; never change any bytes of a candidate. */
+export declare function flagWrapper(flag: string): string | undefined;
+/** A claim is unverified even if its author supplied raw output or high confidence. */
+export declare function findingLabel(finding: TeamFinding): string;
+export declare function formatFinding(finding: TeamFinding): string;
+export declare function formatFlag(flag: FlagCandidate): string;
 /** The team's challenge info with its default flag format filled in. */
 export declare function challengeOf(team: TeamState): ChallengeInfo;
 /** Read one participant's durable cursor; zero means "seen nothing yet". */
@@ -50,9 +58,14 @@ export declare function appendFinding(team: TeamState, input: {
     from: string;
     category?: string;
     content: string;
+    evidenceKind?: TeamFinding['evidenceKind'];
+    confidence?: TeamFinding['confidence'];
+    evidence?: string;
 }): TeamFinding;
 /** Find an existing candidate that already carries this exact flag string. */
 export declare function findFlagCandidate(team: TeamState, flag: string): FlagCandidate | undefined;
+/** Stable across reloads and different from a recreated same-name team's reference. */
+export declare function flagReference(team: TeamState, candidate: FlagCandidate): string;
 /** Append one candidate flag. Duplicates return the existing candidate. Caller must persist. */
 export declare function appendFlagCandidate(team: TeamState, input: {
     flag: string;
@@ -66,10 +79,19 @@ export declare function appendFlagCandidate(team: TeamState, input: {
 export declare function reviewFlagCandidate(team: TeamState, flagId: string, verdict: Exclude<FlagStatus, 'candidate'>, input: {
     by: string;
     note?: string;
+    flag?: string;
+    verifiedFlag?: string;
 }): {
     candidate: FlagCandidate;
     solved: boolean;
 };
+/** Record a captain's reproducibility check and publish a new audit beat. */
+export declare function verifyFinding(team: TeamState, findingId: string, input: {
+    by: string;
+    method: string;
+    result: 'confirmed' | 'refuted' | 'inconclusive';
+    note?: string;
+}): TeamFinding;
 /** Captain-owned challenge metadata update; merges into existing info. */
 export declare function updateChallenge(team: TeamState, patch: ChallengeInfo): ChallengeInfo;
 /** Everything one participant has not seen yet, oldest first. */

@@ -1519,7 +1519,7 @@ try {
       && (await bridgeTask())?.status === 'failed')
   await call('ctf_teams_delete', {})
 
-  const batchPlan = { members: [{ name: 'worker' }, { name: 'verifier' }], tasks: [
+  const batchPlan = { members: [{ name: 'worker', executionPrompt: 'Inspect real bytes; preserve case' }, { name: 'verifier' }], tasks: [
     { id: 'verify', subject: 'Validate output', assignee: 'verifier', dependencies: ['work'] },
     { id: 'work', subject: 'Actual task', description: 'FULL_CONTRACT_BODY', assignee: 'worker' },
   ] }
@@ -1529,12 +1529,20 @@ try {
   check('invalid batch plan is rejected without any state or session side effect', badPlanRejected && children.length === beforeBadPlan && await readTeam(stateRoot, 'atomic-invalid') === undefined)
   const batch = await call('ctf_teams_create', { name: 'Batch Plan', description: 'One call builds roster and DAG', plan: batchPlan, approval: 'required' })
   const stagedBatch = await readTeam(stateRoot, 'batch-plan')
+  check('inline member executionPrompt survives atomic create', stagedBatch.members[0].executionPrompt === 'Inspect real bytes; preserve case')
+  const taskSchema = definitions.get('ctf_teams_create').parameters.properties.plan.properties.tasks.items
+  check('published JSON Schema declares required task ids and subjects', taskSchema.required.includes('id') && taskSchema.required.includes('subject'))
   check('one atomic call creates the full roster and resolves forward dependency references', batch.members.length === 2 && batch.tasks.length === 2 && stagedBatch.members.every(m => m.id === '') && stagedBatch.tasks[1].dependencies[0] === stagedBatch.tasks[0].id)
   const deliveryBeforeWork = await call('ctf_teams_status', {})
   check('ordinary pending work cannot be reported deliverable', !deliveryBeforeWork.deliverable && !deliveryBeforeWork.delivery.ok)
   await call('ctf_teams_approve', { confirmation: 'Run the accepted batch' })
   const workingBatch = await readTeam(stateRoot, 'batch-plan')
   const batchWorker = liveAgents.get(workingBatch.members.find(m => m.name === 'worker').id)
+  const reported = await call('ctf_teams_report_finding', { content: 'decoded bytes', evidence_kind: 'inference', confidence: 'high', evidence: 'python solve.py' }, batchWorker)
+  let selfCheckBlocked = false
+  try { await call('ctf_teams_verify_finding', { finding_id: reported.finding_id, method: 'self claim', result: 'confirmed' }, batchWorker) } catch { selfCheckBlocked = true }
+  check('members cannot self-verify findings', selfCheckBlocked)
+  await call('ctf_teams_verify_finding', { finding_id: reported.finding_id, method: 'independent byte check', result: 'refuted', note: 'case mismatch' })
   const batchTask = workingBatch.tasks[0]
   const details = await call('ctf_teams_claim_task', { task_id: batchTask.id }, batchWorker)
   check('claim exposes the complete task contract without reading team files', details.task_details.includes('FULL_CONTRACT_BODY'))
@@ -1552,6 +1560,40 @@ try {
   check('failed member drain never reports a successful archive', archiveRejected && await readTeam(stateRoot, 'batch-plan') !== undefined && await readArchivedTeam(stateRoot, 'batch-plan') === undefined)
   await call('ctf_teams_delete', {})
   check('archive retries drain previously removed roster rows', await readTeam(stateRoot, 'batch-plan') === undefined && !liveAgents.has(batchWorker.id))
+
+  // CTF2 end-to-end bookkeeping: solo -> context -> evidence -> flag -> verdict -> archive.
+  const childrenBeforeSolo = children.length
+  const solo = await call('ctf_teams_create', { name: 'CTF2 Solo', mode: 'solo' })
+  await call('ctf_teams_set_challenge', { title: '中文附件题', remote: 'http://ctf.local', environment_id: 'env-ctf2', flag_format: 'flag\\{[^}]+\\}' })
+  const soloFinding = await call('ctf_teams_report_finding', { content: '原始字节为 EaSyRe', evidence_kind: 'raw_output', evidence: 'xxd attachment.bin' })
+  await call('ctf_teams_verify_finding', { finding_id: soloFinding.finding_id, method: 'independent xxd', result: 'confirmed', note: '大小写一致' })
+  const original = await call('ctf_teams_submit_flag', { flag: 'CTF2{EaSyRe}', evidence: 'attachment output' })
+  const repeat = await call('ctf_teams_submit_flag', { flag: 'CTF2{EaSyRe}' })
+  check('CTF2 candidate is retained with durable team reference and format warning', original.flag === 'CTF2{EaSyRe}' && original.format_warning && original.flag_ref.startsWith('ctf2-solo@') && original.flag_ref.endsWith('/f1') && repeat.flag_id === original.flag_id && repeat.flag_ref === original.flag_ref && repeat.duplicate)
+  await call('ctf_teams_set_challenge', { flag_format: ['flag\\{[^}]+\\}', 'CTF2\\{[^}]+\\}'] })
+  await call('ctf_teams_set_challenge', { flag_format: null })
+  const verdict = await call('ctf_teams_mark_flag', { flag: original.flag, team_id: solo.team_id, verdict: 'verified', note: 'platform accepted' })
+  check('mark by original content records platform-accepted flag', verdict.solved && verdict.verified_flag === 'CTF2{EaSyRe}')
+  let crossedTeam = false
+  try { await call('ctf_teams_mark_flag', { flag_id: original.flag_ref, team_id: 'other-team', verdict: 'verified' }) } catch { crossedTeam = true }
+  check('cross-team verdict guard rejects mismatched namespace', crossedTeam)
+  for (const [tool, args] of [['ctf_teams_add_member', { name: 'unwanted' }], ['ctf_teams_create_task', { subject: 'unwanted' }]]) {
+    let rejected = false
+    try { await call(tool, args) } catch { rejected = true }
+    check(`solo mode rejects ${tool}`, rejected)
+  }
+  const soloState = await readTeam(stateRoot, solo.team_id)
+  check('solo mode creates no sessions, members or tasks and preserves metadata', children.length === childrenBeforeSolo && soloState.mode === 'solo' && soloState.members.length === 0 && soloState.tasks.length === 0 && soloState.challenge.remote === 'http://ctf.local' && soloState.challenge.flagFormat === null)
+  let invalidReplacement = false
+  try { await call('ctf_teams_create', { name: 'Invalid Replacement', replaceExisting: true, plan: { members: [], tasks: [{ id: 'cycle', subject: 'cycle', dependencies: ['cycle'] }] } }) } catch { invalidReplacement = true }
+  check('invalid replacement preserves the existing solved board', invalidReplacement && (await readTeam(stateRoot, solo.team_id)).challenge.solved)
+  const replacement = await call('ctf_teams_create', { name: 'Next Solo', mode: 'solo', replaceExisting: true })
+  check('replaceExisting archives the prior solve and returns its path', replacement.archived_path === join(stateRoot, 'archive', solo.team_id) && await readTeam(stateRoot, solo.team_id) === undefined && (await readArchivedTeam(stateRoot, solo.team_id)).flags[0].flag === original.flag)
+  const summary = await call('ctf_teams_archive_summary', { team_id: solo.team_id, archived: true })
+  check('archive summary includes findings, checks, exact accepted flag and environment', summary.summary.includes('原始字节为 EaSyRe') && summary.summary.includes('independent xxd') && summary.summary.includes('platform accepted: CTF2{EaSyRe}') && summary.summary.includes('env-ctf2'))
+  await call('ctf_teams_set_challenge', { environment_id: 'env-next' })
+  const ended = await call('ctf_teams_delete', {})
+  check('delete returns archive path and explicit environment cleanup reminder', ended.archive_path === join(stateRoot, 'archive', replacement.team_id) && ended.environment_notice.includes('env-next'))
 } finally {
   await rm(workspace, { recursive: true, force: true })
 }

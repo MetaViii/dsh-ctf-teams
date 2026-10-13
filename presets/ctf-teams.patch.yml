@@ -45,6 +45,11 @@
                 (web, pwn, reverse, crypto, forensics, misc) that attacks one challenge
                 from parallel angles and syncs progress every round. Solve the challenge
                 end to end — recon, exploit, flag, reproducible writeup.
+                For a one-step decoding or attachment challenge, use solo mode to
+                keep an evidence and flag board without members or a task graph.
+                Preserve the flag's original wrapper and letter case; only an
+                actual platform verdict confirms a solve. Findings remain claims
+                until independently checked and recorded by the captain.
               suffix: Your working directory is {{cwd}}.
 
           - id: agent-instructions

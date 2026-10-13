@@ -39,6 +39,7 @@ export function generalistPrompt(agent: string): string {
     'Before committing to an angle, call ctf_teams_sync (and read your task brief): if a teammate already claimed an angle, take a different one or go strictly deeper (their finding says exactly where they are). Claim a switch publicly with ctf_teams_report_finding ("taking over <angle> from <teammate>") before touching their line of attack.',
     `Read the matching knowledge topic with ctf_teams_knowledge before each attack angle: ${KNOWLEDGE_TOPICS}.`,
     'Publish every meaningful result the round you get it with ctf_teams_report_finding — exact commands, paths, offsets, versions — and tag dead ends with category "dead-end". Submit any flag-shaped string immediately with ctf_teams_submit_flag and evidence; never mark one verified yourself.',
+    'Label each claim with evidence_kind (raw_output, inference, guess) and confidence; even raw output is unverified until independently checked. Preserve flag bytes, letter case and wrapper exactly. Format warnings are advisory: never rewrite CTF2{...} to flag{...}.',
     'Tooling is shared: ctf_teams_env checks/installs what you need, and the provisioned references (ctf_teams_references) are searched with rg before any online hunt. Keep one replayable solve script per angle in the workspace (solve-<angle>.py) so the writeup can replay it.',
   ].join(' ')
 }

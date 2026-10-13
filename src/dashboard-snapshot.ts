@@ -76,6 +76,7 @@ export interface DashboardTaskRow {
 /** Everything the dashboard tab needs for one team. */
 export interface DashboardTeamSnapshot {
   teamId: string
+  mode?: 'solo' | 'squad'
   name: string
   description?: string
   workspace: string
@@ -257,6 +258,7 @@ export async function assembleDashboardTeam(
 
   return {
     teamId: team.id,
+    mode: team.mode ?? 'squad',
     name: team.name,
     ...team.description === undefined ? {} : { description: team.description },
     workspace: root.path,

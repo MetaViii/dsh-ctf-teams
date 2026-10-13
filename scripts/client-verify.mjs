@@ -316,6 +316,19 @@ check('renders the live challenge, lanes, tasks, findings and flags',
   && live.includes('两个附件') && live.includes('flag{w13n3r_4ttack}'), live.slice(0, 200))
 check('renders the next-step line from the host', live.includes('下一步') && live.includes('ctf_teams_mark_flag'))
 check('renders the progress bar and census', live.includes('1/2') && live.includes('已验证'))
+check('legacy findings are visibly unverified', live.includes('待验证'))
+
+withTeam({
+  challenge: { ...baseTeam.challenge, flagFormat: null, environmentId: 'env-ctf2' },
+  findings: [{ ...baseTeam.findings[0], evidenceKind: 'raw_output', confidence: 'high', evidence: 'xxd 附件.bin', verifications: [{ by: 'captain', method: 'independent xxd', result: 'confirmed', ts: Date.now() }] }],
+  flags: [{ ...baseTeam.flags[0], status: 'verified', verifiedFlag: 'CTF2{EaSyRe}', formatWarning: 'Observed wrapper: CTF2' }],
+})
+await settle()
+const evidenceView = textOf(render()).join(' ')
+check('UI distinguishes registered flag, accepted flag and advisory warning', evidenceView.includes('登记原文') && evidenceView.includes('平台接受') && evidenceView.includes('CTF2{EaSyRe}') && evidenceView.includes('格式警告'))
+check('UI shows evidence verification and platform environment', evidenceView.includes('confirmed') && evidenceView.includes('raw_output') && evidenceView.includes('xxd 附件.bin') && evidenceView.includes('以平台为准') && evidenceView.includes('env-ctf2'))
+withTeam({})
+await settle()
 
 failFetch = true
 await new Promise((resolve) => setTimeout(resolve, 1700))

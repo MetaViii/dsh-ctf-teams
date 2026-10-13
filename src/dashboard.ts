@@ -12,7 +12,7 @@
  */
 
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts'
-import { challengeOf, DEFAULT_FLAG_FORMAT } from './findings.ts'
+import { challengeOf, DEFAULT_FLAG_FORMAT, flagFormatLabel } from './findings.ts'
 
 /** The task fields the dashboard renders; a narrow view of TeamTask. */
 export interface DashboardTask {
@@ -117,6 +117,7 @@ export interface DashboardMember {
 /** Everything the dashboard needs; derived from team state plus live activity. */
 export interface DashboardInput {
   teamName: string
+  mode?: 'solo' | 'squad'
   description?: string
   /** `staged` | `running` | `halted` | `escalated`. */
   phase: string
@@ -222,6 +223,7 @@ export function nextStepHint(input: DashboardInput): string {
   if (input.phase === 'escalated') return 'review loop hit its ceiling — escalate to the user or amend the contract'
   if (challenge.solved === true) return 'solved — finish WRITEUP.md, then clean the team up (归档 / 删除) from the panel'
   if (candidates.length > 0) return `verify ${candidates.map((flag) => flag.id).join(', ')} against the platform, then ctf_teams_mark_flag`
+  if (input.mode === 'solo') return 'solo — solve directly, record findings and submit the original flag for platform verification'
   if (input.tasks.length === 0) return 'no task graph yet — create the team plan (recon first, then one task per angle)'
   if (working.length === 0 && pending.length > 0) return `${pending.length} pending task(s) and nobody working — dispatch or reassign`
   if (working.length > 0) return 'lanes are working — round sync pushes findings; ctf_teams_sync pulls the rest'
@@ -259,7 +261,8 @@ export function renderDashboard(input: DashboardInput): string {
     row('Challenge', title),
     ...(challenge.remote === undefined ? [] : [row('Remote', challenge.remote)]),
     ...(challenge.attachments === undefined || challenge.attachments.length === 0 ? [] : [row('Files', challenge.attachments.join(', '))]),
-    ...(challenge.flagFormat === undefined ? [] : [row('Flag fmt', `/${challenge.flagFormat}/`)]),
+    ...(challenge.flagFormat === undefined ? [] : [row('Flag fmt', flagFormatLabel(challenge))]),
+    ...challenge.environmentId ? [row('Environment', challenge.environmentId)] : [],
     row('Status', meta),
   ]
   if (input.description !== undefined && input.description.trim() !== '') {
@@ -270,7 +273,7 @@ export function renderDashboard(input: DashboardInput): string {
   // task it currently owns or its role.
   lines.push(section('Agents', `${working}/${live} working`))
   if (input.members.length === 0) {
-    lines.push(row('', '(no members yet — the plan is staged)'))
+    lines.push(row('', input.mode === 'solo' ? '(solo — captain solves directly; board keeps the audit trail)' : '(no members yet)'))
   }
   for (const member of input.members) {
     const state = member.status === 'removed'
@@ -324,7 +327,9 @@ export function renderDashboard(input: DashboardInput): string {
   }
   for (const finding of recentFindings) {
     const tag = finding.category === undefined ? finding.from : `${finding.from}/${finding.category}`
-    lines.push(row(`r${finding.round} ${finding.id}`, `[${tag}] ${finding.content}`))
+    const verdict = finding.verifications?.at(-1)?.result
+    const marker = verdict === 'confirmed' ? '✓' : verdict === 'refuted' ? '✗' : '?'
+    lines.push(row(`r${finding.round} ${finding.id}`, `${marker} [${tag}] ${finding.content}`))
   }
 
   // Flags: verification state is the single most important signal.
@@ -335,9 +340,11 @@ export function renderDashboard(input: DashboardInput): string {
     lines.push(row('', '(no candidates yet — submit with ctf_teams_submit_flag)'))
   }
   for (const flag of recentFlags) {
-    const flagText = flag.status === 'verified' ? flag.flag : truncateToWidth(flag.flag, 34)
+    const flagText = flag.status === 'verified' ? flag.verifiedFlag ?? flag.flag : truncateToWidth(flag.flag, 34)
     const note = flag.note === undefined ? '' : ` — ${truncateToWidth(flag.note, 24)}`
     lines.push(row(`${flag.id} ${flagGlyph(flag.status)}`, `${flagText} by ${flag.submittedBy}${note}`))
+    if (flag.verifiedFlag && flag.verifiedFlag !== flag.flag) lines.push(row('Registered', flag.flag))
+    if (flag.formatWarning) lines.push(row('Format warn', flag.formatWarning))
   }
   if (input.captainUnread !== undefined && input.captainUnread > 0) {
     lines.push(row('', `✉ ${input.captainUnread} unread captain message${input.captainUnread === 1 ? '' : 's'}`))
@@ -380,6 +387,7 @@ export function dashboardInputFromTeam(
     }))
   return {
     teamName: team.name,
+    mode: team.mode ?? 'squad',
     description: team.description,
     phase,
     challenge: challengeOf(team),

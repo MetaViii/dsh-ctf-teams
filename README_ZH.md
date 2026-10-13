@@ -17,7 +17,7 @@
 - **可选中的 agent 模式**——插件同时声明了 `ctf-teams` 这个 Harness **agent 预设**（显示名「CTF 团队模式」），于是战队成为一个可在应用里直接选中的模式（会话模式选择器 / 设置 → 通用里的默认预设），而不用靠记工具名。该模式组合出完整的 agent 平面（shell、文件系统、技能、委派、计划模式、上下文压缩）并叠加 CTF 队长人格；`ctf_teams_*` 工具来自 profile 级的宿主行，在任何模式下都可调用。
 - **ctf-teams 团队模板**——内置零配置团队模板：`/ctf-teams <题目>` 一键派出四名全能专家攻打题目，队长现场规划攻击图。
 - **轮次同步协议**——每一条有价值的中间结论都发到共享 findings 看板；成员一次调用即可拉取自己没看过的增量，调度器把最新进展附在每个任务派发里，还会主动推送给空闲成员。没有新进展的一轮零开销。
-- **证据门控的 flag 流程**——候选 flag 必须带可复现证据提交，按题目 flag 格式校验、自动去重；只有队长能录入平台判定结果。一旦 verified，全队切换到 writeup 模式。
+- **证据门控的 flag 流程**——候选 flag 必须带可复现证据提交，格式不匹配时登记并警告，按原文大小写敏感去重；只有队长能录入平台判定结果。一旦 verified，全队切换到 writeup 模式。
 - **内置知识库**——kali 工具箱、pwntools、SageMath、Volatility 3、分领域作战手册（web / pwn / reverse / crypto / forensics / misc），以及全新 PoC/CVE 的狩猎流程，会话内用 `ctf_teams_knowledge` 直接阅读。
 - **工具链服务**——`ctf_teams_env` 先检测本机：pwntools、volatility3、sage、gdb、nmap、hashcat、tshark、exiftool 等约 40 个托管工具的状态与版本；缺失的按预置 apt/pip/brew/gem 映射直接安装（逐参数执行、不走 shell）。重型工具（sage、ghidra、pwndbg）只报告手动安装命令，不擅自执行。
 - **引用库预置**——小型 PoC/技能库（ctf-skills、Awesome-POC）在**建队时自动克隆**；其余（exphub、0xMarcio pocindex/cve、trickest/cve、PoC-in-GitHub、cvelistV5）用 `ctf_teams_references` 按需同步到 `<workspace>/.ctf-teams/references/`，并给每个 agent 返回绝对路径和 `rg` 检索提示——N-day 狩猎先查本地、再上网。
@@ -180,13 +180,40 @@ ctf_teams_references { action: "path", repo: "exphub" }
 1. 成员把每一条有价值的结论用 `ctf_teams_report_finding` 发上看板——死胡同也要发，打上 `dead-end` 标签，帮队友省一整轮。
 2. `ctf_teams_sync` 返回该成员没看过的全部增量并推进其游标；空结果意味着"没人有新进展——继续或让出"。
 3. 调度器顺路捎带：任务派发自动附上最新 findings，空闲成员若看板有新内容会收到 digest 推送。游标持久化——不重复、不丢失。
-4. flag 也是看板：`ctf_teams_submit_flag` 按题目格式校验并去重；队长对平台验证后用 `ctf_teams_mark_flag` 录入判定。`verified` 即标记题目已解出，全员转入 writeup。
+4. flag 也是看板：`ctf_teams_submit_flag` 保留原文，按题目格式提供警告并按大小写敏感的完整字符串去重；队长对平台验证后用 `ctf_teams_mark_flag` 录入判定。`verified` 即标记题目已解出，全员转入 writeup。
 
 ## 工具
 
 队长专属：`ctf_teams_create`、`ctf_teams_approve`、`ctf_teams_edit_plan`、`ctf_teams_add_member`、`ctf_teams_remove_member`、`ctf_teams_create_task`、`ctf_teams_reassign_task`、`ctf_teams_amend_task`、`ctf_teams_set_challenge`、`ctf_teams_mark_flag`、`ctf_teams_resume`、`ctf_teams_delete`
 
 成员共用：`ctf_teams_claim_task`、`ctf_teams_update_task`、`ctf_teams_send_message`、`ctf_teams_status`、`ctf_teams_submit_flag`、`ctf_teams_report_finding`、`ctf_teams_sync`、`ctf_teams_knowledge`、`ctf_teams_env`、`ctf_teams_references`
+
+## 实战证据、平台 flag 与单人模式
+
+一步解码或附件题可用 `ctf_teams_create({name:"quick-solve",mode:"solo"})`：只建立持久化看板，不建成员、任务、模型会话或下载参考库。之后按 `set_challenge` → 直接解题 → `submit_flag` → 核对平台 → `mark_flag` → `delete` 留存记录。默认仍为 squad 模式。
+
+批量 plan 必须包含 `members`、`tasks` 两个数组；每个任务的 **`id`、`subject` 必填**，成员可写 `executionPrompt`。错误分别列出缺失字段、未声明字段、类型错误，并回显精简结构，不把长 description 放进报错。大计划或逐步变化的计划建议 `create` → `add_member` → `create_task`，逐步定位错误。
+
+不指定 profile/plan 的 squad create 会应用默认阵容。要分步建立自定义阵容，可先传最小 plan（`members:[{name:"first-worker"}], tasks:[]`），再逐个添加其余成员和任务。
+
+```js
+await tools.ctf_teams_set_challenge({
+  flag_format: ["flag\\{[^}]+\\}", "CTF2\\{[^}]+\\}"],
+  environment_id: "平台环境编号"
+});
+// 也支持 (flag|CTF2)\\{[^}]+\\}；null 表示格式完全以平台为准。
+const candidate = await tools.ctf_teams_submit_flag({flag:"CTF2{EaSyRe}", evidence:"python solve.py；原始输出"});
+// 实际检查平台响应后，再由队长记录：
+await tools.ctf_teams_mark_flag({flag_id:candidate.flag_ref, team_id:candidate.team_id, verdict:"verified", note:"平台接受"});
+```
+
+格式不匹配会**登记并警告**，不会强迫改包装或大小写。完全相同的候选复用 ID，大小写不同的候选分别登记。`flag_ref` 包含看板代际，同名重建也不会误用旧引用；当前看板仍支持 `f1`，也可用 `mark_flag({flag:"候选原文",…})` 按原文定位。`verified_flag` 可另存平台真正接受的字符串，界面同时显示登记原文与平台接受值。成员看过候选后，后续判定仍会通过 sync 返回。
+
+finding 默认为**待验证**，旧报告和高置信度原始输出同样如此。`report_finding` 可填写 `evidence_kind`（`raw_output` / `inference` / `guess`）、`confidence`（`low` / `medium` / `high`）和 `evidence`。队长独立检查后用 `verify_finding({finding_id,method,result,note})` 留痕；result 为 `confirmed`、`refuted` 或 `inconclusive`。核验历史持久化，并作为新进展同步。终端用 `?` / `✓` / `✗` 标记，Web 面板和导出展示证据与核验细节。
+
+明确开始另一题时可 `create({replaceExisting:true,…})`：先校验新计划，再归档旧队。`delete` 返回 `archive_path`；两种操作都会提醒检查已记录的环境并释放平台槽位，插件不直接管理题目容器。`archive_summary({team_id:"quick-solve",archived:true})` 返回完整 findings、核验、任务与平台判定，供 writeup 引用。
+
+看板文件和 HTTP/模型文本按 UTF-8 保存与传递，已加入 Windows 中文持久化与终端排版回归。外部命令若输出 GBK，需要配置对应命令/终端使用 UTF-8（Python 可设 `PYTHONUTF8=1`）；插件无法恢复上报前已经乱码的文本。
 
 ## 配置
 
