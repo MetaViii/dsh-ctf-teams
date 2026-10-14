@@ -55,7 +55,7 @@ test('published versions come from the release notes themselves', () => {
 test('the checked-in READMEs match the package version', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   const files = Object.fromEntries(
-    ['README.md', 'README_ZH.md'].map(name => [name, readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')])
+    ['README.md', 'README_EN.md', 'README_ZH.md'].map(name => [name, readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')])
   )
   const known = publishedVersions(fileURLToPath(new URL('../release-notes', import.meta.url)))
   assert.deepEqual(checkReadmeVersions({ version: pkg.version, known, files }), [])

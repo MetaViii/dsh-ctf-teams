@@ -24,6 +24,7 @@
     "presets",
     "release-notes",
     "README.md",
+    "README_EN.md",
     "README_ZH.md",
     "compatibility.json",
     "scripts/doctor.mjs",

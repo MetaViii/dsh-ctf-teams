@@ -1,269 +1,353 @@
 <p align="right">
-  <strong>English</strong> · <a href="./README_ZH.md">简体中文</a>
+  <a href="./README_EN.md">English</a> · <strong>简体中文</strong>
+</p>
+
+<h1 align="center">dsh-ctf-teams</h1>
+
+<p align="center">
+  <strong>让一个 DeepSeek Harness 会话，组织一支协同解题的 CTF 战队。</strong>
+</p>
+
+<p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
+
+<p align="center">
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.29-2563eb?style=flat-square" alt="源码版本 0.1.29"></a>
+  <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-ctf-teams turns one DeepSeek Harness session into a multi-agent CTF squad">
+  <a href="#quick-start">快速开始</a> ·
+  <a href="#workflow">协作流程</a> ·
+  <a href="#use-cases">使用场景</a> ·
+  <a href="#configuration">配置</a> ·
+  <a href="#documentation">文档</a>
 </p>
 
-# dsh-ctf-teams
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="CTFTeams 协作结构示意：队长统一规划，持久化成员通过任务与消息协作">
+</p>
 
-**CTFTeams** for DeepSeek Harness — a fork of [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) rebuilt for CTF. One session becomes the **captain** and dispatches a squad of full-stack CTF experts (web, pwn, reverse, crypto, forensics, misc — every agent covers every domain). They attack the challenge **in parallel from different angles**, sync progress **every round**, track candidate flags on a shared board, and render the whole solve through a **terminal dashboard**.
+**CTFTeams** 是 DeepSeek Harness 的多智能体 CTF 插件。队长负责规划任务、协调成员和核对平台结果；成员从不同角度分析题目，在同一块看板上共享发现、脚本线索与候选 flag。任务、消息和复核记录持久化保存，便于续做、交接和生成可复现的解题记录。
 
-## Why
+适用于需要多条路线并行验证的题目，也支持批量刷题。简单附件解码可使用单人模式，保留同一套证据与归档流程。
 
-A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-teams machinery (durable continuable members, task DAG with dependencies, mailboxes, two-phase plan approval, quality gates) and adds the parts CTF actually needs:
+## 核心能力
 
-- **A selectable agent mode** — the bundle also declares the `ctf-teams` Harness **agent preset** (`CTF 团队模式`), so the squad is a mode you pick in the app (session mode picker / Settings → General default preset) rather than a tool set you have to remember. The mode composes a full agent plane (shell, filesystem, skills, delegation, plan mode, compaction) plus a CTF captain persona; the `ctf_teams_*` tools come from the profile-wide host row and stay callable in every mode.
-- **`ctf-teams` team profile** — a built-in, zero-config squad definition: `/ctf-teams <challenge>` dispatches four interchangeable full-stack experts at the challenge and the captain plans the attack graph.
-- **Round-sync protocol** — every meaningful result is published to a shared findings board; members pull their delta with one call, the scheduler attaches new findings to every task assignment and pushes digests to idle members. A round with no new progress costs nothing.
-- **Evidence-gated flags** — candidates are submitted with reproducible evidence, retained with advisory format warnings, deduplicated by exact case-sensitive content, and only the captain records the platform verdict. A verified flag flips the whole team into writeup mode.
-- **Shipped knowledge base** — kali toolbox, pwntools, SageMath, Volatility 3, per-domain playbooks (web / pwn / reverse / crypto / forensics / misc), and a fresh-PoC/CVE hunting workflow, readable in-session via `ctf_teams_knowledge`.
-- **Toolchain service** — `ctf_teams_env` probes the machine for every managed tool (pwntools, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions, then installs the missing ones from a curated apt/pip/brew/gem map — argv-by-argv, no shell. Heavy tools (sage, ghidra, pwndbg) report their manual command instead.
-- **Reference library, pre-provisioned** — the small PoC/skill repos (ctf-skills, Awesome-POC) clone automatically when a team is created; `ctf_teams_references` syncs the rest (exphub, 0xMarcio pocindex/cve, trickest/cve, PoC-in-GitHub, cvelistV5) on demand into `<workspace>/.ctf-teams/references/` and hands each agent the absolute paths + `rg` hints, so N-day hunting works offline before any web search.
-- **Live dashboard tab, and it is operable** — a `解题面板` view next to 对话 / 轨迹: challenge header, task progress bar, member lanes with live activity and unseen-board badges, the finding feed, the flag board and the host-computed `Next` line, refreshed every 1.5 s from a trust-gated route. Its controls drive the solve — 开始解题 (challenge form), 批准并运行, 推进一轮, 暂停 / 继续, 核对 flag, 附件 (workspace file picker), 写 WRITEUP, 导出 WP / 导出复盘 — and each click becomes exactly one user turn, so the captain agent stays the only writer of team state.
-- **Terminal dashboard** — the same picture in the harness transcript, for surfaces without the tab: `ctf_teams_status` (model + human) and `/ctf-teams-board` (human only, zero model turns).
+| 能力 | 实际用途 |
+| --- | --- |
+| **并行解题** | 默认四名全栈 CTF 成员，覆盖 Web、Pwn、Reverse、Crypto、Forensics、Misc；按攻击角度组织任务，阵容可自定义。 |
+| **共享发现与独立复核** | 记录原始输出、推断、猜测和复现依据；队长单独登记复核结果，死胡同与纠正同样保留。 |
+| **候选 flag 审计** | 保留包装和大小写，格式不符只警告；返回持久化引用，支持独立候选变体及判定历史。平台接受结果由队长记录。 |
+| **批量题目管理** | 按 `challenge_id` 统计不同题目的通过数；单题通过后继续其他任务，整批完成需要明确确认。 |
+| **任务调度与资源排队** | 依赖完成后派发就绪任务，显示实际派发状态和等待原因；同战队的独占资源可串行使用。 |
+| **故障恢复与交接** | 区分配置错误、限流和临时基础设施故障；合并重复通知，保留检查点与剩余事项，支持修复模型路由和重派任务。 |
+| **解题面板** | 查看成员活动、任务进度、发现和 flag 判定；支持暂停、继续、核对候选、导出记录与归档。 |
+| **工具与知识支持** | 内置分领域知识库、工具链检测和参考仓库同步；非视觉模型可使用 ASCII、OCR、QR/条码和像素比较入口。 |
 
-## Quick start
+<a id="quick-start"></a>
 
-**DeepSeek Harness Desktop (primary target):** open 「Plugins → Add Plugin」 in the app sidebar, enter the package name and version (`@nanmicoder/dsh-ctf-teams`), click enable, and restart the app when the host asks. The desktop app ships its own Harness kernel and package manager, so it manages its own profiles.
+## 快速开始
 
-**CLI / Web:**
+### 1. 准备环境
+
+| 项目 | 要求 |
+| --- | --- |
+| 宿主 | 已安装并可正常运行的 DeepSeek Harness；本轮增强功能在 `0.2.0-rc.2` 验收。 |
+| Node.js | CLI / 源码环境使用 `22.x`（≥ `22.19.0`）或 `24+`，与 `package.json` 一致。 |
+| 模型 | 宿主中已有可用的模型配置。成员默认沿用队长模型，也可按团队模板指定。 |
+| 工作区 | 题目附件、解题脚本与输出所在的目录。工具链依题目需要准备。 |
+
+历史宿主支持范围见 [兼容性清单](./compatibility.json)；本轮验收结果见 [验证记录](./docs/ctf2-improvements-2026-10-14/validation.json)。
+
+### 2. 安装本仓库版本
+
+本 fork 的新增能力已提交到 GitHub，尚未发布到 npm；包名沿用 `@nanmicoder/dsh-ctf-teams`。获取本文所述功能请使用本仓库的 Git 地址或本地源码。
+
+**桌面 / Web：** 在「插件 → 添加插件」中输入以下地址，安装后启用插件，并按宿主提示重启：
+
+```text
+git+https://github.com/MetaViii/dsh-ctf-teams.git
+```
+
+**CLI：** 在实际使用的 profile 中安装。下例以 `default` 为例，请替换为你的 profile 名称：
 
 ```bash
-dsh plugin --profile <name> add @nanmicoder/dsh-ctf-teams
+dsh plugin --profile default add git+https://github.com/MetaViii/dsh-ctf-teams.git
 ```
 
-(Replace `<name>` with your CLI profile; restart the profile's Harness process after installing.) The bundle ships two patch layers — the plugin row and the `ctf-teams` agent preset — and both are read when the composition loads, so **restart the Host / Desktop app** after installing or upgrading, then pick the mode:
+<details>
+<summary>从本地源码安装</summary>
 
-- Desktop: choose 「CTF 团队模式」 for a new session (or set it as the default under Settings → General). A fresh install whose mode list shows no `CTF 团队模式` needs the restart, not a reinstall.
-- CLI/web profile: the mode follows the same preset roster.
+仓库包含预构建的 `lib/`，正常安装无需先批准构建脚本。
 
-Then, in a session of that profile:
-
-```
-/ctf-teams solve http://chal.local:8000, attachments are in ./dist
-/ctf-teams-board          # print the solving dashboard without waking the model
-```
-
-or in natural language: "Use CTFTeams to solve this pwn challenge." **Nothing to approve**: with the shipped `autoApprove: true` the captain records the challenge, submits the roster + task graph and starts dispatching in the same turn, then keeps working through reports until the flag is verified and the writeup exists. Open the **`解题面板` tab** next to 对话 / 轨迹 and watch it live. Set `autoApprove: false` in the plugin config (see [Configuration](#configuration)) to get the old two-phase flow back: the plan is staged, the Web plan card asks for approval, and 批准并运行 starts it.
-
-## Commands
-
-The plugin owns a closed command namespace, so the `/` menu is short and every entry means one thing:
-
-| Command | What it does |
-|---|---|
-| `/ctf-teams [--profile <name>] <challenge>` | Start (or continue) a solve. Without `--profile` the configured default squad — the built-in `ctf-teams` roster — applies. |
-| `/ctf-teams-board` | Print the dashboard into the transcript. No model turn, no state change. |
-| `/ctf-teams-<profile>` | One alias per *other* configured team profile, so `/ctf-teams-web-only <goal>` selects that roster explicitly. |
-
-Two generated aliases are deliberately not registered: the **default** profile's own alias (it would be `/ctf-teams` under a longer name, e.g. `ctf-teams-ctf-teams`), and any profile whose name maps onto a command this plugin already owns (`board`). Set `defaultProfile: ''` to disable the default squad and get its alias back.
-
-## The dashboard
-
-Two surfaces, one truth source. The **`解题面板` tab** (对话 / 轨迹 / 解题面板) is the live picture: a read-only client view that polls `GET /plugins/dsh-ctf-teams/state` every 1.5 s behind the harness browser-trust fence (an unauthenticated request gets 401, not data) and renders
-
-- the challenge header — 🚩 solved / ◌ running, category, points, remote, attachments, flag format;
-- a task progress bar plus the census (`3 完成 · 1 进行中 · 1 待办 · …`);
-- member lanes with live activity, `⚡` unseen board beats, unread mail, the task they own and `done/total`;
-- the newest findings with their age, the flag board with verdicts, and the **下一步 (`Next`)** line;
-- a team switcher plus the archived roster for finished solves.
-
-Polling keeps the last snapshot when the host restarts ("重连中") and pauses while the page is hidden.
-
-### Operating from the tab
-
-Every control queues **one user turn** and nothing else — the tab never writes team state, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked:
-
-| Button | When | What it sends |
-|---|---|---|
-| 开始解题 | no team | a challenge form (goal, profile, remote, category, points, flag format, **attachments**) → `/ctf-teams …` + the facts |
-| 批准并运行 | a staged plan exists (captain) | `ctf_teams_approve` + dispatch ready tasks — only needed with `autoApprove: false`, or for a team staged before this release |
-| 推进一轮 | running | `ctf_teams_status`, dispatch ready work, wake lanes that are behind |
-| 暂停 / 继续 | running / halted (captain) | halt, or `ctf_teams_resume` with a reason |
-| 核对 flag fN | a candidate exists (captain) | platform check, then `ctf_teams_mark_flag` |
-| 附件 | not archived (captain) | workspace file picker → `ctf_teams_set_challenge` with the picked paths |
-| 写 WRITEUP | participant | write the solve record to `WRITEUP.md` (see below) |
-| 导出 WP / 导出复盘 | always | download `WRITEUP.md`, or a generated markdown review report |
-| 删除战队 | captain | confirm dialog showing the team's file count and size → 移到归档 (still reviewable under 「已归档」) or 彻底删除 (frees the space) |
-| 清空归档 (N) | archived roster (captain) | permanently removes every archived team |
-
-Every control above queues **one user turn**, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked. The two cleanup buttons are the exception: deleting files needs no model turn, so the host performs them directly under the team lock — still gated (captain session for a team, a live session for the archive), still two clicks, and the response reports the bytes that were actually freed.
-
-Captain-only buttons are disabled (not silently switched off) in a member's session, and an archived team is read-only except for exports and cleanup. The endpoints behind these controls are method-whitelisted, body-limited and authority-checked against durable state, and they sit behind the same browser-trust fence as the read path.
-
-### The writeup
-
-`写 WRITEUP` sends the CTF solving-record spec that lives in `src/writeup.ts` — the same text the captain protocol and the completion criterion use. It is a normal CTF writeup:
-
-```
-# <题目名> — <分类>
-## 题目信息   平台/分类/分值、附件、远程地址
-## 侦察      真正跑过的命令与真实输出
-## 漏洞分析   漏洞点、成因、触发条件、关键代码片段
-## 利用过程   从侦察到 flag 的完整步骤；payload 原始形式 + 编码形式；原始 HTTP 报文
-## flag      平台返回的原始响应与 flag 原文
-## 参考      公开资料/CVE（没有就删掉）
+```bash
+git clone https://github.com/MetaViii/dsh-ctf-teams.git
+cd dsh-ctf-teams
+dsh plugin --profile default add .
 ```
 
-No mention of the tooling, the agent, the model or the framework, and no 修复建议/缓解措施 section: a CTF writeup records how the box was popped, not how to patch it. Output must be what actually ran, every command copy-pasteable, and an existing writeup is extended rather than rewritten.
+修改源码后的构建与检查方法见下方「开发与验证」。
 
-The **terminal panel** is the same state for surfaces without the tab (`ctf_teams_status` for the model and the human, `/ctf-teams-board` for the human with zero model turns). Every section bar carries its own live counter and the `Next` line is computed by the same helper the tab uses, so the two can never disagree:
+</details>
 
+### 3. 交给战队一项任务
 
-```
-╭─ CTF TEAMS ── 🚩 SOLVED ────────────────────────────────────────────────────╮
-│ Challenge  baby_rsa · crypto · 500pts                                      │
-│ Remote     nc chal.local:9999                                              │
-│ Files      rsa.pem, out.txt                                                │
-│ Flag fmt   /flag\{[^}]+\}/                                                 │
-│ Status     running · round 4 · 12m · 3 findings · 1 flag                   │
-│ Goal       解出 baby_rsa 并写出可复现的解题链                              │
-├─ Agents ─────────────────────────────────────────────────────── 1/4 working┤
-│ ○ agent-1     idle ⚡1      full-stack CTF expert                           │
-│ ○ agent-2     idle         full-stack CTF expert                           │
-│ ● agent-3     working      t3 Write the reproducible solve cha…            │
-│ ◇ agent-4     unspawned    full-stack CTF expert                           │
-├─ Task board ──────────────────── [████████████░░░░] 3/4 · last beat 30s ago┤
-│ t3 ▶       Write the reproducible solve chain to WRITEUP.md → agent-3      │
-│ t1 ✓       Recon attachments and fingerprint the challenge → agent-1       │
-│ t2 ✓       Attack the RSA parameters (Wiener / Coppersmith) → agent-2      │
-│ t4 ✓       Cross-check the flag against the platform → captain             │
-│            3 done · 1 active · 0 pending                                   │
-├─ Findings (latest) ──────────────────────────────── 3 total · newest 3m ago┤
-│ r1 fd1     [agent-1/recon] 两个附件 rsa.pem + out.txt；openssl rsa -pubin… │
-│ r2 fd2     [agent-2/crypto] Wiener 命中：e 极大、d 很小；已还原私钥并解出… │
-│ r3 fd3     [agent-3/dead-end] 远端无 HTTP 面，纯 nc 交互，排除 web 链路    │
-├─ Flags ─────────────────────────────────────────── 1 total · 1 verified    ┤
-│ f1 ✓       flag{w13n3r_4tt4ck_ftw} by agent-2 — platform accepted          │
-│ Next       ▸ solved — write WRITEUP.md, then archive the team              │
-╰─ live · ctf_teams_status for the full detail                               ╯
+重启宿主后新建会话。支持 agent 预设的界面可选择 **「CTF 团队模式」**，随后输入：
+
+```text
+/ctf-teams 分析 ./dist 中的附件，从不同角度验证解题路线，拿到平台接受的 flag 后整理 WRITEUP.md。
 ```
 
-Reading it at a glance: the header is the verdict (🚩 SOLVED vs ◌ unsolved); each section bar carries its own counter (working lanes, a task progress bar plus the last board beat, finding freshness, verified flags); `⚡N` on a lane means that member has N unseen board beats; and `Next` is the single most useful action for whoever is reading — verify a flag candidate, dispatch idle lanes that still have ready work, resume a halted team, or finish the writeup.
+也可以直接描述需求：
 
-## The built-in `ctf-teams` squad
-
-Four agents (`agent-1` … `agent-4`), deliberately interchangeable: each one is a full-stack CTF expert (web, pwn, reverse, crypto, forensics, misc) reading the same knowledge base (kali-tools, pwntools, sage-math, volatility3, web, pwn, reverse, crypto, forensics, misc, cve-poc). The speed-up comes from parallel angles, not from domain walls: every agent syncs before committing to an angle, claims publicly (`ctf_teams_report_finding`), takes over a teammate's line only by announcing it, and publishes every result — dead ends included — the round it gets them.
-
-Task planning is `captain` mode: the profile supplies people and guardrails; the captain derives the task graph from the actual challenge (recon first, parallel domain tasks, converge on flag + writeup). Your own `profiles.ctf-teams` config entry overrides it key-for-key.
-
-## Toolchain & references services
-
-Before the squad starts, the captain (or any member) readies the box:
-
-```
-ctf_teams_env  { action: "check" }                  # probe pwntools, vol3, sage, kali tools …
-ctf_teams_env  { action: "install", dry_run: true } # review the plan
-ctf_teams_env  { action: "install" }                # install the missing ones (apt/pip/brew/gem)
-ctf_teams_references { action: "sync", repo: "all" }# clone the PoC/CVE/skill libraries
-ctf_teams_references { action: "path", repo: "exphub" }
+```text
+用 CTFTeams 解这道题。目标是 http://challenge.local:8000，附件在 ./dist。
+先侦察，再并行验证可行路线。记录真实命令和输出，最终以平台判定为准。
 ```
 
-The managed catalog covers ~40 tools (python stack, pwn/reverse, web, crypto, forensics, misc). `check` reports versions and per-tool install hints; `install` executes curated argv sequences directly (no shell), re-probes what it installed, and never auto-runs heavy tools — sage/ghidra/pwndbg print their manual path. Disable execution entirely with `env.allowInstall: false` (dry-run keeps working).
+默认配置 `autoApprove: true`，队长提交计划后即可派发就绪任务。需要先审阅计划时，设置 `autoApprove: false`，再通过面板的「批准并运行」启动。
 
-The reference manifest ships curated entries — the collections stay on GitHub (several are multi-GB), so the service shallow-clones what you ask for into the workspace instead of bloating the package:
+打开 **「解题面板」** 查看进展；文本界面也可以使用：
 
-| Repo id | Source | What you get |
-|---|---|---|
-| `ctf-skills` | [ljagiello/ctf-skills](https://github.com/ljagiello/ctf-skills) | agent playbooks per CTF domain (MIT) |
-| `awesome-poc` | [WyAtu/Awesome-POC](https://github.com/WyAtu/Awesome-POC) | curated PoC index by product |
-| `exphub` | [zhzyker/exphub](https://github.com/zhzyker/exphub) | ready-to-run classic-CVE exploit scripts |
-| `pocindex` | [0xMarcio/pocindex](https://github.com/0xMarcio/pocindex) | 82k+ PoC index keyed by CVE |
-| `marcio-cve` | [0xMarcio/cve](https://github.com/0xMarcio/cve) | per-year CVE+PoC aggregation |
-| `trickest-cve` | [trickest/cve](https://github.com/trickest/cve) | auto-aggregated CVE database (huge) |
-| `poc-in-github` | [nomi-sec/PoC-in-GitHub](https://github.com/nomi-sec/PoC-in-GitHub) | daily JSON PoC index (large) |
-| `cvelistv5` | [CVEProject/cvelistV5](https://github.com/CVEProject/cvelistV5) | official CVE JSON v5 archive (huge) |
+```text
+/ctf-teams-board
+```
 
-## Round-sync protocol
+该命令直接读取看板，不产生新的模型轮次。
 
-1. Members publish every real result as a finding (`ctf_teams_report_finding`) — including dead ends, tagged `dead-end`.
-2. `ctf_teams_sync` returns everything a member has not seen yet and advances their cursor; an empty sync means "nobody has new progress — continue or yield".
-3. The scheduler rides along: task assignments carry the newest findings, and idle members with unseen board content get a digest pushed to them. Cursors are durable — nothing is repeated, nothing is lost.
-4. Flags are a board too: `ctf_teams_submit_flag` records original strings with advisory format warnings and exact, case-sensitive de-duplication; the captain verifies against the platform and records the verdict with `ctf_teams_mark_flag`. `verified` marks the challenge solved and redirects every agent to the writeup.
+<a id="workflow"></a>
 
-## Tools
+## 协作流程
 
-Captain-only: `ctf_teams_create`, `ctf_teams_approve`, `ctf_teams_edit_plan`, `ctf_teams_add_member`, `ctf_teams_remove_member`, `ctf_teams_create_task`, `ctf_teams_reassign_task`, `ctf_teams_amend_task`, `ctf_teams_set_challenge`, `ctf_teams_mark_flag`, `ctf_teams_verify_finding`, `ctf_teams_archive_summary`, `ctf_teams_resume`, `ctf_teams_delete`
+```mermaid
+flowchart LR
+    C["队长规划"] -->|任务派发| A["成员并行探索"]
+    A --> B["共享发现与候选"]
+    B --> V["独立复核与平台验证"]
+    V -->|继续探索| C
+    V -->|完成目标| W["WRITEUP.md 与归档"]
+```
 
-Shared with members: `ctf_teams_claim_task`, `ctf_teams_update_task`, `ctf_teams_send_message`, `ctf_teams_status`, `ctf_teams_submit_flag`, `ctf_teams_report_finding`, `ctf_teams_sync`, `ctf_teams_knowledge`, `ctf_teams_env`, `ctf_teams_references`
+1. **规划。** 记录题目信息与约束，建立侦察、路线验证和最终复核之间的任务依赖。
+2. **探索。** 成员执行各自任务，通过轮次同步获取最新发现，及时公开有效结果、失败尝试和纠正。
+3. **复核。** 成员结论保留为待验证声明；队长记录独立检查。候选 flag 原文不因格式警告而被改写。
+4. **收敛。** 单题以平台接受为完成依据；批量模式按题计数，明确结束整批后再整理最终记录。
 
-## Evidence, platform flags and solo solves
+任务状态、当前尝试标识和邮箱消息均保存到工作区。成员交接会撤销旧尝试的写入权限，避免迟到结果覆盖新执行者；临时基础设施故障的检查点只用于续做，不作为完成证据。
 
-For a one-step attachment or decoding challenge, use `ctf_teams_create({name:"quick-solve",mode:"solo"})`. This creates a durable board without members, tasks, model sessions or reference downloads. Continue with `set_challenge` → solve directly → `submit_flag` → check the platform → `mark_flag` → `delete`. Squad mode remains the default.
+### 解题面板
 
-Inline plans require **both** `members` and `tasks` arrays. Each task requires **`id` and `subject`**; each member can include `executionPrompt`. Errors distinguish missing, undeclared and invalid fields and show a compact received structure. For a large or evolving plan, use `create` → `add_member` → `create_task` so errors stay local to one row.
+面板集中展示题目、成员、任务、发现、候选 flag 和下一步提示。常用操作包括：
 
-An unprofiled squad create uses the configured default roster. To build a custom roster step by step, start with a minimal inline plan (`members:[{name:"first-worker"}], tasks:[]`), then add the other rows.
+| 操作 | 用途 |
+| --- | --- |
+| 开始解题 / 添加附件 | 提交题目上下文，选择工作区内的附件。 |
+| 批准 / 推进 / 暂停 / 继续 | 控制计划和任务执行；队长专属操作按权限显示。 |
+| 核对 flag | 让队长检查平台结果并登记对应候选的判定。 |
+| 写 WRITEUP / 导出 | 整理解题链，导出 writeup 或复盘记录。 |
+| 归档 / 清理 | 保留已完成战队的历史，或明确清理数据。 |
+
+已归档战队可回看。平台靶机的生命周期独立于战队归档，释放槽位需要通过平台处理。
+
+<a id="use-cases"></a>
+
+## 使用场景
+
+### 一道题，多条路线
+
+```text
+/ctf-teams 这道题同时包含 Web 服务与二进制附件。先做共同侦察，
+再让成员分别验证输入处理、文件解析和二进制逻辑。避免重复劳动，
+每个结论都附命令、脚本路径或原始输出。
+```
+
+默认阵容由 `agent-1` 至 `agent-4` 组成，每名成员均具备完整领域提示。提速来自不同角度的探索，队长根据题目决定任务分配；成员数量和提示词可通过 `profiles` 调整。
+
+### 简单题，单人完成
+
+```text
+这是一道单步附件解码题，请用 CTFTeams 的 solo 模式直接完成，
+保留发现、候选 flag、平台判定和最终解题记录。
+```
+
+`mode: "solo"` 只建立持久化看板，跳过成员、任务图和建队时的参考仓库同步，适合无需并行探索的工作。
+
+### 批量刷题，逐题验收
+
+```text
+/ctf-teams 批量处理这一场的 23 道题。启用 multi_challenge，
+expected_challenges 设为 23，每个任务和 flag 都记录真实 challenge_id。
+一题通过后继续其他题；单容器槽位的任务排队执行，全部核验后明确结束整批。
+```
+
+批量模式按不同 `challenge_id` 计数，同一题的多个通过候选不会重复增加进度。`mark_challenge_solved` 用于明确结束整批；配置了预期题数时，未达到目标不能提前关闭。
+
+<details>
+<summary>模型工具调用示例：批量状态与候选登记</summary>
+
+以下示例用于已创建战队的会话，运行在 Harness 的模型工具上下文中；普通使用时直接描述上述需求即可。候选登记与平台提交是两个步骤。
 
 ```js
 await tools.ctf_teams_set_challenge({
-  flag_format: ["flag\\{[^}]+\\}", "CTF2\\{[^}]+\\}"],
-  environment_id: "platform-environment-id"
+  multi_challenge: true,
+  expected_challenges: 23,
+  flag_format: null
 });
-// Alternation works too; null means the platform alone determines the format.
-const candidate = await tools.ctf_teams_submit_flag({flag:"CTF2{EaSyRe}", evidence:"python solve.py; original output"});
-// Only after checking the competition's actual response:
-await tools.ctf_teams_mark_flag({flag_id:candidate.flag_ref, team_id:candidate.team_id, verdict:"verified", note:"platform accepted"});
+
+const candidate = await tools.ctf_teams_submit_flag({
+  challenge_id: '题目的实际 ID',
+  flag: 'CTF2{原始候选}',
+  evidence: '解题脚本路径、执行命令与原始输出'
+});
+
+// 队长实际检查平台接受结果后，才登记 verified。
+await tools.ctf_teams_mark_flag({
+  flag_id: candidate.flag_ref,
+  verdict: 'verified',
+  note: '平台实际返回的接受依据'
+});
 ```
 
-Format mismatches are recorded with a warning, preserving the candidate's wrapper and case. Exact duplicates reuse their ID; different letter case creates a separate candidate. `flag_ref` includes the board generation, so a recreated same-name team rejects an old reference. Local IDs (`f1`) still work on the current board; `mark_flag({flag:"exact original",…})` also locates by content. `verified_flag` optionally records a different string actually accepted by the platform; both registered and accepted strings appear on the board. Verdict updates reach round sync even after a member has seen the original candidate.
+</details>
 
-Findings start **unverified**, including legacy reports and high-confidence raw output. `report_finding` accepts `evidence_kind` (`raw_output`, `inference`, `guess`), `confidence` (`low`, `medium`, `high`) and `evidence`. The captain records an independent check with `verify_finding({finding_id,method,result,note})`; `result` is `confirmed`, `refuted` or `inconclusive`. Verification history stays on disk and is published as a new sync beat. The terminal uses `?` / `✓` / `✗`; the Web view and exports show evidence and verification details.
+### 稀缺环境、限流与非视觉模型
 
-`create({replaceExisting:true,…})` explicitly archives your prior solve after validating the new draft. `delete` returns `archive_path`; both actions remind you to check a recorded environment ID and release its platform slot. The plugin does not control platform containers. `archive_summary({team_id:"quick-solve",archived:true})` retrieves all findings, checks, tasks and platform verdicts as writeup source material.
+同战队任务可通过 `resource_key` 排队使用独占资源；`preflight` 在派发、认领与接管前检查环境、题目状态或已复核的离线自测。平台事实通过 `ctf_teams_platform_check` 只读刷新，未知、过期或属于其他题目的事实会阻塞相关任务。
 
-Board storage and HTTP/model text use UTF-8. Windows persistence and Chinese dashboard rendering have regression coverage. If an external command produces GBK bytes, configure that command/session for UTF-8 (for Python, `PYTHONUTF8=1`); the board cannot recover text already corrupted before it was reported.
+配置错误会暂停成员并提示修复，限流展示上游提供的恢复时间；临时基础设施故障保留任务进度，冷却后自动恢复一次，再次失败等待修复或重派。模型无法读取图片时，可使用 `ctf_teams_image_to_text` 提取 ASCII、OCR 或 QR/条码候选，或进行像素比较；所需依赖按环境准备。
 
-## Configuration
+详细用法与当前限制见 [CTF2 增强指南](./docs/ctf2-improvements-2026-10-14/README.md)。
+
+<a id="configuration"></a>
+
+## 配置
+
+以下示例覆盖 profile 中的插件配置，适用于已安装插件的环境：
 
 ```yaml
-# cordis.patch.yml / profile config
-stateDir: .ctf-teams          # team state root under the session workspace
-memberProvider: spawn         # 'spawn' or 'fork'
-maxMembers: 8
-defaultProfile: ctf-teams     # applied when create omits profile/plan ('' disables)
-slashCommand: true            # /ctf-teams + gesture boundary
-boardCommand: true            # /ctf-teams-board dashboard command
-autoApprove: true             # create-and-run: no plan-review click (false = two-phase)
-profiles: {}                  # your own profiles; override the builtin by name
-env:
-  allowInstall: true          # false keeps ctf_teams_env install dry-run only
-  probeTimeoutMs: 10000
-  installTimeoutMs: 300000
-  # pythonBin: /usr/bin/python3
-references:
-  autoSync: small             # small repos clone at team creation ('off'|'small'|'all'; shipped config enables it — the library default is off)
-  depth: 1                    # shallow clone depth for the reference repos
-  dirName: references         # under <stateDir>: .ctf-teams/references
-  timeoutMs: 600000
+- id: ctf-teams
+  config:
+    stateDir: .ctf-teams
+    memberProvider: spawn
+    maxMembers: 8
+    defaultProfile: ctf-teams
+    autoApprove: true
+    slashCommand: true
+    boardCommand: true
+    env:
+      allowInstall: true
+      probeTimeoutMs: 10000
+      installTimeoutMs: 300000
+    references:
+      autoSync: small
+      depth: 1
 ```
 
-## The agent preset mode
+| 设置 | 说明 |
+| --- | --- |
+| `autoApprove` | `true` 提交计划后运行；`false` 保留先审阅后批准的流程。 |
+| `defaultProfile` / `profiles` | 默认团队模板与自定义阵容；同名模板覆盖内置配置。空字符串可关闭默认阵容。 |
+| `memberModel` / 成员 `provider`、`model` | 设置成员模型；省略时按宿主与队长配置解析。可配置备用路由 `fallback`。 |
+| `env.allowInstall` | 控制工具链安装执行；关闭后仍可检查与预览安装计划。重型工具提供手动安装提示。 |
+| `references.autoSync` | 随附配置使用 `small`，建队时同步小型参考库；`off` 关闭，`all` 包含大型仓库。 |
+| `ctf2` | 可选 CTF2 代理地址、超时与宿主管理设置；默认不启动托管代理。 |
 
-The bundle applies two patch layers, in `dsh.bundle.patch` order:
+修改配置后重启对应宿主。模型修复、资源条件和可选代理设置的完整示例见 [增强指南](./docs/ctf2-improvements-2026-10-14/README.md#使用方式)。
 
-| Layer | File | What it contributes |
-|---|---|---|
-| 1 | `cordis.patch.yml` | The `@nanmicoder/dsh-ctf-teams` plugin row on the host plane: `ctf_teams_*` tools, `/ctf-teams`, `/ctf-teams-board`, the captain usage section — every session of the profile. |
-| 2 | `presets/ctf-teams.patch.yml` | The `ctf-teams` **agent preset** (`@deepseek-ai/dsh-agent-preset`, `CTF 团队模式`, order 3): the mode's persona, shell, filesystem, skills, delegation, plan mode and compaction. |
+<details>
+<summary>自定义两人阵容</summary>
 
-Edit layer 2 to shape the mode: every row in its `plugins` list is part of the agent plane, so removing `tool-web` removes web search from this mode only, and enabling `tool-subagent-codex` adds a delegation provider to it. Preset rows resolve against the Harness installation and the profile, exactly like the shipped presets, and a Host restart is what makes an edit visible (later sessions pick it up).
+在上面的 `config` 中加入团队模板：
 
-This layer needs a Harness that carries the agent-preset registry (**0.2.0-rc.2 or later**), where a preset is a declaration row in the composition. On an older host the row cannot resolve, the mode does not appear, and layer 1 keeps working unchanged — add `- insert: [{ id: ctf-teams, name: '@nanmicoder/dsh-ctf-teams' }]` to that profile's `cordis.patch.yml` if you want the tools mounted there explicitly.
+```yaml
+profiles:
+  duo:
+    description: 两名全栈成员，从不同角度探索
+    taskPlanning: captain
+    members:
+      - name: analyst-1
+        executionPrompt: 优先检查输入处理与协议行为，报告复现证据。
+      - name: analyst-2
+        executionPrompt: 优先检查附件与程序逻辑，及时同步有效结果和死胡同。
+```
 
-## Development
+重启后通过 `/ctf-teams --profile duo <题目描述>` 显式选用；也可将 `defaultProfile` 设置为 `duo`。
 
-See the [second CTF2 improvement report](docs/ctf2-improvements-2026-10-14/README.md) for batch solving, durable failure handling, resource/preflight gates, optional host-owned proxy management and image-to-text fallback. The report distinguishes implemented features from unimplemented platform reconciliation, global environment locking and external submission-order enforcement.
+</details>
+
+### 知识库与参考资料
+
+`ctf_teams_knowledge` 提供 Web、Pwn、Reverse、Crypto、Forensics、Misc 及 Kali、pwntools、SageMath、Volatility 3 等资料。`ctf_teams_env` 检查本机工具状态和安装路径。
+
+`ctf_teams_references` 按需同步 CTF 技能、PoC 和 CVE 索引，包括 [ctf-skills](https://github.com/ljagiello/ctf-skills)、[Awesome-POC](https://github.com/WyAtu/Awesome-POC) 等。仓库保存在工作区，供成员检索；大型库按实际需要同步。
+
+## 工具索引
+
+日常使用通过自然语言和面板即可。编写自定义工作流时，可按以下分组查找工具：
+
+| 工作流 | 主要工具 |
+| --- | --- |
+| 战队与计划 | `create`、`approve`、`edit_plan`、`add_member`、`update_member`、`remove_member` |
+| 任务执行与交接 | `create_task`、`claim_task`、`update_task`、`reassign_task`、`amend_task` |
+| 发现与复核 | `report_finding`、`verify_finding`、`sync` |
+| 题目与 flag | `set_challenge`、`submit_flag`、`mark_flag`、`mark_challenge_solved` |
+| 通信与状态 | `send_message`、`status`、`resume` |
+| 解题支持 | `knowledge`、`env`、`references`、`image_to_text`、`platform_check` |
+| 归档 | `delete`、`archive_summary` |
+
+完整工具名均带 `ctf_teams_` 前缀。成员只获得协作所需工具；题目判定、独立复核与成员路由修复等操作由队长执行。
+
+## 常见问题
+
+**候选格式不符合正则，会被拒收吗？**
+
+会保留候选并附上格式警告。可以设置多个格式，或以 `flag_format: null` 交由平台判断。嵌套包装与显式变体分别记录，原文不会被静默改写。
+
+**`submit_flag` 会直接向比赛平台提交吗？**
+
+该工具登记共享看板上的候选。实际平台提交通过平台工具或接入完成，队长检查后使用 `mark_flag` 记录结果。外部提交成功后的自动对账尚未实现。
+
+**已经分配任务，为什么成员还没有开始？**
+
+查看 `dispatch_state` 和 `dispatch_reason`。依赖、忙碌成员、待投递邮件、资源占用、故障或 preflight 都可能让任务等待。就绪任务由调度器派发，消息用于沟通和补充指导。
+
+**删除战队会释放平台容器吗？**
+
+平台环境需要单独检查与释放。归档会保留历史并返回路径；配置为宿主管理的共享代理不随战队删除而停止。
+
+**有哪些能力仍有边界？**
+
+资源锁目前作用于同一战队，平台事实需要显式刷新；跨战队全局租约、外部提交与停止顺序的强制约束尚未实现。图片 OCR/条码需要对应依赖，提取结果仍须验证。详细状态见 [逐项实施清单](./docs/ctf2-improvements-2026-10-14/README.md#完成状态)。
+
+<a id="documentation"></a>
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [CTF2 增强指南](./docs/ctf2-improvements-2026-10-14/README.md) | 批量解题、故障恢复、资源预检、图像降级与代理托管。 |
+| [验证记录](./docs/ctf2-improvements-2026-10-14/validation.json) | 完整回归、11 个真实宿主场景、安装包与图像测试的范围和结果。 |
+| [第一轮改进记录](./docs/ctf2-improvements-2026-10-13/README.md) | 计划诊断、原始 flag、证据复核、solo 与归档增强。 |
+| [兼容性清单](./compatibility.json) | 推荐与历史宿主版本范围。 |
+| [维护指南](./docs/maintenance-workflow.md) | 兼容性、验证与发布规则。 |
+
+本轮真实宿主验收使用确定性模型及平台判定样本，不代表已重新完成线上比赛测试，或已验证真实模型账号的配额恢复。
+
+## 开发与验证
 
 ```bash
 pnpm install
-pnpm build          # tsc -> lib/ + git-artifact stamp
+pnpm build             # 构建宿主、前端产物与 Git 分发校验戳记
 pnpm typecheck
-pnpm verify         # full offline chain incl. ctf-verify, lifecycle, quality gates
+pnpm verify            # 项目完整回归
+pnpm verify:ctf:harness # 当前已安装的精确宿主入口验收
 ```
 
-## Credits
+修改源码后请同步提交生成的 `lib/`，保证 Git 安装获取到可运行的产物。纯文档改动使用 `pnpm verify:readme` 检查版本引用。反馈问题时请附宿主版本、安装来源、复现步骤及相关状态；可通过本仓库的 [Issues](https://github.com/MetaViii/dsh-ctf-teams/issues) 提交。
 
-Forked from [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) by 程序员阿江 (Relakkes) — thanks for the excellent multi-agent foundation. The CTF-specific round sync, flag board, knowledge base, and terminal dashboard are this fork's additions. MIT licensed.
+## 致谢与许可
+
+本项目基于 [NanmiCoder/dsh-ctf-teams](https://github.com/NanmiCoder/dsh-ctf-teams) 继续维护，其多智能体底座来自程序员阿江（Relakkes）的 [dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams)。感谢上游的持久化成员、任务调度、消息与质量门设计，以及相关 CTF 知识库与参考资料的贡献者。
+
+本项目采用 [MIT License](./LICENSE)。

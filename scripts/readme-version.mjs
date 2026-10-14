@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // to update it afterwards, so a README that still names an older plugin version is
 // only fixable by cutting another release. Catch it before the tag is pushed.
 
-const README_FILES = ['README.md', 'README_ZH.md']
+const README_FILES = ['README.md', 'README_EN.md', 'README_ZH.md']
 
 // A README may name only the version being released. Older plugin versions stay
 // reachable through their own release-notes links, which every check strips first.
