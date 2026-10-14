@@ -52,6 +52,9 @@ export interface DispatchTicket {
     readonly previousResult?: Pick<TeamTask, 'output' | 'verdict' | 'findings' | 'changedPaths' | 'acceptanceResults' | 'commandsRun'>;
     readonly subject: string;
     readonly description?: string;
+    readonly checkpoint?: string;
+    readonly resourceKey?: string;
+    readonly remainingItems?: readonly string[];
     readonly teamDescription?: string;
     readonly profileProtocol?: string;
     readonly profileSeedId?: string;

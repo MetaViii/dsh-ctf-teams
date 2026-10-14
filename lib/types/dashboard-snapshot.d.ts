@@ -22,6 +22,7 @@ export interface DashboardMemberRow {
     model: string;
     reasoningEffort: string;
     status: string;
+    availability?: string;
     /** `working` | `idle` | `ready` | `unspawned` | `removed`. */
     activity: string;
     /** Unseen board beats (findings + flags) for this lane. */
@@ -35,6 +36,7 @@ export interface DashboardMemberRow {
 }
 /** One task row. */
 export interface DashboardTaskRow {
+    dispatchReason?: string;
     id: string;
     subject: string;
     description: string;
@@ -79,6 +81,11 @@ export interface DashboardTeamSnapshot {
     solved: boolean;
     challenge: ChallengeInfo;
     nextStep: string;
+    batchProgress?: {
+        verified: number;
+        expected?: number;
+        unscoped: number;
+    };
     members: DashboardMemberRow[];
     tasks: DashboardTaskRow[];
     findings: TeamFinding[];

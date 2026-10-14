@@ -177,7 +177,13 @@ for (const scenario of selectedScenarios) {
     const statePath = join(workspace, '.ctf-teams/runtime-lab/team.json'), state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : undefined;
     const requests = trace.filter(x => x.event === 'request' && x.purpose === undefined), memberRequests = requests.filter(x => x.isMember);
     const isFailure = scenario === 'failure';
-    const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes(isFailure ? 'AGENTTEAMS_EXPECTED_FAILURE_OK' : scenario === 'captain-idle-wakeup' ? 'CAPTAIN_IDLE_WAKEUP_OK' : 'AGENTTEAMS_PRODUCT_TURN_OK'), pluginToolsVisible: requests.some(x => x.toolNames.includes('ctf_teams_create')), memberExecuted: memberRequests.length > 0, explicitReasoning: memberRequests.length > 0 && memberRequests.some(x => x.model !== 'fixture-fallback') && memberRequests.filter(x => x.model !== 'fixture-fallback').every(x => x.reasoningEffort === 'high'), taskTerminal: state?.tasks?.find(t => t.id === 't1')?.status === (isFailure ? 'failed' : 'completed') };
+    const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes(isFailure ? 'AGENTTEAMS_EXPECTED_FAILURE_OK' : scenario === 'captain-idle-wakeup' ? 'CAPTAIN_IDLE_WAKEUP_OK' : 'AGENTTEAMS_PRODUCT_TURN_OK'), pluginToolsVisible: requests.some(x => x.toolNames.includes('ctf_teams_create')), memberExecuted: memberRequests.length > 0, explicitReasoning: memberRequests.length > 0 && memberRequests.some(x => x.model !== 'fixture-fallback') && memberRequests.filter(x => x.model !== 'fixture-fallback').every(x => x.reasoningEffort === 'high'), taskTerminal: state?.tasks?.find(t => t.id === 't1')?.status === 'completed' };
+    if (isFailure) {
+        const retained = trace.find(x => x.event === 'configuration-fault-retained');
+        assertions.configurationRetainsOwner = retained?.status === 'faulted' && retained?.code === 'AUTH' && retained?.count === 1 && ['claimed', 'in_progress'].includes(retained?.taskStatus) && retained?.owner === 'worker';
+        assertions.routeRepairContinuesSameTask = Boolean(retained && state?.members?.[0]?.id !== retained.memberId && state?.members?.[0]?.model === 'fixture-model' && state?.members?.[0]?.fault === undefined && state?.tasks?.[0]?.attemptId !== retained.attemptId);
+        assertions.noConfigurationRetryLoop = memberRequests.filter(x => x.model === 'fixture-failing').length === 1;
+    }
     if (!isFailure && scenario !== 'captain-idle-wakeup')
         assertions.secondWake = memberRequests.some(x => x.userText.includes('SECOND_WAKE_FIXTURE'));
     if (scenario === 'captain-idle-wakeup') {

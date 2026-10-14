@@ -36,12 +36,15 @@ import { installTeamCapabilities } from './capabilities.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
 import { CTF_PROFILE_NAME, withBuiltinCtfProfile } from './ctf-profile.ts'
 import { WRITEUP_COMPLETION } from './writeup.ts'
+import { installProxySupervisor, type PlatformConfig } from './platform.ts'
 
 export const name = 'ctf-teams'
 export const inject = ['tools', 'llm', 'subagents', 'systemPrompt', 'agents']
 
 /** Plugin configuration. */
 export interface Config {
+  /** Optional CTF2 loopback proxy integration. Managed mode is opt-in and host-owned. */
+  ctf2?: PlatformConfig
   /**
    * State directory name under the captain's workspace; team state lives at
    * `<workspace>/<stateDir>/<teamId>/` (default `.ctf-teams`).
@@ -126,6 +129,11 @@ const fallbackRouteConfig = z.union([
 ])
 
 export const Config: z<Config> = z.object({
+  ctf2: z.object({
+    proxyUrl: z.string(), timeoutMs: z.natural().min(1).default(10_000),
+    manageProxy: z.boolean().default(false), credentialDir: z.string(),
+    restartDelayMs: z.natural().min(1).default(3000), maxRestarts: z.natural().default(3),
+  }),
   stateDir: z.string().default('.ctf-teams'),
   memberProvider: z.string().default('spawn'),
   memberModel: z.string(),
@@ -204,23 +212,27 @@ export function usageSectionText(toolNames: string, profilesText = '', options: 
     ? 'Create it in the same call as the roster, then tell the user what is running in one short message and get on with the solve.'
     : 'Present the plan and end your turn for review; never approve in that planning turn.'}
 5. Findings are unverified claims: report evidence_kind (raw_output/inference/guess), confidence and reproducible evidence; independently check important claims and record ctf_teams_verify_finding(method,result,note). Round sync is the coordination contract: members publish findings with ctf_teams_report_finding and pull ctf_teams_sync; the scheduler attaches new findings to every assignment and pushes digests to idle members. You monitor the board via ctf_teams_status. When a dead-end finding invalidates a lane, re-plan with ctf_teams_edit_plan: add tasks for the new attack path instead of messaging members to "start" work.
-6. Preserve candidate flag bytes, wrapper and case; a format warning never licenses rewriting CTF2{...} to flag{...}. submit_flag returns team_id and durable flag_ref; mark_flag accepts that reference or exact flag content, and verified_flag records the exact platform-accepted string separately. Flags are evidence-gated: candidates arrive via ctf_teams_submit_flag (members must include evidence). Verify each against the competition platform yourself, then record the verdict with ctf_teams_mark_flag — verified marks the challenge solved and redirects every lane to the writeup. Never claim solved without the platform accepting; never mark a claim verified without checking; rejected candidates keep hunting.
+6. Preserve candidate flag bytes, wrapper and case; a format warning never licenses rewriting CTF2{...} to flag{...}. submit_flag returns team_id and durable flag_ref; mark_flag accepts that reference or exact flag content, and verified_flag records the exact platform-accepted string separately. Opt-in variants/generate_variants record separate unverified candidates and histories, never platform submissions. Flags are evidence-gated: candidates arrive via ctf_teams_submit_flag (members must include evidence). Verify each against the competition platform yourself, then record the verdict with ctf_teams_mark_flag. Single-challenge verification converges on the writeup. For batch solving set multi_challenge=true and expected_challenges before work, include challenge_id on every flag and task, continue after individual verifications and explicitly close with mark_challenge_solved only after all platform checks. Never claim solved without the platform accepting; never mark a claim verified without checking; rejected candidates keep hunting.
 7. The scheduler dispatches ready tasks. Delegate; do not duplicate slow work or send messages merely to start a stage. Handle reports/user work, then yield when waiting is all that remains: reports wake you automatically. Use status after a delivery or user request, never busy-poll or wait for unassigned members.${autoApprove
     ? ' Run to the flag: do not treat the first quiet moment as the end of the solve — while open tasks or live lanes remain, the solve is still running and the user is not asked anything.' : ''}
 8. Tasks carry attempt_id capabilities. Use the current attempt_id; stale means ownership changed. Pause members only on explicit request; later guidance via send_message continues that same attempt. Retry, transfer or take over through reassign_task first; it revokes the old attempt and waits for quiescence. Prefer a member. Captain implementation/review takeover requires a user request. Every takeover is one ready task at a time, finished in this turn; never yield with captain-owned work open.
 9. In a running team, correct never-started pending tasks with edit_plan update_task; preserve dependency and ownership contracts instead of cancelling and recreating the graph. A captain can cancel a never-started pending task directly. Quality kinds (requirements, implementation, verification, review, repair, integration) require objective + acceptance; implementation/repair also require inScope + verify. Review/requirements complete only with verdict=pass; needs_revision/reject fail with findings. Never approve your own implementation. Do not recreate the review loop, omit integration, or depend on a failed task. When a quality contract itself is wrong, fix it with ctf_teams_amend_task — captain-only, non-terminal tasks only, recorded in the task's revisions ledger — instead of letting the worker dead-lock.
 10. Halted means the user stopped work (including the captain turn). Resume only on a later explicit user request with a reason, via ctf_teams_resume or create_task({resume:true,resumeReason}); creating tasks alone never resumes. Escalated means the review loop hit its limit, not a halt.
 11. ctf_teams_delete returns archive_path and any environment cleanup reminder; ctf_teams_archive_summary(team_id,archived=true) retrieves all findings and platform verdicts for writeup source material. replaceExisting=true explicitly archives a previous solve before creating a separate challenge, only when that separate solve is intended. Completion: all required tasks terminal and members idle/ready — present the verified flag, the writeup path, and the final board, then let the user clean the team up (the 解题面板 has 删除战队 / 清空归档 for that) unless they want to continue. Never discard unfinished work without authorization. The writeup is a CTF solve record a reader can replay: real commands and raw output, the payload, the flag, the dead ends in one line — no tooling/agent/model/platform talk and no remediation advice. ${WRITEUP_COMPLETION}
+12. For exclusive environment slots use task resource_key; the scheduler serializes owners within a team. Add challenge_id to avoid accidental duplicate active work (allow_duplicate_challenge=true only for intentional parallel angles). Add allowlisted preflight checks and run captain-only platform_check to refresh read-only facts; missing/stale/unknown facts block dispatch. For offline readiness use preflight=offline_verified and preflight_finding_id referencing a captain-confirmed reproducible finding. Check and release real platform slots explicitly; task completion is not proof that the environment was released. requires_running_target_for_submit warns on missing/stopped targets; never turn an environment/network error into a rejected flag. ctf_teams_image_to_text provides optional ASCII/OCR/QR/barcode/pixel comparison when vision is unavailable; extraction remains a candidate. Shared MCP infrastructure belongs to the host; never kill it during member stand-down or team deletion.
+13. NO_ADAPTER/auth/model configuration faults require update_member(provider,model,reason); it drains and replaces the child while preserving member/task identities and checkpoints. Rate limits display retry/reset time when supplied, otherwise remain unavailable. Final transient infrastructure failures retain the open task and retry once after cooldown; a second failure waits for explicit repair/reassignment. Repeated same-member/code notices are suppressed durably. Use reassign_task(assignee="auto") or queue_if_busy=true for a shared-pool retry, or captain takeover when the user authorized direct work. Preserve remaining_items through update_task. Do not repeatedly wake a faulted member.
 Tools: ${toolNames}${profilesText === '' ? '' : `\n\n${profilesText}`}`
 }
 
 export function apply(ctx: Context, config: Config): void {
+  installProxySupervisor(ctx, config.ctf2)
   // The built-in ctf-teams squad ships under the user's own profiles; exact
   // name collisions resolve to the user's definition.
   const profiles = withBuiltinCtfProfile(config.profiles)
   /** True unless the profile explicitly wants the two-phase review gate. */
   const autoApprove = config.autoApprove ?? true
   const resolved: ToolsConfig = {
+    ctf2: config.ctf2,
     stateDir: config.stateDir ?? '.ctf-teams',
     memberProvider: config.memberProvider ?? 'spawn',
     memberModel: config.memberModel,

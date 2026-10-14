@@ -127,7 +127,12 @@ class FixtureAdapter extends LlmAdapter {
             else
                 chunks = textChunks('CAPTAIN_YIELDED_WAITING_FOR_MEMBER');
         }
-        else if (process.env.LAB_SCENARIO === 'failure' && toolText.includes('AUTH'))
+        else if (process.env.LAB_SCENARIO === 'failure' && toolText.includes('AUTH') && !names.includes('ctf_teams_update_member')) {
+            const retained = JSON.parse(readFileSync(join(process.cwd(), '.ctf-teams/runtime-lab/team.json'), 'utf8'));
+            record({ event: 'configuration-fault-retained', memberId: retained.members[0].id, status: retained.members[0].status, code: retained.members[0].fault?.code, count: retained.members[0].fault?.count, taskStatus: retained.tasks[0].status, owner: retained.tasks[0].assignee, attemptId: retained.tasks[0].attemptId });
+            chunks = call('ctf_teams_update_member', { member_name: 'worker', provider: 'runtime-lab', model: 'fixture-model', reasoning_effort: 'high', reason: 'Repair the fixture AUTH route while retaining the owned task' });
+        }
+        else if (process.env.LAB_SCENARIO === 'failure' && names.includes('ctf_teams_update_member') && (toolText + userText).includes('MEMBER_REPORT_OK'))
             chunks = textChunks('AGENTTEAMS_EXPECTED_FAILURE_OK');
         else if (process.env.LAB_SCENARIO === 'lifecycle' && !tools.some(t => t.name === 'ctf_teams_send_message' && t.arguments.includes('FIFO_FIRST'))) {
             for (let i = 0; i < 100 && !memberStarted; i++)

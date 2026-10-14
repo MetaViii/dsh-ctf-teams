@@ -19,6 +19,8 @@ import { join } from 'node:path'
 import { deliverToMember } from './members.ts'
 import { isCurrentMail, mailboxPrompt } from './mailbox.ts'
 import { advanceCursor, deltaSince, formatBoardDelta } from './findings.ts'
+import { memberAvailable } from './availability.ts'
+import { taskBlockReason } from './task-admission.ts'
 import {
   markMailboxDelivered,
   discardMailboxMessages,
@@ -78,6 +80,9 @@ export interface DispatchTicket {
   readonly previousResult?: Pick<TeamTask, 'output' | 'verdict' | 'findings' | 'changedPaths' | 'acceptanceResults' | 'commandsRun'>
   readonly subject: string
   readonly description?: string
+  readonly checkpoint?: string
+  readonly resourceKey?: string
+  readonly remainingItems?: readonly string[]
   readonly teamDescription?: string
   readonly profileProtocol?: string
   readonly profileSeedId?: string
@@ -191,7 +196,7 @@ function liveMember(ctx: Context, member: TeamMember): Agent | undefined {
 }
 
 function isMemberAvailable(ctx: Context, member: TeamMember): boolean {
-  if (member.stopping === true) return false
+  if (!memberAvailable(member)) return false
   const live = liveMember(ctx, member)
   return live === undefined || live.status === 'idle'
 }
@@ -201,12 +206,18 @@ function ownedOpenTask(tasks: readonly TeamTask[], memberName: string): TeamTask
     && (task.status === 'claimed' || task.status === 'in_progress'))
 }
 
-function nextReadyTask(tasks: readonly TeamTask[], memberName: string): TeamTask | undefined {
+function nextReadyTask(team: TeamState, memberName: string): TeamTask | undefined {
+  const tasks = team.tasks
   const ready = tasks.filter(task => task.status === 'pending'
     && task.reassigning !== true
     && unsatisfiedDependencies([...tasks], task.dependencies).length === 0)
-  return ready.find(task => task.assignee === memberName)
-    ?? ready.find(task => task.assignee === undefined)
+  const candidates = [...ready.filter(task => task.assignee === memberName), ...ready.filter(task => task.assignee === undefined)]
+  for (const task of candidates) {
+    const reason = taskBlockReason(team, task)
+    if (reason) task.blockedReason = reason
+    else { delete task.blockedReason; return task }
+  }
+  return undefined
 }
 
 export function assignmentPrompt(ticket: DispatchTicket, stateDir: string, teamId: string): string {
@@ -254,6 +265,7 @@ ${ticket.digest}
 `}
 
 Task: ${ticket.taskId}${seed} — ${ticket.subject}${description}
+${ticket.resourceKey ? `Exclusive resource: ${ticket.resourceKey}; you are the holder while this task is open. Submit accepted evidence and release the platform environment before completing/handoff.\n` : ''}${ticket.checkpoint ? `Infrastructure recovery checkpoint (not completion evidence): ${ticket.checkpoint}\n` : ''}${ticket.remainingItems?.length ? `Remaining items: ${ticket.remainingItems.join(', ')}\n` : ''}
 ${contract === '' ? '' : `\nContract:\n${contract}\n`}
 ${structuredCompletion}
 Attempt: ${ticket.attempt}
@@ -372,10 +384,12 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
           // the marker sticky across later kicks; only a durable attempt that
           // this process has not observed is eligible for one cold recovery.
           const parkedAttemptId = parkedAttempts.get(currentMember.id)
+          const infrastructureRetry = owned !== undefined && ['transient', 'rate_limit'].includes(currentMember.fault?.kind ?? '') && memberAvailable(currentMember) && (owned.infrastructureRetries ?? 0) < 1
           const recoverOwned = owned !== undefined
-            && (owned.attemptId === undefined || owned.attemptId !== parkedAttemptId)
+            && (currentMember.fault === undefined || infrastructureRetry)
+            && (infrastructureRetry || owned.attemptId === undefined || owned.attemptId !== parkedAttemptId)
           const task = recoverOwned ? owned : owned === undefined
-            ? nextReadyTask(fresh.tasks, currentMember.name)
+            ? nextReadyTask(fresh, currentMember.name)
             : undefined
           const delta = deltaSince(fresh, currentMember.name)
           const digest = formatBoardDelta(delta)
@@ -383,11 +397,18 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
           // beats arriving before delivery acceptance stay pending instead of
           // being skipped by a cursor that jumped to a newer head.
           const upTo = { findingSeq: fresh.findingSeq ?? 0, flagSeq: fresh.flagSeq ?? 0 }
+          if (task !== undefined) {
+            const blocked = taskBlockReason(fresh, task)
+            if (blocked) { task.blockedReason = blocked; await writeTeam(stateRoot, fresh); return undefined }
+            delete task.blockedReason
+            if (infrastructureRetry) { owned!.infrastructureRetries = (owned!.infrastructureRetries ?? 0) + 1; delete currentMember.fault; currentMember.status = 'idle' }
+            else if (owned === undefined && currentMember.fault && memberAvailable(currentMember)) delete currentMember.fault
+          }
           if (task === undefined) {
             if (currentMember.status !== 'idle') {
               currentMember.status = 'idle'
-              await writeTeam(stateRoot, fresh)
             }
+            await writeTeam(stateRoot, fresh)
             // An idle member with nothing to claim still syncs: new board
             // content may redirect its next round or tell it to stop.
             if (delta.hasUpdates || delta.solved) {
@@ -428,6 +449,9 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
             ...previousAttemptId === undefined ? {} : { previousAttemptId },
             subject: task.subject,
             description: task.description,
+            checkpoint: task.checkpoint,
+            resourceKey: task.resourceKey,
+            remainingItems: task.remainingItems,
             teamDescription: fresh.description,
             ...protocol === undefined ? {} : { profileProtocol: protocol },
             ...profileSeedId === undefined ? {} : { profileSeedId },
@@ -573,6 +597,7 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
       } else {
         parkedAttempts.delete(agent.id)
       }
+      if (current.fault && !memberAvailable(current)) return
       if (current.status === next) return
       current.status = next
       await writeTeam(stateRoot, fresh)

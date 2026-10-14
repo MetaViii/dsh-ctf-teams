@@ -26,6 +26,19 @@ await tools.ctf_teams_set_challenge({flag_format:['flag\\\\{[^}]+\\\\}','CTF2\\\
 await tools.ctf_teams_set_challenge({flag_format:null});
 const verdict = await tools.ctf_teams_mark_flag({flag_id:flag.flag_ref,flag:flag.flag,team_id:solo.team_id,verdict:'verified',note:'fixture platform accepted'});
 if (!verdict.solved || verdict.verified_flag !== 'CTF2{EaSyRe}') throw Error('platform verdict failed');
+await tools.ctf_teams_set_challenge({multi_challenge:true,expected_challenges:2,requires_running_target_for_submit:true});
+const nested = await tools.ctf_teams_submit_flag({flag:'flag{GWHT{aA01}}',challenge_id:'ch1',generate_variants:true,evidence:'nested output'});
+if (nested.variants.length !== 2 || !nested.environment_warning) throw Error('variant/environment fallback failed');
+await tools.ctf_teams_mark_flag({flag_id:nested.flag_ref,verdict:'rejected',note:'fixture platform rejected outer wrapper'});
+const inner = await tools.ctf_teams_mark_flag({flag_id:nested.variants[0].split(' ')[0],verdict:'verified',note:'fixture platform accepted inner'});
+if (inner.solved || !inner.progress.includes('1/2')) throw Error('batch converged after only one challenge');
+let premature = false;
+try { await tools.ctf_teams_mark_challenge_solved({note:'premature closure'}); } catch { premature = true; }
+if (!premature) throw Error('incomplete batch accepted');
+const second = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',challenge_id:'ch2'});
+const secondVerdict = await tools.ctf_teams_mark_flag({flag_id:second.flag_ref,verdict:'verified',note:'fixture platform accepted second'});
+if (secondVerdict.solved) throw Error('batch closed without explicit completion');
+await tools.ctf_teams_mark_challenge_solved({note:'fixture platform accepted both distinct challenge ids'});
 const archived = await tools.ctf_teams_delete({});
 if (!archived.archive_path || !archived.environment_notice.includes('env-ctf2')) throw Error('archive receipt failed');
 const summary = await tools.ctf_teams_archive_summary({team_id:solo.team_id,archived:true});

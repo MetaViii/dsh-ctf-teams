@@ -254,6 +254,8 @@ references:
 
 ## 开发
 
+最新 CTF2 实战建议的实现状态、批量刷题、故障修复、环境预检、可选代理托管与图像降级用法见 [第二轮改进记录](docs/ctf2-improvements-2026-10-14/README.md)。其中平台自动对账、跨战队全局环境锁和外部提交/停止次序的强制约束仍未实现，记录中逐项说明了边界。
+
 ```bash
 pnpm install
 pnpm build          # tsc -> lib/ + git-artifact 戳记

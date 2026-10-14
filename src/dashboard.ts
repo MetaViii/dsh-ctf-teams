@@ -13,6 +13,7 @@
 
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts'
 import { challengeOf, DEFAULT_FLAG_FORMAT, flagFormatLabel } from './findings.ts'
+import { availabilityLabel } from './availability.ts'
 
 /** The task fields the dashboard renders; a narrow view of TeamTask. */
 export interface DashboardTask {
@@ -20,6 +21,8 @@ export interface DashboardTask {
   subject: string
   status: string
   assignee?: string
+  blockedReason?: string
+  dispatch_reason?: string
 }
 
 /** Panel content width (between the `│` borders), including the 1-space pads. */
@@ -112,6 +115,7 @@ export interface DashboardMember {
   behind?: number
   /** The open task this member currently owns, if any. */
   workingOn?: string
+  availability?: string
 }
 
 /** Everything the dashboard needs; derived from team state plus live activity. */
@@ -222,6 +226,7 @@ export function nextStepHint(input: DashboardInput): string {
   if (input.phase === 'halted') return 'team halted — ctf_teams_resume with a reason to continue'
   if (input.phase === 'escalated') return 'review loop hit its ceiling — escalate to the user or amend the contract'
   if (challenge.solved === true) return 'solved — finish WRITEUP.md, then clean the team up (归档 / 删除) from the panel'
+  if (live.length > 0 && live.every(member => member.status === 'faulted')) return 'no available members — repair provider/model or take over when authorized; consult recorded cooldowns'
   if (candidates.length > 0) return `verify ${candidates.map((flag) => flag.id).join(', ')} against the platform, then ctf_teams_mark_flag`
   if (input.mode === 'solo') return 'solo — solve directly, record findings and submit the original flag for platform verification'
   if (input.tasks.length === 0) return 'no task graph yet — create the team plan (recon first, then one task per angle)'
@@ -229,7 +234,7 @@ export function nextStepHint(input: DashboardInput): string {
   if (working.length > 0) return 'lanes are working — round sync pushes findings; ctf_teams_sync pulls the rest'
   if (active.length > 0) return `${active.length} task(s) in flight — wait for the owner, then verify the result`
   if (pending.length > 0) return `${pending.length} ready task(s) — dispatch them or let the scheduler wake the owners`
-  return 'every task is terminal — present the result and converge on the writeup'
+  return challenge.multiChallenge ? 'batch remains open — continue remaining challenges or explicitly mark_challenge_solved after platform checks' : 'every task is terminal — present the result and converge on the writeup'
 }
 
 /**
@@ -264,6 +269,7 @@ export function renderDashboard(input: DashboardInput): string {
     ...(challenge.flagFormat === undefined ? [] : [row('Flag fmt', flagFormatLabel(challenge))]),
     ...challenge.environmentId ? [row('Environment', challenge.environmentId)] : [],
     row('Status', meta),
+    ...challenge.multiChallenge ? [row('Batch', `${new Set(input.flags.filter(f => f.status === 'verified' && f.challengeId).map(f => f.challengeId)).size}/${challenge.expectedChallenges ?? '?'} challenges verified; explicit completion required`)] : [],
   ]
   if (input.description !== undefined && input.description.trim() !== '') {
     lines.push(row('Goal', input.description))
@@ -278,6 +284,7 @@ export function renderDashboard(input: DashboardInput): string {
   for (const member of input.members) {
     const state = member.status === 'removed'
       ? 'removed'
+      : member.status === 'faulted' ? 'faulted'
       : member.activity === 'unspawned' || member.status === 'unspawned' ? 'unspawned' : member.activity ?? member.status
     const behind = member.behind ?? 0
     const lane = `${agentGlyph(member)} ${member.name}`
@@ -285,6 +292,7 @@ export function renderDashboard(input: DashboardInput): string {
     const work = member.workingOn ?? member.role ?? ''
     const body = `${fit(lane, 14)}${fit(stateText, 13)}${fit(work, PANEL_WIDTH - 15 - 14 - 13)}`
     lines.push(`│ ${fit(body, PANEL_WIDTH - 4)} │`)
+    if (member.availability && member.status === 'faulted') lines.push(row('Recovery', member.availability))
   }
 
   // Task board: the progress bar and the last board beat ride the section bar,
@@ -302,6 +310,7 @@ export function renderDashboard(input: DashboardInput): string {
     const who = task.assignee ?? 'unassigned'
     const title = truncateToWidth(task.subject, PANEL_WIDTH - 26)
     lines.push(row(`${task.id} ${glyph}`, `${title} → ${who}`))
+    if (task.blockedReason || task.dispatch_reason) lines.push(row('Waiting', task.blockedReason ?? task.dispatch_reason ?? ''))
   }
   const census = [
     `${done} done`,
@@ -380,6 +389,7 @@ export function dashboardInputFromTeam(
       name: member.name,
       role: member.role,
       status: member.status,
+      availability: availabilityLabel(member),
       activity: member.id === '' ? 'unspawned' : extras.activity?.get(member.id) ?? member.status,
       route: member.provider !== undefined && member.model !== undefined ? `${member.provider}/${member.model}` : undefined,
       behind: extras.memberBehind?.get(member.name) ?? 0,

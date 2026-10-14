@@ -69,6 +69,7 @@ export function flagFormatRegex(challenge: ChallengeInfo | undefined): RegExp {
 /** True when the flag string matches the challenge's configured format. */
 export function flagMatchesFormat(flag: string, challenge: ChallengeInfo | undefined): boolean {
   if (challenge?.flagFormat === null) return true
+  if ((challenge?.flagFormat === undefined || challenge.flagFormat === DEFAULT_FLAG_FORMAT) && flagWrapper(flag)?.toLowerCase() === 'flag') return true
   return flagFormatRegex(challenge).test(flag)
 }
 
@@ -80,7 +81,45 @@ export function flagFormatLabel(challenge: ChallengeInfo | undefined): string {
 
 /** Infer only the wrapper; never change any bytes of a candidate. */
 export function flagWrapper(flag: string): string | undefined {
-  return /^([A-Za-z][A-Za-z0-9_-]*)\{[^}]+\}$/u.exec(flag)?.[1]
+  const prefix = /^([A-Za-z][A-Za-z0-9_-]*)\{/u.exec(flag)
+  if (!prefix || !flag.endsWith('}') || flag.length <= prefix[0].length + 1) return undefined
+  let depth = 0
+  for (let i = prefix[0].length - 1; i < flag.length; i++) {
+    if (flag[i] === '{') depth++
+    if (flag[i] === '}' && --depth === 0 && i !== flag.length - 1) return undefined
+    if (depth < 0) return undefined
+  }
+  return depth === 0 ? prefix[1] : undefined
+}
+
+/** Opt-in candidate generation only: no variant is automatically submitted or verified. */
+export function nestedFlagVariants(raw: string): string[] {
+  const variants: string[] = []
+  let value = normalizeFlag(raw)
+  for (let i = 0; i < 16 && flagWrapper(value); i++) {
+    value = value.slice(value.indexOf('{') + 1, -1)
+    if (value) variants.push(value)
+  }
+  return [...new Set(variants)]
+}
+
+export function batchProgress(team: TeamState): { verified: number; expected?: number; unscoped: number } {
+  const accepted = (team.flags ?? []).filter(f => f.status === 'verified')
+  return { verified: new Set(accepted.flatMap(f => f.challengeId ? [f.challengeId] : [])).size, expected: team.challenge?.expectedChallenges, unscoped: accepted.filter(f => !f.challengeId).length }
+}
+
+/** Explicit batch completion, after real platform checks; flags alone never close a batch. */
+export function markChallengeSolved(team: TeamState, note: string): void {
+  if (!note.trim()) throw new Error('explicit completion evidence/note is required')
+  const progress = batchProgress(team)
+  if (team.challenge?.multiChallenge && progress.verified === 0) throw new Error('batch completion needs at least one verified challenge_id; unscoped legacy flags do not count')
+  if (team.challenge?.multiChallenge && progress.expected !== undefined && progress.verified < progress.expected) throw new Error(`batch incomplete: ${progress.verified}/${progress.expected} distinct challenges verified`)
+  if (!(team.flags ?? []).some(f => f.status === 'verified')) throw new Error('no platform-verified flags on the board')
+  team.challenge ??= {}
+  team.challenge.explicitlySolved = true
+  team.challenge.solved = true
+  team.challenge.solvedAt = Date.now()
+  appendFinding(team, { from: 'captain', category: 'completion', content: note, evidenceKind: 'raw_output' })
 }
 
 /** A claim is unverified even if its author supplied raw output or high confidence. */
@@ -94,7 +133,7 @@ export function formatFinding(finding: TeamFinding): string {
 }
 
 export function formatFlag(flag: FlagCandidate): string {
-  return `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}${flag.verifiedFlag ? `; platform accepted: ${flag.verifiedFlag}` : ''}${flag.formatWarning ? `; FORMAT WARNING: ${flag.formatWarning}` : ''}${flag.note ? `; ${flag.note}` : ''}`
+  return `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}${flag.challengeId ? `; challenge=${flag.challengeId}` : ''}${flag.variantOf ? `; variant of ${flag.variantOf}` : ''}${flag.verifiedFlag ? `; platform accepted: ${flag.verifiedFlag}` : ''}${flag.formatWarning ? `; FORMAT WARNING: ${flag.formatWarning}` : ''}${flag.note ? `; ${flag.note}` : ''}`
 }
 
 /** The team's challenge info with its default flag format filled in. */
@@ -180,14 +219,14 @@ export function flagReference(team: TeamState, candidate: FlagCandidate): string
 /** Append one candidate flag. Duplicates return the existing candidate. Caller must persist. */
 export function appendFlagCandidate(
   team: TeamState,
-  input: { flag: string; submittedBy: string; evidence?: string },
+  input: { flag: string; submittedBy: string; evidence?: string; challengeId?: string; variantOf?: string },
 ): { candidate: FlagCandidate; duplicate: boolean } {
   const flag = normalizeFlag(input.flag)
   if (flag === '') throw new Error('flag must not be empty')
   const wrapper = flagWrapper(flag)
   const formatWarning = flagMatchesFormat(flag, team.challenge) ? undefined
     : `Does not match /${flagFormatLabel(team.challenge)}/.${wrapper ? ` Observed wrapper: ${wrapper}.` : ''} Preserve the original string; the platform decides.`
-  const existing = findFlagCandidate(team, flag)
+  const existing = team.flags?.find(entry => entry.flag === flag && entry.challengeId === input.challengeId)
   if (existing !== undefined) return { candidate: existing, duplicate: true }
   const seq = Math.max(team.flagSeq ?? 0, ...(team.flags ?? []).map(entry => boardIdNumber(entry.id))) + 1
   const candidate: FlagCandidate = {
@@ -196,6 +235,8 @@ export function appendFlagCandidate(
     submittedBy: input.submittedBy,
     status: 'candidate',
     ts: Date.now(),
+    ...input.challengeId ? { challengeId: input.challengeId } : {},
+    ...input.variantOf ? { variantOf: input.variantOf } : {},
     ...formatWarning === undefined ? {} : { formatWarning },
     ...(input.evidence !== undefined && input.evidence.trim() !== ''
       ? { evidence: input.evidence.trim().slice(0, FLAG_EVIDENCE_MAX_CHARS) }
@@ -215,13 +256,15 @@ export function reviewFlagCandidate(
   input: { by: string; note?: string; flag?: string; verifiedFlag?: string },
 ): { candidate: FlagCandidate; solved: boolean } {
   const localId = flagId.startsWith(`${team.id}/`) ? flagId.slice(team.id.length + 1) : flagId
-  const candidate = input.flag !== undefined
-    ? findFlagCandidate(team, normalizeFlag(input.flag))
-    : team.flags?.find((entry) => entry.id === localId || flagReference(team, entry) === flagId || entry.flag === flagId)
+  const matchingFlags = input.flag === undefined ? [] : (team.flags ?? []).filter(entry => entry.flag === normalizeFlag(input.flag!))
+  if (flagId && !team.flags?.some(entry => entry.id === localId || flagReference(team, entry) === flagId) && (team.flags ?? []).filter(entry => entry.flag === flagId).length > 1) throw new Error('ambiguous flag content across challenges; use durable flag_ref')
+  if (flagId === '' && matchingFlags.length > 1) throw new Error(`ambiguous flag content across challenges; use durable flag_ref: ${matchingFlags.map(f => flagReference(team, f)).join(', ')}`)
+  const candidate = flagId !== '' ? team.flags?.find((entry) => entry.id === localId || flagReference(team, entry) === flagId || entry.flag === flagId) : matchingFlags[0]
+  if (!candidate && flagId !== '' && matchingFlags.length) throw new Error('flag_id and flag identify different candidates')
   if (candidate === undefined) {
     throw new Error(`no flag candidate "${input.flag ?? flagId}" on team "${team.id}". Current ids: ${(team.flags ?? []).map(entry => `${entry.id} (${flagReference(team, entry)})`).join(', ') || '(none)'}. Use ctf_teams_status or mark by exact flag content.`)
   }
-  if (input.flag !== undefined && flagId !== '' && candidate.id !== localId && flagReference(team, candidate) !== flagId && candidate.flag !== flagId) throw new Error('flag_id and flag identify different candidates')
+  if (input.flag !== undefined && candidate.flag !== normalizeFlag(input.flag)) throw new Error('flag_id and flag identify different candidates')
   const verifiedFlag = input.verifiedFlag === undefined ? candidate.flag : normalizeFlag(input.verifiedFlag)
   if (verdict === 'verified' && verifiedFlag === '') throw new Error('verified_flag must not be empty')
   candidate.status = verdict
@@ -230,15 +273,18 @@ export function reviewFlagCandidate(
   if (verdict === 'verified') candidate.verifiedFlag = verifiedFlag
   else delete candidate.verifiedFlag
   if (input.note !== undefined && input.note.trim() !== '') candidate.note = input.note.trim()
+  candidate.reviews ??= []
+  candidate.reviews.push({ verdict, by: input.by, ts: candidate.reviewedAt, ...input.note ? { note: input.note } : {}, ...verdict === 'verified' ? { verifiedFlag } : {} })
   candidate.updateSeq = Math.max(team.flagSeq ?? 0, ...(team.flags ?? []).map(entry => boardIdNumber(entry.id))) + 1
   team.flagSeq = candidate.updateSeq
   team.round = (team.round ?? 0) + 1
   const accepted = team.flags?.find(entry => entry.status === 'verified')
-  const solved = accepted !== undefined
   team.challenge ??= {}
+  const progress = batchProgress(team)
+  const solved = team.challenge.multiChallenge ? team.challenge.explicitlySolved === true && progress.verified > 0 && (progress.expected === undefined || progress.verified >= progress.expected) : accepted !== undefined
   team.challenge.solved = solved
-  if (accepted) { team.challenge.solvedAt = accepted.reviewedAt ?? accepted.ts; team.challenge.solvedBy = accepted.submittedBy }
-  else { delete team.challenge.solvedAt; delete team.challenge.solvedBy }
+  if (accepted && solved && !team.challenge.multiChallenge) { team.challenge.solvedAt = accepted.reviewedAt ?? accepted.ts; team.challenge.solvedBy = accepted.submittedBy }
+  else if (!solved) { delete team.challenge.solvedAt; delete team.challenge.solvedBy }
   return { candidate, solved }
 }
 
@@ -256,6 +302,7 @@ export function verifyFinding(team: TeamState, findingId: string, input: { by: s
 
 /** Captain-owned challenge metadata update; merges into existing info. */
 export function updateChallenge(team: TeamState, patch: ChallengeInfo): ChallengeInfo {
+  if (patch.expectedChallenges !== undefined && (!Number.isSafeInteger(patch.expectedChallenges) || patch.expectedChallenges < 1)) throw new Error('expected_challenges must be a positive integer')
   if (patch.flagFormat !== undefined && patch.flagFormat !== null) {
     const formats = Array.isArray(patch.flagFormat) ? patch.flagFormat : [patch.flagFormat]
     if (formats.length === 0 || formats.some(entry => entry.trim() === '')) throw new Error('flag_format must contain nonempty regex sources, or null')
@@ -271,6 +318,10 @@ export function updateChallenge(team: TeamState, patch: ChallengeInfo): Challeng
     ...patch.attachments !== undefined ? { attachments: patch.attachments } : {},
     ...patch.remote !== undefined ? { remote: patch.remote.trim() } : {},
     ...patch.environmentId !== undefined ? { environmentId: patch.environmentId.trim() } : {},
+    ...patch.multiChallenge !== undefined ? { multiChallenge: patch.multiChallenge } : {},
+    ...patch.expectedChallenges !== undefined ? { expectedChallenges: patch.expectedChallenges } : {},
+    ...patch.requiresRunningTargetForSubmit !== undefined ? { requiresRunningTargetForSubmit: patch.requiresRunningTargetForSubmit } : {},
+    ...patch.practiceGroundId !== undefined ? { practiceGroundId: patch.practiceGroundId.trim() } : {},
     ...patch.flagFormat !== undefined ? { flagFormat: patch.flagFormat } : {},
   }
   for (const [key, value] of Object.entries(next)) {
@@ -279,6 +330,11 @@ export function updateChallenge(team: TeamState, patch: ChallengeInfo): Challeng
     }
   }
   team.challenge = next
+  if (next.multiChallenge) {
+    const progress = batchProgress(team)
+    next.solved = next.explicitlySolved === true && (progress.expected === undefined || progress.verified >= progress.expected) && progress.verified > 0
+    if (!next.solved) { delete next.solvedAt; delete next.solvedBy }
+  }
   return next
 }
 
@@ -291,6 +347,7 @@ export interface BoardDelta {
   round: number
   /** The challenge is solved — overrides everything else in the digest. */
   solved: boolean
+  batch?: { verified: number; expected?: number; unscoped: number }
 }
 
 export function deltaSince(team: TeamState, participant: string): BoardDelta {
@@ -303,6 +360,7 @@ export function deltaSince(team: TeamState, participant: string): BoardDelta {
     flags,
     round: team.round ?? 0,
     solved: team.challenge?.solved === true,
+    ...team.challenge?.multiChallenge ? { batch: batchProgress(team) } : {},
   }
 }
 
@@ -322,6 +380,7 @@ export function formatBoardDelta(delta: BoardDelta): string {
   if (!delta.hasUpdates && !delta.solved) return ''
   const lines: string[] = []
   if (delta.solved) lines.push('*** THE CHALLENGE IS SOLVED — a flag was verified. Wrap up: stop exploring, help finalize the writeup. ***')
+  else if (delta.batch) lines.push(`BATCH PROGRESS: ${delta.batch.verified}/${delta.batch.expected ?? '?'} challenges verified${delta.batch.unscoped ? `; ${delta.batch.unscoped} verified flags lack challenge_id` : ''}. Continue remaining lanes; do NOT converge on a batch writeup yet.`)
   if (delta.findings.length > 0) {
     lines.push('New teammate findings:')
     for (const finding of delta.findings.slice(-DIGEST_FINDING_LIMIT)) {

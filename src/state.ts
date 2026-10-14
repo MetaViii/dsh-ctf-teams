@@ -726,6 +726,7 @@ function isTeamMember(value: unknown): value is TeamMember {
     && typeof value['name'] === 'string'
     && value['name'].trim() !== ''
     && isOptionalString(value['role'])
+    && isOptionalString(value['repairId'])
     && (value['stopping'] === undefined || typeof value['stopping'] === 'boolean')
     && isOptionalString(value['provider'])
     && isOptionalString(value['model'])
@@ -737,7 +738,9 @@ function isTeamMember(value: unknown): value is TeamMember {
     && (value['fallback'] === undefined || (isRecord(value['fallback']) && typeof value['fallback']['provider'] === 'string' && typeof value['fallback']['model'] === 'string'))
     && (value['fallbackActive'] === undefined || typeof value['fallbackActive'] === 'boolean')
     && isFiniteNumber(value['joinedAt'])
-    && (value['status'] === 'idle' || value['status'] === 'working' || value['status'] === 'removed')
+    && (value['status'] === 'idle' || value['status'] === 'working' || value['status'] === 'faulted' || value['status'] === 'removed')
+    && (value['failureCounts'] === undefined || isRecord(value['failureCounts']) && Object.values(value['failureCounts']).every(count => Number.isSafeInteger(count) && (count as number) >= 0))
+    && (value['fault'] === undefined || isRecord(value['fault']) && typeof value['fault']['code'] === 'string' && typeof value['fault']['message'] === 'string' && ['configuration', 'rate_limit', 'transient', 'task'].includes(String(value['fault']['kind'])) && Number.isSafeInteger(value['fault']['count']) && (value['fault']['count'] as number) > 0 && isFiniteNumber(value['fault']['firstAt']) && isFiniteNumber(value['fault']['lastAt']) && (value['fault']['retryAt'] === undefined || isFiniteNumber(value['fault']['retryAt'])))
 }
 
 /** Validate one task record at the durable JSON boundary. */
@@ -822,6 +825,14 @@ export function isTeamTask(value: unknown): value is TeamTask {
     && Array.isArray(value['dependencies'])
     && value['dependencies'].every((dependency) => typeof dependency === 'string')
     && isOptionalString(value['output'])
+    && isOptionalString(value['challengeId'])
+    && isOptionalString(value['resourceKey'])
+    && isOptionalString(value['checkpoint'])
+    && isOptionalString(value['blockedReason'])
+    && isOptionalString(value['preflightFindingId'])
+    && (value['remainingItems'] === undefined || Array.isArray(value['remainingItems']) && value['remainingItems'].every(item => typeof item === 'string'))
+    && (value['preflight'] === undefined || Array.isArray(value['preflight']) && value['preflight'].every(item => typeof item === 'string' && ['environment_free', 'whoami.active_environments==0', 'challenge_unsolved', 'get.is_solved==false', 'access_ready', 'env.access_ready==true', 'target_running', 'offline_verified'].includes(item)))
+    && (value['infrastructureRetries'] === undefined || Number.isSafeInteger(value['infrastructureRetries']) && (value['infrastructureRetries'] as number) >= 0)
     && (value['attempt'] === undefined
       || (Number.isSafeInteger(value['attempt']) && (value['attempt'] as number) >= 0))
     && isOptionalString(value['attemptId'])
@@ -852,6 +863,11 @@ function isTeamState(value: unknown, expectedId: string): value is TeamState {
     && Number.isSafeInteger(value['taskSeq'])
     && (value['taskSeq'] as number) >= 0
     && (value['mode'] === undefined || value['mode'] === 'solo' || value['mode'] === 'squad')
+    && (value['platformSnapshot'] === undefined || isRecord(value['platformSnapshot'])
+      && isFiniteNumber(value['platformSnapshot']['checkedAt'])
+      && isOptionalString(value['platformSnapshot']['challengeId'])
+      && (value['platformSnapshot']['activeEnvironments'] === undefined || Number.isSafeInteger(value['platformSnapshot']['activeEnvironments']) && (value['platformSnapshot']['activeEnvironments'] as number) >= 0)
+      && ['isSolved', 'accessReady', 'targetRunning'].every(key => (value['platformSnapshot'] as Record<string, unknown>)[key] === undefined || typeof (value['platformSnapshot'] as Record<string, unknown>)[key] === 'boolean'))
     && (value['phase'] === undefined || value['phase'] === 'staged' || value['phase'] === 'running')
     && (value['planReviewState'] === undefined
       || value['planReviewState'] === 'awaiting_review'

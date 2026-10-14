@@ -255,6 +255,8 @@ This layer needs a Harness that carries the agent-preset registry (**0.2.0-rc.2 
 
 ## Development
 
+See the [second CTF2 improvement report](docs/ctf2-improvements-2026-10-14/README.md) for batch solving, durable failure handling, resource/preflight gates, optional host-owned proxy management and image-to-text fallback. The report distinguishes implemented features from unimplemented platform reconciliation, global environment locking and external submission-order enforcement.
+
 ```bash
 pnpm install
 pnpm build          # tsc -> lib/ + git-artifact stamp

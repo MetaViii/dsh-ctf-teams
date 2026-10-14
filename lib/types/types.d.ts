@@ -92,6 +92,16 @@ export interface TeamTask {
     dependencies: string[];
     /** The worker's written result, set when the task completes or fails. */
     output?: string;
+    challengeId?: string;
+    /** Team-local mutually exclusive resource (e.g. the sole platform container). */
+    resourceKey?: string;
+    preflight?: string[];
+    preflightFindingId?: string;
+    blockedReason?: string;
+    remainingItems?: string[];
+    /** Kept across infrastructure retries; never treated as completion evidence. */
+    checkpoint?: string;
+    infrastructureRetries?: number;
     /** Monotonic execution generation. Reassignment/retry invalidates every older attempt. */
     attempt?: number;
     /** Capability for the current claimed/in-progress attempt. Members must present it when updating. */
@@ -133,9 +143,20 @@ export interface TeamTask {
     updatedAt: number;
 }
 /** Member lifecycle status. */
-export type MemberStatus = 'idle' | 'working' | 'removed';
+export type MemberStatus = 'idle' | 'working' | 'faulted' | 'removed';
+export interface MemberFault {
+    code: string;
+    message: string;
+    kind: 'configuration' | 'rate_limit' | 'transient' | 'task';
+    count: number;
+    firstAt: number;
+    lastAt: number;
+    retryAt?: number;
+}
 /** One team member: a continuable subagent plus its team-side record. */
 export interface TeamMember {
+    /** Fences concurrent provider repairs, including unspawned members. */
+    repairId?: string;
     /** Durable continuable subagent session id (empty until spawned). */
     id: string;
     /** Unique display name inside the team. */
@@ -167,6 +188,9 @@ export interface TeamMember {
      * member. Cleared by the next successful start.
      */
     spawnError?: string;
+    fault?: MemberFault;
+    /** Durable notification counts; repeated (member,code) failures do not create new mail. */
+    failureCounts?: Record<string, number>;
 }
 /** One mailbox message. */
 export interface TeamMessage {
@@ -216,6 +240,11 @@ export interface ChallengeInfo {
     flagFormat?: string | string[] | null;
     /** Platform environment to release after the solve; never destroyed by the plugin. */
     environmentId?: string;
+    multiChallenge?: boolean;
+    expectedChallenges?: number;
+    explicitlySolved?: boolean;
+    requiresRunningTargetForSubmit?: boolean;
+    practiceGroundId?: string;
     /** Set once a flag candidate is marked verified. */
     solved?: boolean;
     solvedAt?: number;
@@ -244,6 +273,15 @@ export interface FlagCandidate {
     formatWarning?: string;
     /** Sequence of the latest review, so verdicts participate in round sync. */
     updateSeq?: number;
+    challengeId?: string;
+    variantOf?: string;
+    reviews?: {
+        verdict: 'verified' | 'rejected';
+        by: string;
+        note?: string;
+        ts: number;
+        verifiedFlag?: string;
+    }[];
     ts: number;
 }
 /** One shared progress finding on the team-wide findings board (append-only). */
@@ -310,6 +348,15 @@ export interface TeamState {
     taskSeq: number;
     /** Solo keeps the same durable board without spawning members or tasks. */
     mode?: 'solo' | 'squad';
+    /** Read-only observations from the platform; freshness and challenge identity matter. */
+    platformSnapshot?: {
+        checkedAt: number;
+        activeEnvironments?: number;
+        challengeId?: string;
+        isSolved?: boolean;
+        accessReady?: boolean;
+        targetRunning?: boolean;
+    };
     /**
      * Two-phase execution lifecycle. Missing means `running` for durable
      * compatibility with teams created before staging existed.

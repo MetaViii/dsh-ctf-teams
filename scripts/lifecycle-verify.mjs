@@ -1337,10 +1337,11 @@ try {
   for (let waited = 0; waited < 2000; waited += 20) {
     // A torn read during a degraded non-atomic overwrite must not kill the
     // run; treat it as "not settled yet" and keep polling.
-    const settled = ((afterCaptainIdle?.tasks.filter(candidate => (
+    const observedRecovery = afterCaptainIdle?.tasks.filter(candidate => (
       candidate.id === t8.task_id || candidate.id === t9.task_id
-    )) ?? []).every(candidate => candidate.assignee !== 'captain'
-      && (candidate.status === 'claimed' || candidate.status === 'in_progress')))
+    )) ?? []
+    const settled = observedRecovery.length === 2 && observedRecovery.every(candidate => candidate.assignee !== 'captain'
+      && (candidate.status === 'claimed' || candidate.status === 'in_progress'))
     if (settled) break
     await new Promise(resolve => setTimeout(resolve, 20))
     afterCaptainIdle = await state().catch(() => undefined)
@@ -1594,6 +1595,38 @@ try {
   await call('ctf_teams_set_challenge', { environment_id: 'env-next' })
   const ended = await call('ctf_teams_delete', {})
   check('delete returns archive path and explicit environment cleanup reminder', ended.archive_path === join(stateRoot, 'archive', replacement.team_id) && ended.environment_notice.includes('env-next'))
+  // Resource queue, honest dispatch receipts and in-place model repair.
+  await call('ctf_teams_create', { name: 'runtime-checks', approval: 'automatic' })
+  await call('ctf_teams_add_member', { name: 'one' })
+  await call('ctf_teams_add_member', { name: 'two' })
+  const exclusive = await call('ctf_teams_create_task', { subject: 'exclusive A', assignee: 'one', challenge_id: 'ch-a', resource_key: 'single-slot', remaining_items: ['ch-b'] })
+  check('create_task reports accepted dispatch using the post-scheduler snapshot', exclusive.dispatch_state === 'dispatched' && exclusive.status === 'claimed')
+  const queued = await call('ctf_teams_create_task', { subject: 'exclusive B', assignee: 'two', challenge_id: 'ch-b', resource_key: 'single-slot' })
+  check('exclusive resource waits with an explicit holder', queued.status === 'pending' && queued.dispatch_state === 'waiting' && queued.dispatch_reason.includes('held by one'))
+  let duplicateChallenge = false
+  try { await call('ctf_teams_create_task', { subject: 'duplicate angle', challenge_id: 'ch-a' }) } catch { duplicateChallenge = true }
+  check('active challenge duplication is rejected unless explicitly requested', duplicateChallenge)
+  const other = await call('ctf_teams_create_task', { subject: 'offline work', assignee: 'two' })
+  check('blocked resource work does not starve a later ready task for the same member', other.dispatch_state === 'dispatched')
+  const beforeRepair = await readTeam(stateRoot, 'runtime-checks')
+  const firstChild = liveAgents.get(beforeRepair.members.find(member => member.name === 'one').id)
+  await call('ctf_teams_update_task', { task_id: exclusive.task_id, attempt_id: exclusive.attempt_id, status: 'in_progress', output: 'partial script and 3 solved', remaining_items: ['ch-b', 'ch-c'] }, firstChild)
+  let lateTaskRejected = false, lateBoardRejected = false
+  const originalDrain = ctx.subagents.drainContinuableChildren
+  ctx.subagents.drainContinuableChildren = async function (parent, ids) {
+    try { await call('ctf_teams_update_task', { task_id: exclusive.task_id, attempt_id: exclusive.attempt_id, output: 'stale result' }, firstChild) } catch { lateTaskRejected = true }
+    try { await call('ctf_teams_report_finding', { content: 'stale report' }, firstChild) } catch { lateBoardRejected = true }
+    return originalDrain.call(this, parent, ids)
+  }
+  try { await call('ctf_teams_update_member', { member_name: 'one', provider: 'fake', model: 'repaired-model', reason: 'fix broken provider route' }) }
+  finally { ctx.subagents.drainContinuableChildren = originalDrain }
+  const repaired = await readTeam(stateRoot, 'runtime-checks')
+  const repairedTask = repaired.tasks.find(task => task.id === exclusive.task_id)
+  check('route repair revokes both old attempt writes and old member board admission before draining', lateTaskRejected && lateBoardRejected)
+  check('route repair preserves checkpoint/remaining items and changes the child identity', repairedTask.checkpoint === 'partial script and 3 solved' && repairedTask.remainingItems.join(',') === 'ch-b,ch-c' && repaired.members.find(member => member.name === 'one').id !== firstChild.id)
+  const preflight = await call('ctf_teams_create_task', { subject: 'guarded target', challenge_id: 'ch-preflight', preflight: ['challenge_unsolved'] })
+  check('unknown platform facts remain blocked rather than starting a target', preflight.dispatch_state === 'waiting' && preflight.dispatch_reason.includes('preflight'))
+  await call('ctf_teams_delete', {})
 } finally {
   await rm(workspace, { recursive: true, force: true })
 }

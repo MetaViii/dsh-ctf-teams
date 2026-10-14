@@ -28,6 +28,9 @@
     "compatibility.json",
     "scripts/doctor.mjs",
     "scripts/compatibility.mjs",
+    "scripts/ctf2-cli.mjs",
+    "scripts/ctf2-mcp-proxy.mjs",
+    "scripts/ctf2-mcp-oauth.mjs",
     "pnpm-workspace.yaml"
   ],
   "license": "MIT",
@@ -101,7 +104,7 @@
     "verify:git-artifact": "node scripts/git-artifacts.mjs",
     "verify:client": "node scripts/build-client.mjs --check && node scripts/client-verify.mjs",
     "verify:dashboard": "node scripts/dashboard-route-verify.mjs",
-    "verify:ctf": "node scripts/ctf-verify.mjs && node --test scripts/ctf2-regression.test.mjs",
+    "verify:ctf": "node scripts/ctf-verify.mjs && node --test scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs",
     "verify:ctf:harness": "node scripts/ctf2-harness-smoke.mjs"
   },
   "peerDependencies": {

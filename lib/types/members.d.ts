@@ -14,6 +14,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { type Agent } from '@deepseek-ai/dsh-agent';
 import type { Session } from '@deepseek-ai/dsh-session';
+import { type FailureInput } from './availability.ts';
 import { type TeamMember, type TeamState, type TeamTask } from './types.ts';
 /** Persona snapshot of a profile protocol; the full text lives on team.json. */
 export declare const PERSONA_PROTOCOL_MAX_CHARS = 400;
@@ -99,10 +100,7 @@ interface FailedMemberAttempt {
     readonly task?: Pick<TeamTask, 'id' | 'attempt' | 'attemptId'>;
 }
 /** Record a final turn failure, never an intermediate request retry. */
-export declare function failMemberOpenAttempt(ctx: Context, stateRoot: string, teamId: string, memberName: string, failure: {
-    readonly code: string;
-    readonly message: string;
-}, fallbackSession: Session, observed: FailedMemberAttempt): Promise<boolean>;
+export declare function failMemberOpenAttempt(ctx: Context, stateRoot: string, teamId: string, memberName: string, failure: FailureInput, fallbackSession: Session, observed: FailedMemberAttempt): Promise<boolean>;
 /**
  * Resolve one member's complete model selection. Ordinary members snapshot the
  * captain's current request route and reasoning effort. When provider or model

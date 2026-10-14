@@ -17,6 +17,8 @@ export interface DashboardTask {
     subject: string;
     status: string;
     assignee?: string;
+    blockedReason?: string;
+    dispatch_reason?: string;
 }
 /** Panel content width (between the `│` borders), including the 1-space pads. */
 export declare const PANEL_WIDTH = 78;
@@ -39,6 +41,7 @@ export interface DashboardMember {
     behind?: number;
     /** The open task this member currently owns, if any. */
     workingOn?: string;
+    availability?: string;
 }
 /** Everything the dashboard needs; derived from team state plus live activity. */
 export interface DashboardInput {

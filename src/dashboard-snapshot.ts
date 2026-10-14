@@ -28,6 +28,9 @@ import { memberActivity } from './members.ts'
 import { challengeOf } from './findings.ts'
 import { readCursor } from './findings.ts'
 import { dashboardInputFromTeam, nextStepHint } from './dashboard.ts'
+import { availabilityLabel, memberAvailable } from './availability.ts'
+import { batchProgress } from './findings.ts'
+import { dispatchState } from './task-admission.ts'
 import { directoryUsage } from './state.ts'
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts'
 
@@ -40,6 +43,7 @@ export interface DashboardMemberRow {
   model: string
   reasoningEffort: string
   status: string
+  availability?: string
   /** `working` | `idle` | `ready` | `unspawned` | `removed`. */
   activity: string
   /** Unseen board beats (findings + flags) for this lane. */
@@ -54,6 +58,7 @@ export interface DashboardMemberRow {
 
 /** One task row. */
 export interface DashboardTaskRow {
+  dispatchReason?: string
   id: string
   subject: string
   description: string
@@ -99,6 +104,7 @@ export interface DashboardTeamSnapshot {
   solved: boolean
   challenge: ChallengeInfo
   nextStep: string
+  batchProgress?: { verified: number; expected?: number; unscoped: number }
   members: DashboardMemberRow[]
   tasks: DashboardTaskRow[]
   findings: TeamFinding[]
@@ -216,6 +222,7 @@ export async function assembleDashboardTeam(
       model: member.model ?? '',
       reasoningEffort: member.reasoningEffort ?? '',
       status: member.status,
+      availability: availabilityLabel(member),
       activity: live,
       behind,
       unread,
@@ -276,7 +283,8 @@ export async function assembleDashboardTeam(
     ...stamps.length === 0 ? {} : { lastBeatAt: Math.max(...stamps) },
     solved: challenge.solved === true,
     challenge,
-    nextStep: nextStepHint(dashboardInput),
+    nextStep: roster.length && !roster.some(memberAvailable) ? '暂无可用成员：修复模型配置或按授权接管任务；限流不会重复刷屏。' : nextStepHint(dashboardInput),
+    ...challenge.multiChallenge ? { batchProgress: batchProgress(team) } : {},
     members,
     tasks: tasks.map((task) => ({
       id: task.id,
@@ -284,6 +292,7 @@ export async function assembleDashboardTeam(
       description: task.description ?? '',
       status: task.status,
       state: taskVisualState(task.status, task.dependencies, tasks),
+      dispatchReason: dispatchState(team, task).dispatch_reason,
       assignee: task.assignee ?? '',
       dependencies: [...task.dependencies],
       depth: depths.get(task.id) ?? 0,

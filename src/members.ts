@@ -22,6 +22,7 @@ import { join } from 'node:path'
 import { guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
 import { markMailboxDelivered, appendMailbox, CAPTAIN_KEY, createMessage, readRetiredMemberIds, readTeamSync, readTeam, releaseMailboxDelivery, withTeamLock, writeTeam } from './state.ts'
 import { mailboxPrompt } from './mailbox.ts'
+import { memberAvailable, recordMemberFault, type FailureInput } from './availability.ts'
 import { appendTeamEvent, captainSessionOf } from './events.ts'
 import { TERMINAL_TASK_STATUSES, type TeamMember, type TeamState, type TeamTask } from './types.ts'
 
@@ -162,7 +163,7 @@ export async function failMemberOpenAttempt(
   stateRoot: string,
   teamId: string,
   memberName: string,
-  failure: { readonly code: string; readonly message: string },
+  failure: FailureInput,
   fallbackSession: Session,
   observed: FailedMemberAttempt,
 ): Promise<boolean> {
@@ -173,24 +174,31 @@ export async function failMemberOpenAttempt(
     if (team === undefined || team.halted === true || team.captainSessionId !== observed.captainSessionId) return
     const member = team.members.find(candidate => candidate.name === memberName
       && candidate.id === observed.memberId && candidate.status !== 'removed')
-    if (member === undefined) return
+    if (member === undefined || member.stopping) return
     const task = team.tasks.find(candidate => candidate.assignee === memberName
       && (candidate.status === 'claimed' || candidate.status === 'in_progress'))
     // A reassign, completion, or recreated member may win the lock while the
     // final error is queued. Only the capability observed at that event may fail.
     if (task?.id !== observed.task?.id || task?.attemptId !== observed.task?.attemptId
       || task?.attempt !== observed.task?.attempt) return
-    if (task === undefined && member.status !== 'working') return
-    if (task !== undefined) {
+    const { fault, notify } = recordMemberFault(member, failure)
+    if (task !== undefined && fault.kind === 'task') {
       task.status = 'failed'
       task.output = summary
       task.updatedAt = Date.now()
+    } else if (task !== undefined) {
+      task.checkpoint = task.output ?? task.checkpoint
+      task.blockedReason = `${fault.code}: ${fault.message}; ${fault.retryAt ? `retry after ${new Date(fault.retryAt).toISOString()}` : 'repair provider/model or reassign to an available member'}`
     }
-    if (ctx.agents.get(brandedSessionId(member.id))?.status !== 'running') member.status = 'idle'
+    if (fault.kind === 'task' && member.status !== 'faulted' && ctx.agents.get(brandedSessionId(member.id))?.status !== 'running') member.status = 'idle'
+    await writeTeam(stateRoot, team)
+    if (!notify) return
     const message = {
-      ...createMessage(memberName, CAPTAIN_KEY, task === undefined
-        ? `Member "${memberName}" hit an unrecoverable turn failure: ${summary}. No open attempt was owned.`
-        : `Member "${memberName}" hit an unrecoverable turn failure: ${summary}. Task ${task.id} ("${task.subject}") was marked failed; reassign it or retry when ready.`),
+      ...createMessage(memberName, CAPTAIN_KEY, `Member "${memberName}" ${fault.kind} failure: ${summary}. ` + (task === undefined
+        ? 'No open attempt was owned.'
+        : fault.kind === 'task' ? `Task ${task.id} ("${task.subject}") was marked failed; reassign it or retry when ready.`
+          : `Task ${task.id} remains open with its owner and checkpoint. ${fault.retryAt ? `Recovery time: ${new Date(fault.retryAt).toISOString()}.` : 'No automatic retry; update_member or reassign to an available owner.'}`)
+          + ' Repeated notifications are suppressed; status shows the accumulated count.'),
       deliveryClaimedAt: Date.now(),
     }
     await writeTeam(stateRoot, team)
@@ -381,7 +389,7 @@ export function installMemberSelectionRuntime(
       const admitted = await withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
         const team = await readTeam(stateRoot, teamId)
         return team?.captainSessionId === parentSessionId && team.phase !== 'staged' && team.halted !== true
-          && team.members.some(member => member.id === child.id && member.name === memberName && member.status !== 'removed' && member.stopping !== true)
+          && team.members.some(member => member.id === child.id && member.name === memberName && memberAvailable(member))
           && !team.tasks.some(task => task.reassigning === true && task.assignee === memberName)
       })
       if (!admitted) return { kind: 'reject' }
@@ -432,12 +440,18 @@ export function installMemberSelectionRuntime(
           const team = await readTeam(stateRoot, teamId)
           const current = team?.members.find(item => item.id === child.id && item.name === memberName && item.status !== 'removed')
           if (team?.captainSessionId !== parentSessionId || current === undefined || child.status !== 'idle') return
-          if (current.status !== 'idle') {
+          if (current.fault?.kind === 'task' && current.status !== 'faulted' && current.status !== 'idle') {
             current.status = 'idle'
             await writeTeam(stateRoot, team)
           }
         })
         await onFailureSettled?.(workspace, teamId, memberName)
+        const after = readTeamSync(stateRoot, teamId)?.members.find(item => item.name === memberName)
+        if (after?.fault?.retryAt !== undefined && after.fault.retryAt > Date.now()) {
+          const timer = setTimeout(() => { void onFailureSettled?.(workspace, teamId, memberName).catch(error => ctx.logger.warn(`ctf-teams: infrastructure retry failed: ${String(error)}`)) }, Math.min(2_147_483_647, after.fault.retryAt - Date.now()))
+          timer.unref()
+          ctx.effect(() => () => clearTimeout(timer))
+        }
       } catch (error: unknown) {
         ctx.logger.warn(`ctf-teams: failed to record member turn failure: ${String(error)}`)
       }

@@ -10,10 +10,12 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+import { type PlatformConfig } from './platform.ts';
 import { type TeamState, type TeamTask } from './types.ts';
 export { steerCaptainReport } from './members.ts';
 /** Resolved plugin config consumed by the tools. */
 export interface ToolsConfig {
+    ctf2?: PlatformConfig;
     /** State directory name under the captain's workspace. */
     stateDir: string;
     /** Member subagent provider name. */

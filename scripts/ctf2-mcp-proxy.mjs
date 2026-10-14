@@ -205,6 +205,7 @@ async function refreshToken(force = false) {
     if (!force && left !== null && left > 60) return stored
     const client = await readJson(CLIENT_FILE, {})
     const res = await fetch(TOKEN_ENDPOINT, {
+      signal: AbortSignal.timeout(15_000),
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
       body: new URLSearchParams({
@@ -215,7 +216,7 @@ async function refreshToken(force = false) {
       }).toString(),
     })
     const text = await res.text()
-    if (!res.ok) throw new Error(`refresh failed ${res.status}: ${text.slice(0, 300)}`)
+    if (!res.ok) throw new Error(`OAuth refresh HTTP ${res.status}; repeat login`)
     const body = JSON.parse(text)
     const record = {
       ...stored,
@@ -247,6 +248,7 @@ async function currentToken() {
 async function forward(rawBody, allowRetry = true) {
   const token = await currentToken()
   const res = await fetch(UPSTREAM, {
+    signal: AbortSignal.timeout(30_000),
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -284,12 +286,17 @@ function rewriteSse(text) {
 }
 
 const server = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ service: 'ctf2-mcp-proxy', up: true, oauth_configured: existsSync(TOKEN_FILE) && existsSync(CLIENT_FILE) }))
+    return
+  }
   if (req.method === 'GET') {
     res.writeHead(405, { 'content-type': 'text/plain' }).end('this MCP proxy only accepts POST')
     return
   }
   const chunks = []
-  req.on('data', (chunk) => chunks.push(chunk))
+  let size = 0
+  req.on('data', (chunk) => { size += chunk.length; if (size > 2_000_000) { res.writeHead(413).end(); req.destroy(); } else chunks.push(chunk) })
   req.on('end', async () => {
     const rawBody = Buffer.concat(chunks).toString('utf8')
     try {
@@ -304,9 +311,9 @@ const server = createServer((req, res) => {
       res.writeHead(upstream.status, { 'content-type': contentType })
       res.end(body)
     } catch (error) {
-      process.stdout.write(`[proxy] error: ${error.message}\n`)
+      process.stdout.write(`[proxy] upstream/OAuth unavailable (${error.cause?.code ?? error.name ?? 'ERROR'})\n`)
       res.writeHead(502, { 'content-type': 'application/json' }).end(
-        JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: String(error.message) }, id: null }),
+        JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Proxy upstream/OAuth unavailable; check credentials or platform health. This is not a challenge verdict.' }, id: (() => { try { return JSON.parse(rawBody).id ?? null } catch { return null } })() }),
       )
     }
   })
@@ -357,11 +364,10 @@ if (process.argv.includes('--selftest')) {
 } else {
   const port = Number(arg('port', 39528))
   const host = String(arg('host', '127.0.0.1'))
-  await refreshToken().catch((error) => {
-    process.stdout.write(`[proxy] warning: ${error.message}\n`)
-  })
   server.listen(port, host, () => {
     process.stdout.write(`[proxy] ctf2 MCP proxy listening on http://${host}:${port}/mcp\n`)
     process.stdout.write(`[proxy] upstream ${UPSTREAM}\n`)
   })
+  server.on('error', error => { process.stderr.write(`[proxy] listen failed: ${error.code ?? 'UNKNOWN'}\n`); process.exitCode = 1 })
+  void refreshToken().catch(() => process.stdout.write('[proxy] OAuth unavailable; listener remains up. Configure/refresh OAuth before platform calls.\n'))
 }

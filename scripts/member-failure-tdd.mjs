@@ -139,13 +139,13 @@ async function fixture(t, { captainStatus = 'idle', fallback, captainOffline = f
   }
   settleOnCleanup = settleSilently
   return {
-    stateRoot, steers, deliveries, warnings, listeners, child, sessionEvents, memberError, payload, settleSilently,
+    stateRoot, steers, deliveries, warnings, listeners, child, sessionEvents, memberError, payload, settleSilently, scheduler, workspace,
     state: () => readTeam(stateRoot, 'team'),
     mailbox: () => readMailbox(stateRoot, 'team', 'captain'),
     unread: () => readUnreadMailbox(stateRoot, 'team', 'captain'),
     retry: (policy, code) => { const value = payload(policy, code); return retryHandler(value, () => memberError(value)) },
-    terminal({ settle = true, turn = 1 } = {}) {
-      pendingFailures.push(listeners.get('agent/error')?.({ agent: child, turn, step: 0, error: new LlmError(failure.message, failure.code) }))
+    terminal({ settle = true, turn = 1, failure: terminalFailure = failure } = {}) {
+      pendingFailures.push(listeners.get('agent/error')?.({ agent: child, turn, step: 0, error: new LlmError(terminalFailure.message, terminalFailure.code) }))
       if (settle) settleSilently()
     },
   }
@@ -153,6 +153,37 @@ async function fixture(t, { captainStatus = 'idle', fallback, captainOffline = f
 
 const normal = { mode: 'normal', maxRetries: 1, retryableCodes: ['STREAM_CLOSED'], initialDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 }
 const always = { mode: 'always', initialDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 }
+
+await test('503 preserves owner/checkpoint, cannot move to other work and recovers at most once', async t => {
+  const h = await fixture(t)
+  const originalAttempt = (await h.state()).tasks[0].attemptId
+  await withTeamLock(`team:${h.stateRoot}:team`, async () => {
+    const state = await h.state()
+    state.tasks[0].output = '3 challenges solved; saved script'
+    state.tasks[0].remainingItems = ['ch4']
+    state.tasks.push({ id: 't2', subject: 'other work', status: 'pending', assignee: 'worker', dependencies: [], createdAt: 1, updatedAt: 1 })
+    await writeTeam(h.stateRoot, state)
+  })
+  const error = { code: 'SERVICE_UNAVAILABLE', message: '503 no_healthy_account' }
+  h.terminal({ failure: error })
+  await eventually(async () => (await h.state()).members[0].fault?.kind === 'transient')
+  assert.equal((await h.state()).tasks[0].status, 'in_progress')
+  assert.equal((await h.state()).tasks[1].status, 'pending')
+  assert.equal(h.deliveries.length, 0)
+  await withTeamLock(`team:${h.stateRoot}:team`, async () => { const state = await h.state(); state.members[0].fault.retryAt = Date.now() - 1; await writeTeam(h.stateRoot, state) })
+  await h.scheduler.kickMember(h.workspace, 'team', 'worker')
+  const resumed = await h.state()
+  assert.equal(resumed.tasks[0].infrastructureRetries, 1)
+  assert.equal(resumed.tasks[0].checkpoint, '3 challenges solved; saved script')
+  assert.deepEqual(resumed.tasks[0].remainingItems, ['ch4'])
+  assert.match(JSON.stringify(h.deliveries[0].content), /saved script/)
+  assert.notEqual(resumed.tasks[0].attemptId, originalAttempt)
+  h.terminal({ failure: error, turn: 2 })
+  await eventually(async () => (await h.state()).members[0].fault?.count === 2)
+  await h.scheduler.kickMember(h.workspace, 'team', 'worker')
+  assert.equal(h.deliveries.length, 1)
+  assert.equal((await h.mailbox()).length, 1)
+})
 
 await test('always retry keeps the owned task open and sends no false failure report', async t => {
   const h = await fixture(t)

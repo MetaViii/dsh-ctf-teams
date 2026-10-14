@@ -33,6 +33,15 @@ export declare function flagMatchesFormat(flag: string, challenge: ChallengeInfo
 export declare function flagFormatLabel(challenge: ChallengeInfo | undefined): string;
 /** Infer only the wrapper; never change any bytes of a candidate. */
 export declare function flagWrapper(flag: string): string | undefined;
+/** Opt-in candidate generation only: no variant is automatically submitted or verified. */
+export declare function nestedFlagVariants(raw: string): string[];
+export declare function batchProgress(team: TeamState): {
+    verified: number;
+    expected?: number;
+    unscoped: number;
+};
+/** Explicit batch completion, after real platform checks; flags alone never close a batch. */
+export declare function markChallengeSolved(team: TeamState, note: string): void;
 /** A claim is unverified even if its author supplied raw output or high confidence. */
 export declare function findingLabel(finding: TeamFinding): string;
 export declare function formatFinding(finding: TeamFinding): string;
@@ -71,6 +80,8 @@ export declare function appendFlagCandidate(team: TeamState, input: {
     flag: string;
     submittedBy: string;
     evidence?: string;
+    challengeId?: string;
+    variantOf?: string;
 }): {
     candidate: FlagCandidate;
     duplicate: boolean;
@@ -103,6 +114,11 @@ export interface BoardDelta {
     round: number;
     /** The challenge is solved — overrides everything else in the digest. */
     solved: boolean;
+    batch?: {
+        verified: number;
+        expected?: number;
+        unscoped: number;
+    };
 }
 export declare function deltaSince(team: TeamState, participant: string): BoardDelta;
 /** Convenience used by callers that only need the boolean. */
