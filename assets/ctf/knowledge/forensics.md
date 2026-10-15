@@ -3,6 +3,22 @@
 Order: identify the container → carve/extract → inspect metadata → only then
 go manual.
 
+## OLE2 旧版 Word `.doc`
+
+先确认容器：ZIP/XML 的 `.docx` 与 OLE2 `.doc` 不能共用解析路径。
+优先使用可用的 `antiword`、`catdoc` 或隔离的 LibreOffice 转换；失败后再用
+`olefile` 列流，检查 `WordDocument`、FIB 标志、`0Table` / `1Table`、加密与版本。
+
+现代二进制 DOC 的正文可能由 CLX / PlcPcd piece table 分段引用，不能把
+`WordDocument[fcMin:fcMac]` 一律当 UTF-16LE 连续正文。按 FIB 的
+`fWhichTblStm` 选择表流，从对应版本的 `fcClx/lcbClx` 定位 CLX，校验 CP 单调性、
+PCD 数量及流边界后，按每段压缩标志解码。压缩段需从编码的 `FcCompressed`
+去掉标志并按规范处理偏移（压缩时除以 2）；单字节文本的字符映射不能一律假定 UTF-8。
+未压缩段按 UTF-16LE 和该段字符数读取，注意正文与其他子文档的 CP 范围。
+
+这是定位与诊断路线，不是适配所有年代、损坏或加密 DOC 的通用解析器。
+参见微软 [MS-DOC 文本提取规范](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/01d5d8c4-cf9c-4ef9-80fd-439e763cfe01)。
+
 ## First 60 seconds
 
 ```bash

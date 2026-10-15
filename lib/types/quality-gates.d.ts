@@ -88,7 +88,7 @@ export interface ResumeTeamResult {
     team?: TeamState;
     error?: string;
 }
-export type QualityLoopState = 'running' | 'halted' | 'escalated' | 'deliverable' | 'blocked';
+export type QualityLoopState = 'planning' | 'running' | 'halted' | 'escalated' | 'deliverable' | 'blocked';
 export interface QualityLoopSnapshot {
     state: QualityLoopState;
     halted: boolean;

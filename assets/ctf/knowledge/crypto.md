@@ -2,6 +2,23 @@
 
 Identify the shape first — the numbers tell you the attack.
 
+## Python 后端先做运算检测
+
+`ctf_teams_env(action="check", tools=["pycryptodome","pycryptodomex","cryptography"])`
+会分别检测 `Crypto`、`Cryptodome` 和 `cryptography` 的导入及一次 AES 加解密运算。
+根模块可导入而实际运算报错时状态为 `broken`；安装命令退出成功后也要重新探测。
+这只证明当前 Python 中该基础运算可用，不代表所有算法都可用。
+
+出现 cffi / `KeyError` / 子模块导入失败时，记录 `sys.executable`、版本和报错，
+检查插件 `env.pythonBin` 是否与解题脚本一致，再用独立虚拟环境排查依赖冲突。
+某台机器的故障不能推出所有 Python 3.12 环境都必须改用 `Cryptodome`。
+
+已有 `Cryptodome` 安装可独立验证并用于兼容旧脚本，本插件不自动安装它。
+截至 2026-10-15，官方 4.0 说明已将 `pycryptodomex` 留在 3.x 重要安全修补分支，
+新版本仅使用 `Crypto` 命名空间，故不把旧命名空间设为全局首选。
+参见 [官方变更记录](https://www.pycryptodome.org/src/changelog) 与
+[安装说明](https://www.pycryptodome.org/src/installation)。
+
 ## RSA (n, e, c[, p, q, dp, ...])
 
 - `n` small (< 2^300) → factor: `factordb`, `yafu`, `sage: factor(n)`.

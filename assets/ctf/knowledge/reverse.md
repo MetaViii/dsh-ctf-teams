@@ -1,5 +1,13 @@
 # Reverse Playbook
 
+## radare2 分析深度
+
+先检查入口、符号、字符串与函数列表，按需要从 `aa` / `aaa` 逐步加深。
+`aaaa` 或更激进的配置可帮助恢复部分缺失函数，也可能增加耗时和错误识别；
+不把 `-A -A` 或一次最深分析作为所有二进制的固定起手式。函数仍缺失时，
+检查入口、段边界、调用点、架构与基址，再手工定义并验证控制流。
+参见 [官方 Code Analysis](https://book.rada.re/analysis/code_analysis.html)。
+
 ## 1. Identify before you open a decompiler
 
 ```bash

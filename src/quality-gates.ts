@@ -135,7 +135,7 @@ export interface ResumeTeamResult {
   error?: string
 }
 
-export type QualityLoopState = 'running' | 'halted' | 'escalated' | 'deliverable' | 'blocked'
+export type QualityLoopState = 'planning' | 'running' | 'halted' | 'escalated' | 'deliverable' | 'blocked'
 
 export interface QualityLoopSnapshot {
   state: QualityLoopState
@@ -1172,6 +1172,12 @@ export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
       deliverable: false,
       summary: 'Automatic review/repair loop hit its ceiling. The team is still running; do not treat this as halt. Escalate to the user instead of inventing another needs_revision cycle.',
     }
+  }
+  if (team.tasks.length === 0) {
+    return { state: team.mode === 'solo' ? 'running' : 'planning', halted: false, escalated: false, deliverable: false,
+      summary: team.mode === 'solo'
+        ? 'Solo solve: work directly and record findings, candidate flags and actual platform verdicts; an empty task graph is expected.'
+        : 'Roster ready; the captain must create the task graph. No work has failed and no delivery is declared.' }
   }
   const open = team.tasks.some((item) => OPEN_STATUSES.includes(item.status))
   return {

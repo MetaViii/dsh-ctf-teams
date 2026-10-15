@@ -17,6 +17,7 @@ Two companion services back this knowledge up with the actual machine:
 
 Topics:
 
+- coordination — 任务所有权、消息同步、资源排队、证据与平台战绩的边界
 - kali-tools — the working toolbox: what is installed, when to reach for it
 - pwntools — process/network I/O, shellcraft, ELF/gdb helpers, cyclic offsets
 - sage-math — SageMath one-liners for RSA/ECC/lattices when Python crypto libs stall

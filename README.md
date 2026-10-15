@@ -58,7 +58,7 @@
 | 模型 | 宿主中已有可用的模型配置。成员默认沿用队长模型，也可按团队模板指定。 |
 | 工作区 | 题目附件、解题脚本与输出所在的目录。工具链依题目需要准备。 |
 
-历史宿主支持范围见 [兼容性清单](./compatibility.json)；本轮验收结果见 [验证记录](./docs/ctf2-improvements-2026-10-14/validation.json)。
+历史宿主支持范围见 [兼容性清单](./compatibility.json)；本轮验收结果见 [验证记录](./docs/ctf2-improvements-2026-10-15/validation.json)。
 
 ### 2. 安装本仓库版本
 
@@ -135,6 +135,8 @@ flowchart LR
 4. **收敛。** 单题以平台接受为完成依据；批量模式按题计数，明确结束整批后再整理最终记录。
 
 任务状态、当前尝试标识和邮箱消息均保存到工作区。成员交接会撤销旧尝试的写入权限，避免迟到结果覆盖新执行者；临时基础设施故障的检查点只用于续做，不作为完成证据。
+
+默认 `ctf-teams` 阵容由队长规划任务图，初建零任务显示 `planning`。`ctf_teams_sync` 同时读取看板增量与调用者自己的未读消息，默认每次 10 组、最多 50 组；重要结论仍需 `report_finding` 入板。队长通过 `reassign_task` 接管任务时，会直接收到任务约定、检查点、剩余事项、看板增量与自己的未读消息。
 
 ### 解题面板
 
@@ -217,7 +219,9 @@ await tools.ctf_teams_mark_flag({
 
 配置错误会暂停成员并提示修复，限流展示上游提供的恢复时间；临时基础设施故障保留任务进度，冷却后自动恢复一次，再次失败等待修复或重派。模型无法读取图片时，可使用 `ctf_teams_image_to_text` 提取 ASCII、OCR 或 QR/条码候选，或进行像素比较；所需依赖按环境准备。
 
-详细用法与当前限制见 [CTF2 增强指南](./docs/ctf2-improvements-2026-10-14/README.md)。
+`ctf_teams_text_candidates` 可按需枚举 OCR 易混字符，最多 128 项，保留原文并提示截断；可查看 Base64 原始字节的 hex / 转义 ASCII。密码库检测执行基础 AES 运算，区分缺失与损坏的后端。附带的 CTF2 CLI 已修复多参数传递，并将空结果和工具错误作为非零退出处理。
+
+详细用法与本轮建议取舍见 [第三轮改进记录](./docs/ctf2-improvements-2026-10-15/README.md)，资源预检与代理用法见 [CTF2 增强指南](./docs/ctf2-improvements-2026-10-14/README.md)。
 
 <a id="configuration"></a>
 
@@ -293,7 +297,7 @@ profiles:
 | 发现与复核 | `report_finding`、`verify_finding`、`sync` |
 | 题目与 flag | `set_challenge`、`submit_flag`、`mark_flag`、`mark_challenge_solved` |
 | 通信与状态 | `send_message`、`status`、`resume` |
-| 解题支持 | `knowledge`、`env`、`references`、`image_to_text`、`platform_check` |
+| 解题支持 | `knowledge`、`env`、`references`、`image_to_text`、`text_candidates`、`platform_check` |
 | 归档 | `delete`、`archive_summary` |
 
 完整工具名均带 `ctf_teams_` 前缀。成员只获得协作所需工具；题目判定、独立复核与成员路由修复等操作由队长执行。
@@ -326,8 +330,11 @@ profiles:
 
 | 文档 | 内容 |
 | --- | --- |
+| [第三轮改进与取舍](./docs/ctf2-improvements-2026-10-15/README.md) | CLI 可靠性、同步与接管、OCR 候选、运算检测，逐项说明哪些建议采纳及未采纳。 |
+| [本轮验证记录](./docs/ctf2-improvements-2026-10-15/validation.json) | 新回归、真实宿主与安装包验收的范围和结果。 |
+| [协作知识库](./assets/ctf/knowledge/coordination.md) | 默认规划、队长接管、私信与发现、单环境排队及平台战绩核验。 |
 | [CTF2 增强指南](./docs/ctf2-improvements-2026-10-14/README.md) | 批量解题、故障恢复、资源预检、图像降级与代理托管。 |
-| [验证记录](./docs/ctf2-improvements-2026-10-14/validation.json) | 完整回归、11 个真实宿主场景、安装包与图像测试的范围和结果。 |
+| [第二轮验证记录](./docs/ctf2-improvements-2026-10-14/validation.json) | 第二轮完整回归、真实宿主场景、安装包与图像测试的范围和结果。 |
 | [第一轮改进记录](./docs/ctf2-improvements-2026-10-13/README.md) | 计划诊断、原始 flag、证据复核、solo 与归档增强。 |
 | [兼容性清单](./compatibility.json) | 推荐与历史宿主版本范围。 |
 | [维护指南](./docs/maintenance-workflow.md) | 兼容性、验证与发布规则。 |

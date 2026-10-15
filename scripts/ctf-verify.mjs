@@ -292,9 +292,9 @@ console.log('ctf toolchain env service')
   check('windows plans prefer pip', winPlan.steps.find(step => step.tool === 'pycryptodome').manager === 'pip')
   check('linux-only apt tools plan as unavailable on windows', winPlan.steps.find(step => step.tool === 'tshark').manager === 'manual')
 
-  const installOutcomes = await runInstallPlan(linuxPlan.steps, { runner: async () => ({ code: 0, stdout: '', stderr: '' }) })
+  const installOutcomes = await runInstallPlan(linuxPlan.steps, { runner: fakeRunner, python: 'python3' })
   check('manual steps never execute and report their note', installOutcomes.filter(outcome => outcome.manager === 'manual').every(outcome => outcome.ok === false))
-  check('executed steps report success', installOutcomes.filter(outcome => outcome.manager !== 'manual').every(outcome => outcome.ok === true))
+  check('executed steps report success after a successful re-probe', installOutcomes.filter(outcome => outcome.manager !== 'manual').every(outcome => outcome.ok === true))
   const failedOutcomes = await runInstallPlan(linuxPlan.steps.filter(step => step.tool === 'nmap'), { runner: async () => ({ code: 100, stdout: '', stderr: 'E: unable to locate package' }) })
   check('failed installs capture the stderr tail', failedOutcomes[0].ok === false && failedOutcomes[0].detail.includes('unable to locate'))
 

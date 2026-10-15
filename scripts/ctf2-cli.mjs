@@ -7,12 +7,12 @@
  * Streamable-HTTP JSON-RPC the harness speaks, so any lane can call CTF2 tools
  * from a shell:
  *
- *   node ctf2-play/ctf2-cli.mjs tools
- *   node ctf2-play/ctf2-cli.mjs whoami
- *   node ctf2-play/ctf2-cli.mjs challenges practice_ground_id=<uuid> difficulty=Easy
- *   node ctf2-play/ctf2-cli.mjs get <challenge_id>
- *   node ctf2-play/ctf2-cli.mjs start <challenge_id>
- *   node ctf2-play/ctf2-cli.mjs submit <challenge_id> <flag>
+ *   node scripts/ctf2-cli.mjs tools
+ *   node scripts/ctf2-cli.mjs whoami
+ *   node scripts/ctf2-cli.mjs challenges practice_ground_id=<uuid> difficulty=Easy
+ *   node scripts/ctf2-cli.mjs get <challenge_id>
+ *   node scripts/ctf2-cli.mjs start <challenge_id>
+ *   node scripts/ctf2-cli.mjs submit <challenge_id> <flag>
  *
  * Arguments are JSON (`'{"a":1}'`) or shell-safe `a=1 b=true` pairs; on Windows
  * PowerShell strips the quotes out of inline JSON handed to a native binary, so
@@ -22,6 +22,7 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises'
+import { Ctf2ProtocolError, parseRpcResponse, unwrapToolResult, filterUnsolved } from '../lib/ctf2-protocol.js'
 
 const PROXY = process.env.CTF2_PROXY ?? 'http://127.0.0.1:39528/mcp'
 let nextId = 1
@@ -38,35 +39,20 @@ async function rpc(method, params) {
   }
   const text = await res.text()
   if (!res.ok) throw new Error(`${method} -> HTTP ${res.status}: ${text.slice(0, 600)}`)
-  const payload = text
-    .split('\n')
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trim())
-    .join('')
-  const envelope = JSON.parse(payload || text)
-  if (envelope.error) throw new Error(`${method} -> ${JSON.stringify(envelope.error)}`)
-  return envelope.result
+  return parseRpcResponse(text, id)
 }
 
 /** Flatten an MCP tool result into something readable. */
-function unwrap(result) {
-  if (result?.structuredContent !== undefined) return result.structuredContent
-  const parts = (result?.content ?? []).map((c) => (c.type === 'text' ? c.text : c))
-  if (parts.length === 1 && typeof parts[0] === 'string') {
-    try {
-      return JSON.parse(parts[0])
-    } catch {
-      return parts[0]
-    }
-  }
-  return parts
-}
-
-async function callTool(name, args) {
+async function callTool(name, args, { print = true, unsolvedOnly = false } = {}) {
+  if (!name) throw new Ctf2ProtocolError('A tool name is required; inspect `tools` or `schema <tool>`')
   const res = await rpc('tools/call', { name, arguments: args })
-  if (res.isError) process.exitCode = 1
-  const payload = unwrap(res)
-  console.log(JSON.stringify(payload, null, 2))
+  let payload = unwrapToolResult(res)
+  if (unsolvedOnly) {
+    const filtered = filterUnsolved(payload)
+    payload = filtered.payload
+    console.error(`local unsolved filter: ${filtered.returned}/${filtered.received} returned; ${filtered.unknown} unknown status omitted; server totals unchanged`)
+  }
+  if (print) console.log(JSON.stringify(payload, null, 2))
   return payload
 }
 
@@ -88,10 +74,14 @@ function argsFrom(text) {
 
 async function listTools() {
   const tools = []
+  const cursors = new Set()
   let cursor
   do {
     const page = await rpc('tools/list', cursor ? { cursor } : {})
+    if (!Array.isArray(page.tools) || page.tools.some(tool => !tool || typeof tool.name !== 'string')) throw new Ctf2ProtocolError('Invalid tools/list response')
     tools.push(...page.tools)
+    if (page.nextCursor && (typeof page.nextCursor !== 'string' || cursors.has(page.nextCursor))) throw new Ctf2ProtocolError('Invalid or repeated tools/list cursor')
+    if (page.nextCursor) cursors.add(page.nextCursor)
     cursor = page.nextCursor
   } while (cursor)
   return tools
@@ -123,24 +113,29 @@ try {
     case 'schema': {
       const tools = await listTools()
       const hit = tools.find((t) => t.name === arg(0) || t.name === `ctf2_${arg(0)}`)
-      console.log(JSON.stringify(hit ?? { error: `no such tool: ${arg(0)}` }, null, 2))
+      if (!hit) throw new Ctf2ProtocolError(`no such tool: ${arg(0)}`)
+      console.log(JSON.stringify(hit, null, 2))
       break
     }
     case 'call':
-      await callTool(arg(0), argsFrom(arg(1)))
+      await callTool(arg(0), argsFrom(rest.slice(1).join(' ')))
       break
     case 'whoami':
       await callTool('ctf2_agent_whoami', {})
       break
     case 'grounds':
-      await callTool('ctf2_list_practice_grounds', argsFrom(arg(0)))
+      await callTool('ctf2_list_practice_grounds', argsFrom(rest.join(' ')))
       break
-    case 'next':
-      await callTool('ctf2_agent_next_challenges', argsFrom(arg(0)))
+    case 'next': {
+      const args = argsFrom(rest.join(' '))
+      await callTool('ctf2_agent_next_challenges', args, { unsolvedOnly: args.unsolved_only === true })
       break
-    case 'challenges':
-      await callTool('ctf2_list_practice_challenges', argsFrom(arg(0)))
+    }
+    case 'challenges': {
+      const args = argsFrom(rest.join(' '))
+      await callTool('ctf2_list_practice_challenges', args, { unsolvedOnly: args.unsolved_only === true })
       break
+    }
     case 'get':
       await callTool('ctf2_get_practice_challenge', where(arg(0), arg(1)))
       break
@@ -150,11 +145,7 @@ try {
     case 'download': {
       // Signed URL + fetch in one step: Windows PowerShell 5.1 fails the TLS
       // handshake on the CDN, so the download happens here, in Node.
-      const meta = await rpc('tools/call', {
-        name: 'ctf2_get_attachment_url',
-        arguments: { ...where(arg(0), arg(2)), file_id: arg(1) },
-      })
-      const info = unwrap(meta)
+      const info = await callTool('ctf2_get_attachment_url', { ...where(arg(0), arg(2)), file_id: arg(1) }, { print: false })
       const att = info?.attachment ?? info
       const res = await fetch(att.url)
       if (!res.ok) throw new Error(`attachment fetch -> HTTP ${res.status}`)
@@ -217,5 +208,5 @@ Every practice tool needs the ground: pass it positionally or export CTF2_GROUND
   }
 } catch (error) {
   console.error(`ctf2 error: ${error.message}`)
-  process.exitCode = 1
+  process.exitCode = error instanceof Ctf2ProtocolError ? error.exitCode : 1
 }

@@ -6,11 +6,14 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { runRuntimeScenarios } from './harness-runtime-scenarios.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const lab = mkdtempSync(join(tmpdir(), 'ctf2-harness-'))
-const args = process.argv.slice(2)
-if (args.length && (args.length !== 2 || args[0] !== '--artifact')) throw new Error('Usage: node scripts/ctf2-harness-smoke.mjs [--artifact package.tgz]')
+const rawArgs = process.argv.slice(2)
+const allScenarios = rawArgs.includes('--all-scenarios')
+const args = rawArgs.filter(arg => arg !== '--all-scenarios')
+if (args.length && (args.length !== 2 || args[0] !== '--artifact')) throw new Error('Usage: node scripts/ctf2-harness-smoke.mjs [--artifact package.tgz] [--all-scenarios]')
 let pluginRoot = root, artifactSha256
 if (args.length) {
   const artifact = resolve(args[1])
@@ -76,7 +79,32 @@ clearTimeout(timer)
 writeFileSync(join(lab, 'stdout.log'), stdout, 'utf8')
 writeFileSync(join(lab, 'stderr.log'), stderr, 'utf8')
 const passed = exit === 0 && stdout.includes('CTF2_REGRESSION_PASSED')
-const report = { passed, version, node: process.version, platform: process.platform, artifactSha256, cohortCount: cohort.length, cohort, exit, reportDir: lab, unverified: ['real model reasoning', 'live CTF2 platform verdicts', 'other host versions', 'interactive browser'] }
+let runs
+if (allScenarios && passed) {
+  // Build a fresh runtime from the just-verified dependency closure, instead
+  // of depending on another run's temporary profile remaining on disk.
+  const runtime = join(lab, 'runtime'), scenarioReport = join(lab, 'scenarios')
+  mkdirSync(join(runtime, 'node_modules/@nanmicoder'), { recursive: true })
+  mkdirSync(scenarioReport)
+  symlinkSync(join(profile, 'node_modules/@deepseek-ai'), join(runtime, 'node_modules/@deepseek-ai'), process.platform === 'win32' ? 'junction' : 'dir')
+  symlinkSync(pluginRoot, join(runtime, 'node_modules/@nanmicoder/dsh-ctf-teams'), process.platform === 'win32' ? 'junction' : 'dir')
+  const command = async (argv, cwd, env, label, timeoutMs) => {
+    const processChild = spawn(argv[0], argv.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = '', err = '', timedOut = false
+    processChild.stdout.on('data', data => out += data.toString('utf8'))
+    processChild.stderr.on('data', data => err += data.toString('utf8'))
+    const deadline = setTimeout(() => { timedOut = true; processChild.kill() }, timeoutMs)
+    let code
+    try { code = await new Promise((done, reject) => { processChild.on('error', reject); processChild.on('exit', done) }) }
+    finally { clearTimeout(deadline) }
+    writeFileSync(join(scenarioReport, label + '.stdout.log'), out)
+    writeFileSync(join(scenarioReport, label + '.stderr.log'), err)
+    console.log(JSON.stringify({ scenario: label, code, timedOut }))
+    return { code, stdout: out, stderr: err, timedOut }
+  }
+  runs = await runRuntimeScenarios({ report: scenarioReport, runtime, command, environment: extra => ({ ...process.env, ...extra }), linkWorkspacePackages: true })
+}
+const report = { passed: passed && (!runs || runs.every(run => run.passed)), version, node: process.version, platform: process.platform, artifactSha256, cohortCount: cohort.length, cohort, exit, reportDir: lab, runs, unverified: ['real model reasoning', 'live CTF2 platform verdicts', 'other host versions', 'interactive browser'] }
 writeFileSync(join(lab, 'result.json'), JSON.stringify(report, null, 2) + '\n')
-console.log(JSON.stringify({ passed, version, cohortCount: cohort.length, reportDir: lab, exit }))
-if (!passed) { console.error(stderr.slice(-6000)); console.error(stdout.slice(-3000)); process.exitCode = 1 }
+console.log(JSON.stringify({ passed: report.passed, version, cohortCount: cohort.length, reportDir: lab, exit }))
+if (!report.passed) { console.error(stderr.slice(-6000)); console.error(stdout.slice(-3000)); process.exitCode = 1 }

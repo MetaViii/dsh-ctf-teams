@@ -24,6 +24,8 @@ import { randomUUID } from 'node:crypto'
 import { withPlanDiagnostics } from './plan-diagnostics.ts'
 import { memberAvailable, availabilityLabel, foldFailureInbox } from './availability.ts'
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
+import { collectParticipantInbox, formatInbox, syncInboxLimit } from './coordination.ts'
+import { textCandidates } from './text-candidates.ts'
 import { proxyHealth, readPlatformSnapshot, type PlatformConfig } from './platform.ts'
 import { appendTeamEvent, captainSessionOf } from './events.ts'
 import {
@@ -95,6 +97,7 @@ import {
   formatFinding,
   formatFlag,
   flagReference,
+  formatBoardDelta,
   updateChallenge,
   batchProgress,
   markChallengeSolved,
@@ -364,6 +367,9 @@ function taskDetails(team: TeamState, task: TeamTask): string {
     `In scope: ${(task.inScope ?? []).join(', ')}; Out of scope: ${(task.outOfScope ?? []).join(', ')}`,
     `Acceptance: ${(task.acceptance ?? []).join('; ')}`,
     `Verify: ${(task.verify ?? []).join('; ')}`,
+    ...task.checkpoint ? [`Checkpoint (not completion evidence): ${task.checkpoint}`] : [],
+    ...task.remainingItems?.length ? [`Remaining items: ${task.remainingItems.join(', ')}`] : [],
+    ...task.resourceKey ? [`Exclusive resource: ${task.resourceKey}; explicitly release the platform environment before handoff.`] : [],
     `Dependency results:\n${formatDependencyOutputs(collectCompletedDependencyOutputs(team.tasks, task.id))}`,
   ].join('\n')
 }
@@ -1524,6 +1530,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       task_id: { type: 'string', required: true, description: 'Task to retry/reassign.' },
       assignee: { type: 'string', required: true, description: 'Member, "auto" to select an available idle member/shared pool, or "captain" for explicit takeover.' },
       queue_if_busy: { type: 'boolean', description: 'Release the retry into the shared pool if the requested owner is busy or faulted. Default false preserves strict handoff.' },
+      inbox_limit: { type: 'number', description: 'Captain takeover includes board updates and up to this many unread message groups (1..50, default 10).' },
       reason: { type: 'string', description: 'Why the task is being retried or reassigned.' },
     },
     output: {
@@ -1533,6 +1540,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         properties: {
           task_id: { type: 'string', required: true },
           previous_assignee: { type: 'string', required: true },
+          takeover_context: { type: 'string' },
           dispatch_state: { type: 'string' },
           dispatch_reason: { type: 'string' },
           assignee: { type: 'string', required: true },
@@ -1543,7 +1551,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Task ${value.task_id} reassigned ${value.previous_assignee || 'unassigned'} → ${value.assignee || 'shared pool'} (attempt ${value.attempt}, status ${value.status}${value.attempt_id ? `, attempt_id ${value.attempt_id}` : ''}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}`,
+        text: `Task ${value.task_id} reassigned ${value.previous_assignee || 'unassigned'} → ${value.assignee || 'shared pool'} (attempt ${value.attempt}, status ${value.status}${value.attempt_id ? `, attempt_id ${value.attempt_id}` : ''}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}${value.takeover_context ? `\n\n${value.takeover_context}` : ''}`,
       }],
     },
     async execute(args, exec) {
@@ -1552,6 +1560,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       const stateRoot = stateRootOf(workspace, config)
       const team = await requireCaptainTeam(workspace, config, captain)
       let target = args.assignee.trim()
+      const inboxLimit = syncInboxLimit(args.inbox_limit)
       if (target === '') throw new Error('reassignment assignee must not be empty')
 
       const revoked = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
@@ -1646,9 +1655,21 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       const current = await readTeam(stateRoot, team.id)
       const task = current === undefined ? undefined : requireTask(current, args.task_id)
       if (task === undefined) throw new Error(`team "${team.name}" ended during reassignment`)
+      const takeoverContext = target === CAPTAIN_KEY ? await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+        const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
+        const owned = requireTask(fresh, task.id)
+        if (owned.assignee !== CAPTAIN_KEY || owned.attemptId !== task.attemptId) throw new Error('takeover changed before context delivery; read status before continuing')
+        const delta = deltaSince(fresh, CAPTAIN_KEY)
+        const mail = await collectParticipantInbox(stateRoot, fresh, CAPTAIN_KEY, inboxLimit)
+        advanceCursor(fresh, CAPTAIN_KEY)
+        await writeTeam(stateRoot, fresh)
+        await acknowledgeMailbox(stateRoot, fresh.id, CAPTAIN_KEY, mail.ids)
+        return [taskDetails(fresh, owned), formatBoardDelta(delta), formatInbox(mail.inbox, mail.remaining)].filter(Boolean).join('\n\n')
+      }) : undefined
       return {
         task_id: task.id,
         previous_assignee: revoked.previousAssignee,
+        ...takeoverContext ? { takeover_context: takeoverContext } : {},
         assignee: task.assignee ?? '',
         status: task.status,
         attempt: task.attempt ?? 0,
@@ -2483,6 +2504,26 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_teams_text_candidates',
+    description: 'Bounded OCR ambiguity helper for 0/O, 1/I/l, 5/S, @/?. Preserves the original first, enumerates candidate strings, optionally validates base64 and shows raw hex/escaped ASCII. No platform calls or automatic flag verdicts. Reports truncation instead of exhaustive unbounded substitutions.',
+    parameters: { text: { type: 'string', required: true }, max_candidates: { type: 'number', description: '1..128, default 32.' }, decode_base64: { type: 'boolean' }, preview_bytes: { type: 'number', description: 'Decoded preview bytes, 1..256, default 64.' } },
+    output: {
+      schema: { type: 'object', additionalProperties: false, properties: {
+        candidates: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
+          text: { type: 'string', required: true }, substitutions: { type: 'number', required: true },
+          base64: { type: 'object', additionalProperties: false, properties: { valid: { type: 'boolean', required: true }, hex: { type: 'string' }, ascii: { type: 'string' }, bytes: { type: 'number' }, preview_truncated: { type: 'boolean' } } },
+        } } }, total_variants: { type: 'string', required: true }, truncated: { type: 'boolean', required: true }, notice: { type: 'string', required: true },
+      } },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    },
+    async execute(args, exec) {
+      const caller = requireCaptain(exec)
+      await requireParticipantTeam(workspaceOf(caller), config, caller)
+      return textCandidates(args)
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_teams_image_to_text',
     description: 'Read-only image analysis when the member model cannot see images: ASCII, OCR candidates, QR/barcode decode or pixel comparison. Requires local optional dependencies. Ambiguous characters remain candidates; platform verification is mandatory.',
     parameters: { image: { type: 'string', required: true, description: 'Image path inside the solve workspace.' }, action: { type: 'string', enum: ['ascii', 'ocr', 'decode', 'compare'] }, compare: { type: 'string' }, width: { type: 'number' } },
@@ -2933,14 +2974,16 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
   ctx.tools.register(defineTool({
     name: 'ctf_teams_sync',
-    description: 'Round sync: pull everything that changed on the shared boards since you last looked (teammate findings, flag candidates, verdicts, solve state). Call it when you go idle, before choosing an attack path, and after any teammate pings you. An empty result means nobody has new progress — do not invent work, continue or yield.',
-    parameters: {},
+    description: 'Pull shared board updates and unread direct messages for your own inbox (captain reads captain inbox; members only their own). Direct messages are communications, not verified findings. Only returned messages are acknowledged; excess stays unread. Reports belong on report_finding as well as direct coordination messages.',
+    parameters: { inbox_limit: { type: 'number', description: 'Message groups to return, integer 1..50 (default 10).' } },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
           has_updates: { type: 'boolean', required: true },
+          inbox: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, from: { type: 'string', required: true }, content: { type: 'string', required: true }, ts: { type: 'number', required: true } } }, required: true },
+          inbox_remaining: { type: 'number', required: true },
           batch_progress: { type: 'string' },
           round: { type: 'number', required: true },
           new_findings: { type: 'array', items: { type: 'string' }, required: true },
@@ -2954,10 +2997,11 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           ? '*** THE CHALLENGE IS SOLVED — stop exploring and help finalize the writeup. ***'
           : value.has_updates
             ? `Round ${value.round} — new progress to sync:\n${[...value.new_findings, ...value.flag_updates].map((line) => `- ${line}`).join('\n')}`
-            : `Round ${value.round} — no new teammate progress. Continue your angle or yield.`),
+            : `Round ${value.round} — no new board progress. Continue your angle or yield.`) + `\n\n${formatInbox(value.inbox, value.inbox_remaining)}`,
       }],
     },
-    async execute(_args, exec) {
+    async execute(args, exec) {
+      const inboxLimit = syncInboxLimit(args.inbox_limit)
       const caller = requireCaptain(exec)
       const workspace = workspaceOf(caller)
       const stateRoot = stateRootOf(workspace, config)
@@ -2965,12 +3009,16 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       const result = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const { team: fresh, identity } = await requireFreshParticipant(stateRoot, team.id, caller.id)
         const delta = deltaSince(fresh, identity.name)
+        const mail = await collectParticipantInbox(stateRoot, fresh, identity.name, inboxLimit)
         advanceCursor(fresh, identity.name)
         await writeTeam(stateRoot, fresh)
-        return delta
+        await acknowledgeMailbox(stateRoot, fresh.id, identity.name, mail.ids)
+        return { ...delta, mail }
       })
       return {
         has_updates: result.hasUpdates,
+        inbox: result.mail.inbox,
+        inbox_remaining: result.mail.remaining,
         round: result.round,
         new_findings: result.findings.map(formatFinding),
         flag_updates: result.flags.map(formatFlag),
@@ -3223,7 +3271,7 @@ function scheduleReferenceAutoSync(ctx: Context, workspace: string, teamId: stri
 function renderEnvResult(value: EnvResultValue): string {
   if (value.statuses !== undefined) {
     return value.statuses.map((status) => {
-      const mark = status.status === 'ok' ? '✓' : status.status === 'missing' ? '✗' : '○'
+      const mark = status.status === 'ok' ? '✓' : status.status === 'missing' || status.status === 'broken' ? '✗' : '○'
       const version = status.version === undefined || status.version === '' ? '' : ` ${status.version}`
       const detail = status.status === 'ok' ? `${status.path ?? 'python module'}${version}` : status.install_hint
       return `${mark} ${status.name.padEnd(16)} ${detail}`

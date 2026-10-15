@@ -105,7 +105,7 @@
     "verify:git-artifact": "node scripts/git-artifacts.mjs",
     "verify:client": "node scripts/build-client.mjs --check && node scripts/client-verify.mjs",
     "verify:dashboard": "node scripts/dashboard-route-verify.mjs",
-    "verify:ctf": "node scripts/ctf-verify.mjs && node --test scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs",
+    "verify:ctf": "node scripts/ctf-verify.mjs && node --test --test-concurrency=1 scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs scripts/ctf2-iteration3.test.mjs",
     "verify:ctf:harness": "node scripts/ctf2-harness-smoke.mjs"
   },
   "peerDependencies": {

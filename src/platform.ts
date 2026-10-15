@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { TeamState } from './types.ts'
+import { parseRpcResponse, unwrapToolResult } from './ctf2-protocol.ts'
 
 export interface PlatformConfig {
   proxyUrl?: string
@@ -35,16 +36,7 @@ async function readTool(config: PlatformConfig, name: string, args: Record<strin
   } catch { throw new Error((await proxyHealth(config)).state) }
   const text = await response.text()
   if (!response.ok) throw new Error(`CTF2 proxy/upstream HTTP ${response.status}; refresh OAuth or check platform availability; no challenge verdict was recorded`)
-  const data = text.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(line => line && line !== '[DONE]')
-  const envelopes = data.length ? data.map(line => JSON.parse(line)) : [JSON.parse(text)]
-  const envelope = envelopes.find(item => item.id === name) ?? envelopes.at(-1)
-  if (envelope?.error || envelope?.result?.isError) throw new Error(`CTF2 read-only ${name} failed; check OAuth, challenge/ground ids and platform state`)
-  const result = envelope?.result
-  let facts = result?.structuredContent
-  if (!facts) {
-    const raw = result?.content?.find((entry: { type: string; text?: string }) => entry.type === 'text' && entry.text)?.text
-    if (raw) { try { facts = JSON.parse(raw) } catch {} }
-  }
+  const facts = unwrapToolResult(parseRpcResponse(text, name))
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) throw new Error(`CTF2 ${name} did not return structured facts; preflight stays blocked`)
   return facts as Record<string, unknown>
 }

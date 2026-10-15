@@ -2,6 +2,18 @@
 
 The grab-bag lane: encoding towers, OSINT, esoteric formats, puzzle logic.
 
+## OCR 歧义与二进制解码
+
+保留原图及原始识别结果。先用 `ctf_teams_image_to_text` 提取候选；存在
+`0/O`、`1/I/l`、`5/S`、`@/?` 歧义时，可显式调用
+`ctf_teams_text_candidates({text:"...",max_candidates:32,decode_base64:true})`。
+它按替换次数从少到多枚举，保留原文为第一项；最多返回 128 项，并显示总组合数与
+`truncated`。达到上限后应根据图像、校验和或格式缩小范围，不做无界笛卡尔积。
+
+Base64 仅校验标准字母表、填充及规范编码，输出原始字节的 hex 与转义 ASCII
+预览；二进制并不意味着解码失败，非 UTF-8 数据不要用替换字符丢弃。预览默认
+64 字节，可调到 256。符合编码规则不证明它是正确答案；工具不提交平台或修改判定。
+
 ## Encoding towers
 
 ```python

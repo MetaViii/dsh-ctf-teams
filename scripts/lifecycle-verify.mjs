@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { haltTeamWork, registerCTFTeamsTools } from '../lib/tools.js'
 import { buildActivationDirective, invokedCTFTeamsGoal, invokedCTFTeamsInvocation, installCTFTeamsGestureBoundary, profileCommandName, registerCTFTeamsCommand } from '../lib/command.js'
-import { readArchivedTeam, readMailbox, readTeam, readUnreadMailbox } from '../lib/state.js'
+import { appendMailbox, readArchivedTeam, readMailbox, readTeam, readUnreadMailbox, writeTeam, withTeamLock } from '../lib/state.js'
 
 const deliveryHarness = process.argv.includes('--delivery-harness')
 const modernHarness = deliveryHarness || process.argv.includes('--modern-harness')
@@ -1276,9 +1276,39 @@ try {
   await call('ctf_teams_update_task', {
     task_id: t7.task_id, status: 'in_progress', attempt_id: betaTakeoverClaim.attempt_id,
   }, beta)
+  // Pull only the caller's inbox, acknowledge only returned groups, then
+  // exercise the same reader atomically inside an explicit captain takeover.
+  while ((await call('ctf_teams_sync', { inbox_limit: 50 })).inbox_remaining > 0) {}
+  await withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
+    for (const [id, to, content] of [['sync-a', 'captain', 'first direct message'], ['sync-b', 'captain', 'second direct message'], ['sync-private', 'beta', 'member-only context']]) {
+      await appendMailbox(stateRoot, teamId, to, { id, from: 'gamma', to, content, ts: Date.now() })
+    }
+  })
+  const firstSync = await call('ctf_teams_sync', { inbox_limit: 1 })
+  const secondSync = await call('ctf_teams_sync', { inbox_limit: 1 })
+  const emptySync = await call('ctf_teams_sync', {})
+  check('sync reads only own mailbox, preserves excess and acknowledges returned messages once',
+    firstSync.inbox.length === 1 && firstSync.inbox[0].id === 'sync-a' && firstSync.inbox_remaining === 1
+      && secondSync.inbox[0]?.id === 'sync-b' && emptySync.inbox.length === 0
+      && (await readUnreadMailbox(stateRoot, teamId, 'beta')).some(message => message.id === 'sync-private'))
+  const privateSync = await call('ctf_teams_sync', {}, beta)
+  check('member sync cannot consume captain messages and does read its own context', privateSync.inbox.some(message => message.id === 'sync-private'))
+  await call('ctf_teams_report_finding', { content: 'takeover reproducible evidence', evidence_kind: 'raw_output', evidence: 'fixture command output' }, beta)
+  await withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
+    const saved = await readTeam(stateRoot, teamId)
+    const owned = saved.tasks.find(task => task.id === t7.task_id)
+    owned.checkpoint = 'partial script retained'; owned.remainingItems = ['inspect ch-next']
+    await writeTeam(stateRoot, saved)
+    await appendMailbox(stateRoot, teamId, 'captain', { id: 'handoff-mail', from: 'gamma', to: 'captain', content: 'handoff direct coordination', ts: Date.now() })
+    await appendMailbox(stateRoot, teamId, 'captain', { id: 'stale-mail', from: 'beta', to: 'captain', content: 'revoked attempt must not appear', sourceTaskId: t7.task_id, sourceAttemptId: 'revoked', ts: Date.now() })
+  })
   const captainAttempt = await call('ctf_teams_reassign_task', {
     task_id: t7.task_id, assignee: 'captain', reason: 'deadline takeover',
   })
+  check('captain takeover returns checkpoint, remaining work, board delta and unread messages without stale attempts',
+    ['partial script retained', 'inspect ch-next', 'takeover reproducible evidence', 'handoff direct coordination'].every(text => captainAttempt.takeover_context?.includes(text))
+      && !captainAttempt.takeover_context.includes('revoked attempt must not appear')
+      && !(await readUnreadMailbox(stateRoot, teamId, 'captain')).some(message => message.id === 'handoff-mail'))
   await call('ctf_teams_update_task', { task_id: t7.task_id, status: 'in_progress' })
   await call('ctf_teams_update_task', { task_id: t7.task_id, status: 'completed', output: 'captain result' })
   let lateTakeoverRejected = false

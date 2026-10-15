@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process'
 /** How a managed tool is probed. Absent → the tool reports its manual path. */
 export type ToolProbe =
   | { kind: 'binary'; command: string; args?: readonly string[]; versionRe?: string }
-  | { kind: 'python'; module: string }
+  | { kind: 'python'; module: string; selfTest?: string }
 
 /** One managed CTF tool. */
 export interface ToolSpec {
@@ -48,7 +48,7 @@ export interface ToolStatus {
   name: string
   category: ToolSpec['category']
   summary: string
-  status: 'ok' | 'missing' | 'unavailable' | 'manual'
+  status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual'
   version?: string
   /** Where the binary was found (`which`/`where` line), for binaries. */
   path?: string
@@ -120,7 +120,9 @@ export const TOOL_SPECS: readonly ToolSpec[] = [
   // ── Python library stack ────────────────────────────────────────────────
   { name: 'python3', category: 'misc', summary: 'the Python interpreter every script lane builds on', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'binary', command: process.platform === 'win32' ? 'python' : 'python3', args: ['--version'], versionRe: '[Pp]ython (\\S+)' }, manual: 'install Python 3 from python.org or your package manager — everything pip-based depends on it' },
   { name: 'pwntools', category: 'binary', summary: PWNTOOLS_HELP, platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'pwn' }, install: { pip: ['pwntools'], apt: ['python3-pwntools'] } },
-  { name: 'pycryptodome', category: 'crypto', summary: 'AES/DES/RSA primitives (`from Crypto.Cipher import AES`)', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'Crypto' }, install: { pip: ['pycryptodome'] } },
+  { name: 'pycryptodome', category: 'crypto', summary: 'AES primitives with an actual encrypt/decrypt self-test (Crypto namespace)', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'Crypto', selfTest: 'from Crypto.Cipher import AES; c=AES.new(bytes(16),AES.MODE_ECB); assert c.decrypt(c.encrypt(bytes(16))) == bytes(16)' }, install: { pip: ['pycryptodome'] } },
+  { name: 'pycryptodomex', category: 'crypto', summary: 'Legacy independent Cryptodome namespace; AES operation self-test', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'Cryptodome', selfTest: 'from Cryptodome.Cipher import AES; c=AES.new(bytes(16),AES.MODE_ECB); assert c.decrypt(c.encrypt(bytes(16))) == bytes(16)' }, manual: 'Legacy Cryptodome 3.x environment: probe an existing install separately. Prefer a maintained compatible backend; use isolated dependencies rather than a blanket switch. See pycryptodome.org/src/installation.' },
+  { name: 'cryptography', category: 'crypto', summary: 'Cryptography backend with an AES operation self-test', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'cryptography', selfTest: 'from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes; c=Cipher(algorithms.AES(bytes(16)),modes.ECB()); e=c.encryptor(); value=e.update(bytes(16))+e.finalize(); d=c.decryptor(); assert d.update(value)+d.finalize() == bytes(16)' }, install: { pip: ['cryptography'] } },
   { name: 'z3-solver', category: 'crypto', summary: 'SMT constraint solving for reversing and crypto', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'z3' }, install: { pip: ['z3-solver'] } },
   { name: 'sympy', category: 'crypto', summary: 'symbolic math for number-theory scripting', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'sympy' }, install: { pip: ['sympy'] } },
   { name: 'capstone', category: 'binary', summary: 'disassembler framework for scripted analysis', platforms: ['linux', 'darwin', 'win32'], probe: { kind: 'python', module: 'capstone' }, install: { pip: ['capstone'] } },
@@ -219,12 +221,17 @@ async function probeSpec(spec: ToolSpec, runner: CommandRunner, timeoutMs: numbe
   // Python import probe — works on every platform with a Python.
   const result = await runner([python, '-c', `import ${spec.probe.module}`], timeoutMs)
   if (result.code === 0) {
+    if (spec.probe.selfTest) {
+      const tested = await runner([python, '-c', spec.probe.selfTest], timeoutMs)
+      if (tested.code !== 0) return { ...base, status: 'broken', installHint: `Import succeeded, operation self-test failed: ${(tested.stderr || tested.error || tested.stdout).trim().slice(-600)}. Check env.pythonBin and isolate dependencies in a fresh environment.${spec.probe.module === 'Crypto' ? ' Probe an existing legacy pycryptodomex environment separately; do not rewrite every script or reinstall blindly.' : ''}` }
+    }
     const versionProbe = await runner([python, '-c', `import ${spec.probe.module}; print(getattr(${spec.probe.module}, '__version__', ''))`], timeoutMs)
     const version = versionProbe.stdout.trim() || undefined
     return { ...base, status: 'ok', version, installHint: 'installed' }
   }
   if (unavailable) return { ...base, status: 'unavailable', installHint: spec.manual ?? 'not available on this platform' }
-  return { ...base, status: 'missing', installHint: installHintOf(spec, platform) }
+  const broken = /cffi|KeyError|ImportError/.test(result.stderr)
+  return { ...base, status: broken ? 'broken' : 'missing', installHint: broken ? `Python import failed: ${result.stderr.trim().slice(-600)}. Check env.pythonBin and isolate dependencies in a fresh environment.` : installHintOf(spec, platform) }
 }
 
 function installHintOf(spec: ToolSpec, platform: NodeJS.Platform): string {
@@ -350,11 +357,13 @@ export async function runInstallPlan(
     if (result.code === 0) {
       const spec = (options.specs ?? TOOL_SPECS).find((entry) => entry.name === step.tool)
       let version: string | undefined
+      let reprobe: ToolStatus | undefined
       if (spec !== undefined) {
         const [status] = await detectTools({ tools: [spec.name], runner, timeoutMs: 10_000, python: options.python, specs: options.specs })
         version = status?.version
+        reprobe = status
       }
-      outcomes.push({ tool: step.tool, ok: true, manager: step.manager, detail: `${step.manager} install finished`, version })
+      outcomes.push({ tool: step.tool, ok: reprobe?.status === 'ok', manager: step.manager, detail: reprobe === undefined ? `${step.manager} exited successfully; no probe is available to verify this tool` : reprobe.status !== 'ok' ? `${step.manager} exited successfully but verification is ${reprobe.status}: ${reprobe.installHint}` : `${step.manager} install finished and verified`, version })
     } else {
       const detail = result.error === undefined
         ? `exit ${result.code}: ${tail(result.stderr !== '' ? result.stderr : result.stdout)}`
@@ -368,7 +377,7 @@ export async function runInstallPlan(
 /** Compact human/model-facing render of a detection report. */
 export function renderStatuses(statuses: readonly ToolStatus[]): string {
   const lines = statuses.map((status) => {
-    const mark = status.status === 'ok' ? '✓' : status.status === 'missing' ? '✗' : '○'
+    const mark = status.status === 'ok' ? '✓' : status.status === 'missing' || status.status === 'broken' ? '✗' : '○'
     const version = status.version === undefined || status.version === '' ? '' : ` ${status.version}`
     const detail = status.status === 'ok'
       ? `${status.path ?? 'python module'}${version}`

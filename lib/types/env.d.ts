@@ -24,6 +24,7 @@ export type ToolProbe = {
 } | {
     kind: 'python';
     module: string;
+    selfTest?: string;
 };
 /** One managed CTF tool. */
 export interface ToolSpec {
@@ -49,7 +50,7 @@ export interface ToolStatus {
     name: string;
     category: ToolSpec['category'];
     summary: string;
-    status: 'ok' | 'missing' | 'unavailable' | 'manual';
+    status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual';
     version?: string;
     /** Where the binary was found (`which`/`where` line), for binaries. */
     path?: string;

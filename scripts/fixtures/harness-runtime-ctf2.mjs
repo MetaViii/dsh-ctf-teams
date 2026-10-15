@@ -13,8 +13,16 @@ try { await tools.ctf_teams_create({name:'bad-plan',plan:{members:[{name:'x',ext
 catch (error) { diagnostic = error.message; }
 if (!diagnostic.includes('Missing fields: plan.tasks[0].id, plan.tasks[0].subject') || !diagnostic.includes('Undeclared fields') || diagnostic.includes('missing required property "plan.tasks"')) throw Error('misleading plan diagnostics: '+diagnostic);
 const staged = await tools.ctf_teams_create({name:'ctf2-batch',approval:'required',plan:{members:[{name:'worker',executionPrompt:'Check raw bytes and preserve case'}],tasks:[{id:'recon',subject:'中文附件侦察',assignee:'worker'}]}});
+await tools.ctf_teams_create({name:'ctf2-empty',approval:'required',replaceExisting:true});
+if ((await tools.ctf_teams_status({})).loop_state !== 'planning') throw Error('captain-planned empty graph incorrectly blocked');
 const solo = await tools.ctf_teams_create({name:'ctf2-solo',mode:'solo',replaceExisting:true});
 if (!solo.archived_path || solo.mode !== 'solo') throw Error('solo replacement failed');
+const soloStatus = await tools.ctf_teams_status({});
+if (soloStatus.loop_state !== 'running') throw Error('solo graph incorrectly blocked');
+const synced = await tools.ctf_teams_sync({inbox_limit:1});
+if (!Array.isArray(synced.inbox) || synced.inbox_remaining !== 0) throw Error('sync inbox schema failed');
+const textVariants = await tools.ctf_teams_text_candidates({text:'01S@',max_candidates:7,decode_base64:true});
+if (textVariants.candidates.length !== 7 || textVariants.candidates[0].text !== '01S@' || !textVariants.truncated) throw Error('bounded text candidate tool failed');
 await tools.ctf_teams_set_challenge({title:'中文题目',remote:'http://ctf.local',environment_id:'env-ctf2',flag_format:'flag\\\\{[^}]+\\\\}'});
 const finding = await tools.ctf_teams_report_finding({content:'文件原始字节: EaSyRe',evidence_kind:'raw_output',confidence:'high',evidence:'xxd attachment.bin'});
 await tools.ctf_teams_verify_finding({finding_id:finding.finding_id,method:'independent byte check',result:'confirmed',note:'大小写一致'});
