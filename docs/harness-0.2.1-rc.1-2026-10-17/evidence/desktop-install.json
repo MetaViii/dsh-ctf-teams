@@ -1,0 +1,22 @@
+{
+  "installed": true,
+  "host": "0.2.1-rc.1",
+  "backup": "C:/Users/MetaVi/.dsh/backups/ctf-host-0.2.1-rc.1-2026-10-17T09-26-47-566Z",
+  "artifact": "E:/dsh-ctf-teams-main/dsh-ctf-teams-host-0.2.1-rc.1-0.1.29.tgz",
+  "artifactSha256": "d1f7ba03864e918a06380e44a2553d4d02f11b033ecea33b5a35695f9ecc77aa",
+  "compatibilityDirectory": "C:/Users/MetaVi/.dsh/compat/ctf-auto-review-cleanup-0.2.1-rc.1-20261017",
+  "peerGatePasses": true,
+  "filesMatchTestedPackage": true,
+  "otherManifestFieldsUnchanged": true,
+  "permissionAndModelConfigUnchanged": true,
+  "teamFilesUnchanged": 1,
+  "sessionFilesUnchanged": 325,
+  "restarted": true,
+  "teamResumed": false,
+  "pushed": false,
+  "published": false,
+  "composedPresetPresent": true,
+  "actualComposedPresetId": "ctf-teams",
+  "guiNewSessionConfirmed": true,
+  "guiConfirmation": "用户确认：已能创建并正常回复（rc.1；本次 rc.2 更新之前）"
+}

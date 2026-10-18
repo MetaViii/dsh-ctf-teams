@@ -20,13 +20,27 @@ export function proxyUrl(config: PlatformConfig = {}): URL {
   return url
 }
 
-export async function proxyHealth(config: PlatformConfig = {}): Promise<{ up: boolean; state: string }> {
+export async function proxyHealth(config: PlatformConfig = {}): Promise<{ up: boolean; state: string; probe: string; url: string; http_status?: number }> {
   const url = proxyUrl(config)
+  const healthUrl = new URL('/health', url)
+  const signal = AbortSignal.timeout(config.timeoutMs ?? 5000)
   try {
-    const response = await fetch(new URL('/health', url), { signal: AbortSignal.timeout(config.timeoutMs ?? 5000) })
-    const body = await response.json() as { service?: string }
-    return { up: response.ok && body.service === 'ctf2-mcp-proxy', state: response.ok && body.service === 'ctf2-mcp-proxy' ? 'up' : 'unrecognized proxy; upgrade the proxy to expose /health' }
-  } catch { return { up: false, state: `down/unreachable at ${url.origin}; start scripts/ctf2-mcp-proxy.mjs or enable host-owned ctf2.manageProxy` } }
+    const response = await fetch(healthUrl, { signal })
+    const body = await response.json().catch(() => null) as { service?: string } | null
+    if (response.ok && body?.service === 'ctf2-mcp-proxy') return { up: true, state: 'up (proxy liveness; OAuth/platform readiness requires a facts check)', probe: 'health', url: healthUrl.href, http_status: response.status }
+  } catch { /* Old proxies may not expose /health. Validate the actual MCP endpoint. */ }
+  let status: number | undefined
+  try {
+    const id = 'ctf-teams-health'
+    const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/list', params: {} }), signal })
+    status = response.status
+    if (!response.ok) return { up: false, state: `MCP HTTP ${status} at ${url.href}; check OAuth and proxy availability`, probe: 'tools/list', url: url.href, http_status: status }
+    const result = parseRpcResponse(await response.text(), id) as { tools?: unknown[] }
+    const valid = Array.isArray(result?.tools) && result.tools.some(tool => tool !== null && typeof tool === 'object' && 'name' in tool && tool.name === 'ctf2_agent_whoami')
+    return { up: valid, state: valid ? 'up (legacy proxy verified via tools/list)' : 'unrecognized MCP tool catalogue; expected ctf2_agent_whoami', probe: 'tools/list', url: url.href, http_status: status }
+  } catch (error) {
+    return { up: false, state: status === undefined ? `unreachable at ${url.href}; start scripts/ctf2-mcp-proxy.mjs or check the configured endpoint` : `MCP probe failed: ${String(error)}`, probe: 'tools/list', url: url.href, ...status === undefined ? {} : { http_status: status } }
+  }
 }
 
 async function readTool(config: PlatformConfig, name: string, args: Record<string, string>): Promise<Record<string, unknown>> {

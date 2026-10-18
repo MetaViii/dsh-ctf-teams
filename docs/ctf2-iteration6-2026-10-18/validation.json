@@ -1,0 +1,105 @@
+{
+  "version": "0.1.30",
+  "artifact": "dsh-ctf-teams-iteration6-0.1.30.tgz",
+  "artifactSha256": "8b1253e5abd77a19d05148df474e74cc81d56cee31c1863bb29f017c069f2651",
+  "buildPassed": true,
+  "fullVerifyPassed": true,
+  "iteration6RegressionCount": 7,
+  "readmeAndReleaseChecksPassed": true,
+  "runtimeResults": [
+    {
+      "host": "0.2.1-rc.2",
+      "passed": true,
+      "artifactSha256": "8b1253e5abd77a19d05148df474e74cc81d56cee31c1863bb29f017c069f2651",
+      "scenarios": [
+        {
+          "name": "lifecycle",
+          "passed": true
+        },
+        {
+          "name": "lifecycle-cold-restore",
+          "passed": true
+        },
+        {
+          "name": "fallback",
+          "passed": true
+        },
+        {
+          "name": "fallback-cold-restore",
+          "passed": true
+        },
+        {
+          "name": "failure",
+          "passed": true
+        },
+        {
+          "name": "captain-idle-wakeup",
+          "passed": true
+        },
+        {
+          "name": "progressive-entry",
+          "passed": true
+        },
+        {
+          "name": "web-approval",
+          "passed": true
+        },
+        {
+          "name": "protocol-compatibility",
+          "passed": true
+        },
+        {
+          "name": "stability",
+          "passed": true
+        },
+        {
+          "name": "ctf2-regression",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "host": "0.2.1-rc.1",
+      "passed": true,
+      "artifactSha256": "8b1253e5abd77a19d05148df474e74cc81d56cee31c1863bb29f017c069f2651",
+      "scenarios": [
+        {
+          "name": "ctf2-regression",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "wslActual": {
+    "distribution": "kali-linux",
+    "runtimeReady": true,
+    "elapsedMs": 31121,
+    "ok": [
+      "python3",
+      "exiftool",
+      "7z"
+    ],
+    "missing": [
+      "sage"
+    ],
+    "unknown": [
+      "pycryptodome",
+      "strace",
+      "sqlmap"
+    ]
+  },
+  "desktopPreviousGuiConfirmedByUser": true,
+  "desktopPackageReplacedThisRound": false,
+  "remote": "https://github.com/MetaViii/dsh-ctf-teams",
+  "branch": "main",
+  "npmPublished": false,
+  "teamResumed": false,
+  "unverified": [
+    "WSL launcher intermittently times out; unknown probes are not installation facts",
+    "Custom Linux virtualenv and nonstandard PATH locations",
+    "Real model/provider APIs and platform write operations",
+    "Behavior on future host versions",
+    "Desktop GUI using this new 0.1.30 package"
+  ],
+  "artifactCliRegressionPassed": true
+}

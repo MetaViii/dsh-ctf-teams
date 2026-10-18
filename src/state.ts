@@ -863,6 +863,11 @@ function isTeamState(value: unknown, expectedId: string): value is TeamState {
     && Number.isSafeInteger(value['taskSeq'])
     && (value['taskSeq'] as number) >= 0
     && (value['mode'] === undefined || value['mode'] === 'solo' || value['mode'] === 'squad')
+    && (value['flags'] === undefined || Array.isArray(value['flags']) && value['flags'].every(flag => isRecord(flag)
+      && (flag.sources === undefined || Array.isArray(flag.sources) && flag.sources.every(source => isRecord(source)
+        && ['local_output', 'writeup', 'index', 'manual', 'unknown'].includes(String(source.kind))
+        && isOptionalString(source.url) && isOptionalString(source.evidence)
+        && typeof source.submittedBy === 'string' && isFiniteNumber(source.ts)))))
     && (value['platformSnapshot'] === undefined || isRecord(value['platformSnapshot'])
       && isFiniteNumber(value['platformSnapshot']['checkedAt'])
       && isOptionalString(value['platformSnapshot']['challengeId'])

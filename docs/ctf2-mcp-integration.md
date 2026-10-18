@@ -133,10 +133,12 @@ Append to `~/.dsh/profiles/desktop/cordis.patch.yml`:
     failOnStartupError: false
 ```
 
-The desktop profile reloads patches live (`patchReload: live`), so the tools appear
-without restarting DSH. The row does not collide with the plugin manager:
-`reconcilePlugins` only rewrites `dsh.profile.bundles` in `package.json` and never
-touches `cordis.patch.yml`.
+The shipped host can watch profile patch files through its `hmr` entry. Do not
+edit plugin composition during a running solve: save work, fully exit DSH, apply
+the patch, and restart. This desktop profile now explicitly disables automatic
+HMR after a service-context outage; `patchReload` is not a verified policy field
+in the installed `0.2.0-rc.2` implementation. Direct Plugin Manager operations can
+still recompose the runtime. See [the service recovery record](./session-projections-2026-10-16/README.md).
 
 ## Verification
 

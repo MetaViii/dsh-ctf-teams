@@ -1,0 +1,24 @@
+{
+  "applied": true,
+  "when": "2026-10-16T04:22:04.814Z",
+  "backup": "C:/Users/MetaVi/.dsh/backups/auto-review-cleanup-2026-10-16T04-22-04-796Z",
+  "compat": "C:/Users/MetaVi/.dsh/compat/ctf-auto-review-cleanup-rc2-20261016",
+  "profile": "C:/Users/MetaVi/.dsh/profiles/desktop",
+  "reviewPolicyChanged": false,
+  "userPermissionsChanged": false,
+  "teamResumed": false,
+  "retainedHashes": {
+    "team": "2fc75ca5813035b6cd55d673f74eaec811b725b1f8f6d271e57fe88e20a5c288",
+    "session": "1376b2a764553a23c047dc9c930f5be63768d93faa25bfa0261bcef85fad03fc",
+    "manifest": "4bdd61d561bd8f215abb12e4be3cf0c7073d979e39fdf41467ad334a7c982b1e"
+  },
+  "desktopHostFingerprints": {
+    "cordis": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
+    "autoReview": "697b168133d5d9a3c2b33380cc407b8e94d9c454791b66d2173049af5e8d0033",
+    "permissions": "4f23c620145098d611d04d8363bc6716f49b26930c9141a21dc9a8df2b72ba63"
+  },
+  "files": {
+    "auto-review-cleanup.js": "a02586ca94f2a4d8edfaca102d9f1d00aebdf407d9b22bcf6993643ae4dc8736",
+    "effect-cleanup.js": "e4b71622dbd2e36226b7bfc8950d4410fda01e58634545209794d67788309c6a"
+  }
+}

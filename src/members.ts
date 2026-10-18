@@ -19,7 +19,7 @@ import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import { createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { join } from 'node:path'
-import { guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
+import { ctfTeamsSource, guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMemberWithLenientFilter, startMemberContinuable, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
 import { markMailboxDelivered, appendMailbox, CAPTAIN_KEY, createMessage, readRetiredMemberIds, readTeamSync, readTeam, releaseMailboxDelivery, withTeamLock, writeTeam } from './state.ts'
 import { mailboxPrompt } from './mailbox.ts'
 import { memberAvailable, recordMemberFault, type FailureInput } from './availability.ts'
@@ -49,6 +49,12 @@ export interface MemberRuntimeConfig {
   executionPrompt?: string
   /** Plugin-wide fallback route. */
   fallback?: { provider: string; model: string }
+}
+
+/** rc.1 moved role/filter composition out of start requests into scoped presets. */
+function usesPresetComposition(capabilities: object): boolean {
+  const value = capabilities as { agentPreset?: boolean; persona?: boolean; toolFilter?: boolean }
+  return value.agentPreset === true && value.persona === undefined && value.toolFilter === undefined
 }
 
 /** Durable provider/model/reasoning snapshot for one member. */
@@ -143,7 +149,7 @@ export function steerCaptainReport(captain: Pick<Agent, 'steer'>, from: string, 
   try {
     captain.steer(createUserMessage({
       content: [{ type: 'text', text: receipt ?? `CTFTeams message from member ${from}:\n\n${content}` }],
-      source: { kind: 'ctf-teams' },
+      source: ctfTeamsSource({ kind: 'ctf-teams' }),
     }))
     return true
   } catch {
@@ -364,6 +370,7 @@ export function installMemberSelectionRuntime(
   ctx: Context,
   stateDir: string,
   onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>,
+  compositionConfig: Pick<MemberRuntimeConfig, 'maxDepth' | 'executionPrompt'> = {},
 ): MemberSelectionRuntime {
   const pending = new Map<string, MemberLlmSelection>()
   installContinuableMemberSetup(ctx, (childCtx, child) => {
@@ -406,6 +413,35 @@ export function installMemberSelectionRuntime(
           `ctf-teams: saved model route for member "${memberName}" does not match its subagent descriptor`,
         )
       }
+    }
+
+    let disposeComposition = () => undefined as void
+    const provider = typeof ctx.subagents.getProvider === 'function' ? ctx.subagents.getProvider(descriptor.provider) : undefined
+    if (provider !== undefined && usesPresetComposition(provider.capabilities)) {
+      const owner = readTeamSync(stateRoot, teamId)
+      const member = owner?.members.find(candidate => candidate.name === memberName)
+      if (owner?.captainSessionId !== parentSessionId || member === undefined
+        || (!pending.has(key) && member.id !== child.id)) {
+        disposeAdmission()
+        throw new Error('ctf-teams: cannot compose an unverified preset-based member')
+      }
+      // Old descriptors retain their historical overrides on the new host.
+      // New descriptors need equivalent child-owned effects on every restore.
+      const legacy = descriptor as unknown as { persona?: string; toolFilter?: unknown }
+      const disposers: (() => void)[] = []
+      try {
+        if (legacy.persona === undefined) disposers.push(childCtx.systemPrompt.section({
+          name: 'deployment:persona-prefix',
+          order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+          text: memberPersona(owner, member, stateDir, compositionConfig.executionPrompt),
+        }))
+        if (legacy.toolFilter === undefined) disposers.push(childCtx.tools.restrict(memberToolFilter(compositionConfig.maxDepth, restrictableToolNames(child))))
+      } catch (error) {
+        for (const dispose of disposers.reverse()) dispose()
+        disposeAdmission()
+        throw error
+      }
+      disposeComposition = () => { for (const dispose of [...disposers].reverse()) dispose() }
     }
 
     let lastFailedTurn: number | undefined
@@ -457,7 +493,7 @@ export function installMemberSelectionRuntime(
       }
     })
     // Legacy teams still need failure reporting even without a saved route.
-    if (selection === undefined) return () => { disposeFailure(); disposeAdmission() }
+    if (selection === undefined) return () => { disposeFailure(); disposeComposition(); disposeAdmission() }
     const selectionRef = { current: modelSelection(selection), assembled: undefined as ModelSelection | undefined }
     const disposeSelection = installModelSelection(childCtx, selectionRef)
     const fallback = selection.fallback
@@ -486,6 +522,7 @@ export function installMemberSelectionRuntime(
       disposeFallback()
       disposeSelection()
       disposeFailure()
+      disposeComposition()
       disposeAdmission()
     }
   })
@@ -641,28 +678,28 @@ export async function spawnMember(
   if (provider.prepareContinuable === undefined) {
     throw new Error(`ctf-teams: provider "${config.provider}" does not support continuable members`)
   }
-  if (!provider.capabilities.persona) {
+  const presetComposition = usesPresetComposition(provider.capabilities)
+  if (!presetComposition && !provider.capabilities.persona) {
     throw new Error(`ctf-teams: provider "${config.provider}" cannot apply a member persona`)
   }
-  if (!provider.capabilities.toolFilter) {
+  if (!presetComposition && !provider.capabilities.toolFilter) {
     throw new Error(`ctf-teams: provider "${config.provider}" cannot restrict captain-only tools for members`)
   }
   const label = `${MEMBER_LABEL_PREFIX}${team.id}:${member.name}`
   const start = await selections.withPending(captain.id, label, llmSelection, () => (
     startMemberWithLenientFilter(
-      toolFilter => ctx.subagents.startContinuable({
+      toolFilter => startMemberContinuable(ctx.subagents, {
         provider: config.provider,
         label,
         request: {
           prompt: [{ type: 'text', text: initialPrompt ?? memberWelcome(team, member.name) }],
           parent: captain,
-          persona: memberPersona(team, member, stateDir, config.executionPrompt),
           // Depth deny entries name host tools; resolve them against the
           // running host's registry so a renamed delegation tool cannot abort
           // the spawn (see memberToolFilter). Depth is still enforced by the
           // parent-chain guard installed at plugin mount. A filter the host
           // still rejects is retried without the names it reported.
-          toolFilter,
+          ...presetComposition ? {} : { persona: memberPersona(team, member, stateDir, config.executionPrompt), toolFilter },
           agentOptions: {
             provider: llmSelection.provider,
             model: llmSelection.model,
@@ -779,18 +816,27 @@ export function installMemberDelegationGuard(ctx: Context, stateDir: string, max
   ctx.effect(() => {
     const start = runtime.start
     const continuable = runtime.startContinuable
+    const modern = runtime as unknown as { startActivation?: (spec: { request: { parent: Agent } }) => Promise<unknown> }
+    const activation = modern.startActivation
     const startDescriptor = Object.getOwnPropertyDescriptor(runtime, 'start')
     const continuableDescriptor = Object.getOwnPropertyDescriptor(runtime, 'startContinuable')
+    const activationDescriptor = Object.getOwnPropertyDescriptor(runtime, 'startActivation')
     const guardedStart: typeof start = async (name, request) => { check(request.parent); return start.call(runtime, name, request) }
     const guardedContinuable: typeof continuable = async spec => { check(spec.request.parent); return continuable.call(runtime, spec) }
-    runtime.start = guardedStart
-    runtime.startContinuable = guardedContinuable
+    const guardedActivation = async (spec: { request: { parent: Agent } }) => { check(spec.request.parent); return activation!.call(runtime, spec) }
+    if (typeof start === 'function') runtime.start = guardedStart
+    if (typeof continuable === 'function') runtime.startContinuable = guardedContinuable
+    if (typeof activation === 'function') modern.startActivation = guardedActivation
     return () => {
       active = false
       for (const [key, fn, descriptor] of [['start', guardedStart, startDescriptor], ['startContinuable', guardedContinuable, continuableDescriptor]] as const) {
         if (Object.getOwnPropertyDescriptor(runtime, key)?.value !== fn) continue
         if (descriptor === undefined) Reflect.deleteProperty(runtime, key)
         else Object.defineProperty(runtime, key, descriptor)
+      }
+      if (Object.getOwnPropertyDescriptor(runtime, 'startActivation')?.value === guardedActivation) {
+        if (activationDescriptor === undefined) Reflect.deleteProperty(runtime, 'startActivation')
+        else Object.defineProperty(runtime, 'startActivation', activationDescriptor)
       }
     }
   }, 'ctf-teams: member delegation budget')

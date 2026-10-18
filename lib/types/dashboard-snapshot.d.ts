@@ -12,6 +12,7 @@
  * @module dsh-ctf-teams/dashboard-snapshot
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { memberRouteDiagnostics } from './model-routes.ts';
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts';
 /** One lane as the dashboard renders it. */
 export interface DashboardMemberRow {
@@ -21,6 +22,7 @@ export interface DashboardMemberRow {
     provider: string;
     model: string;
     reasoningEffort: string;
+    routeDiagnostics?: ReturnType<typeof memberRouteDiagnostics>;
     status: string;
     availability?: string;
     /** `working` | `idle` | `ready` | `unspawned` | `removed`. */

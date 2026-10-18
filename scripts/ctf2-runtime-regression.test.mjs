@@ -147,5 +147,5 @@ test('CTF2 adapter calls only allowlisted read operations, handles SSE, preserve
   assert.deepEqual(calls, ['ctf2_agent_whoami', 'ctf2_get_practice_challenge', 'ctf2_get_environment'])
   assert.throws(() => proxyUrl({ proxyUrl: 'https://ctf2.dasctf.com/mcp' }), /loopback/)
   await new Promise(resolve => server.close(resolve))
-  assert.match((await proxyHealth(config)).state, /down\/unreachable/)
+  assert.match((await proxyHealth(config)).state, /unreachable/)
 })

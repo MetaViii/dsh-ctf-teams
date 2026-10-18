@@ -18,8 +18,8 @@
  *    keeping every keyword DSH does enforce, so validation of arguments is
  *    preserved as far as the harness can express it.
  *
- * Everything else — JSON-RPC ids, SSE framing, `tools/call` bodies, error
- * results — is forwarded byte-for-byte.
+ * Platform business-error envelopes are marked isError=true without changing
+ * their payload or retry metadata. JSON-RPC ids and request bodies are preserved.
  *
  * Usage:
  *   node scripts/ctf2-mcp-proxy.mjs --selftest     # offline sanitizer proof
@@ -32,6 +32,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizeToolResult } from '../lib/ctf2-protocol.js'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const UPSTREAM = 'https://ctf2.dasctf.com/api/ai/v1/mcp'
@@ -155,6 +156,7 @@ function sanitizeInputSchema(schema) {
 
 /** Rewrite every `tools/list` result in a JSON-RPC payload, in place. */
 function sanitizeToolsList(message) {
+  if (message && typeof message === 'object' && message.result && !Array.isArray(message.result.tools)) message.result = normalizeToolResult(message.result)
   const tools = message?.result?.tools
   if (!Array.isArray(tools)) return { message, report: [] }
   const report = []
@@ -268,21 +270,26 @@ async function forward(rawBody, allowRetry = true) {
 /** Rebuild an SSE body after rewriting any `tools/list` payload inside it. */
 function rewriteSse(text) {
   const report = []
-  const lines = text.split('\n')
-  const out = lines.map((line) => {
-    if (!line.startsWith('data:')) return line
-    const payload = line.slice(5).trim()
-    if (!payload) return line
+  const out = text.split(/\r?\n\r?\n/).map((frame) => {
+    const lines = frame.split(/\r?\n/)
+    const payload = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).replace(/^ /, '')).join('\n')
+    if (!payload) return frame
     try {
       const parsed = JSON.parse(payload)
       const result = sanitizeToolsList(parsed)
       report.push(...result.report)
-      return `data: ${JSON.stringify(result.message)}`
+      let written = false
+      return lines.flatMap(line => {
+        if (!line.startsWith('data:')) return [line]
+        if (written) return []
+        written = true
+        return [`data: ${JSON.stringify(result.message)}`]
+      }).join('\n')
     } catch {
-      return line
+      return frame
     }
   })
-  return { body: out.join('\n'), report }
+  return { body: out.join('\n\n'), report }
 }
 
 const server = createServer((req, res) => {

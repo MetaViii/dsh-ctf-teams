@@ -6,13 +6,14 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { inspectInstallation } from './doctor.mjs'
-import { policy, workspacePolicy, requiredHostPeers, validatePolicy, validatePackageCompatibility, declaredHostVersions } from './compatibility.mjs'
+import { policy, workspacePolicy, requiredHostPeers, validatePolicy, validatePackageCompatibility, declaredHostVersions, hostPeerRange, acceptsHostVersion } from './compatibility.mjs'
 
 const sourcePolicy = { ...policy, sourceCandidates: [{ version: '0.2.0', repository: 'https://github.com/deepseek-ai/deepseek-harness', commit: '21638c56315ae6a2b552d6091945d3144c9af32e', evidence: 'docs/harness-0.2.0-pre-adaptation/README.md' }] }
 
 test('source candidates pass the peer gate without entering the published download matrix', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   for (const name of Object.keys(pkg.peerDependencies)) if (name.startsWith('@deepseek-ai/dsh-')) pkg.peerDependencies[name] += ' || 0.2.0'
+  pkg.engines.dsh = hostPeerRange(sourcePolicy)
   assert.ok(declaredHostVersions(sourcePolicy).includes('0.2.0'))
   assert.ok(!validatePackageCompatibility(pkg, sourcePolicy).includes('0.2.0'))
   const matrix = spawnSync(process.execPath, [fileURLToPath(new URL('./compatibility.mjs', import.meta.url)), '--github-output'], { encoding: 'utf8' })
@@ -27,6 +28,25 @@ test('source candidates pass the peer gate without entering the published downlo
   ]) assert.throws(() => validatePolicy({ ...policy, sourceCandidates }), /Source candidates/)
   pkg.peerDependencies['@deepseek-ai/dsh-agent'] = pkg.peerDependencies['@deepseek-ai/dsh-agent'].replace(' || 0.2.0', '')
   assert.throws(() => validatePackageCompatibility(pkg, sourcePolicy), /source candidates/)
+})
+
+test('bounded loading accepts later RCs and patches without claiming exact validation', t => {
+  const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-forward-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  for (const version of ['0.2.1-rc.3', '0.2.1', '0.2.2-alpha.1', '0.2.19-rc.7', '0.2.99']) {
+    assert.equal(acceptsHostVersion(version), true, version)
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version }))
+    const result = inspectInstallation(root)
+    assert.equal(result.ok, true, version)
+    assert.equal(result.validation.kind, 'compatible-untested')
+    assert.ok(!result.supportedHosts.includes(version))
+    assert.match(result.limits.join(), /has not passed the exact runtime matrix/)
+  }
+  for (const version of ['0.2.0', '0.3.0-0', '0.3.0-alpha.1', '0.3.0', '1.0.0', '0.2.01', '0.2.1-01', 'garbage']) assert.equal(acceptsHostVersion(version), false, version)
+  for (const compatibleHostRange of ['*', '>=0.2.1', '>=0.2.1-0 <1.0.0-0', '>=0.2.1-0 <0.4.0-0', '>=0.2.1-0 <0.3.0']) assert.throws(() => validatePolicy({...policy, compatibleHostRange}), /bound one API minor line/)
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)))
+  pkg.engines.dsh = '*'
+  assert.throws(() => validatePackageCompatibility(pkg), /engines.dsh/)
 })
 
 test('doctor distinguishes source-preview acceptance from released host validation', t => {

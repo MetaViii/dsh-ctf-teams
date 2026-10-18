@@ -14,6 +14,7 @@ export const MEMBER_TOOL_NAMES: readonly string[] = [
   'ctf_teams_claim_task', 'ctf_teams_update_task', 'ctf_teams_send_message', 'ctf_teams_status',
   'ctf_teams_submit_flag', 'ctf_teams_report_finding', 'ctf_teams_sync', 'ctf_teams_knowledge',
   'ctf_teams_env', 'ctf_teams_references', 'ctf_teams_image_to_text', 'ctf_teams_text_candidates',
+  'ctf_teams_platform_check',
 ]
 
 export const CAPTAIN_TOOL_NAMES = TEAM_TOOL_NAMES.filter(name => !MEMBER_TOOL_NAMES.includes(name))

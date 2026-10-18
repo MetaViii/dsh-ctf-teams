@@ -4,9 +4,9 @@
 
 ## 一份支持清单
 
-[compatibility.json](../compatibility.json) 是宿主矩阵的唯一来源。`scripts/compatibility.mjs` 校验精确开发依赖、声明的 peer 目标和依赖覆盖策略，并通过 `--github-output` 输出 CI matrix。不要在另一个脚本里维护第二份版本数组。
+[compatibility.json](../compatibility.json) 是兼容策略的唯一来源。`compatibleHostRange` 为有上下界的同一 API 次版本加载区间，包含预发布；`supportedHosts` 仍为精确测试/下载矩阵。二者不能混同：范围内未知版本可加载，但 doctor 标为 `compatible-untested`，不能声称已测试。`engines.dsh` 与全部 DSH peer 由 `hostPeerRange()` 生成相同要求，旧版本继续精确列举；不允许 `*` 或无上界放行。`scripts/compatibility.mjs` 同时保持开发依赖和 pnpm overrides 的精确闭包，并通过 `--github-output` 只输出精确 CI matrix。不要在另一个脚本里维护第二份版本数组。此规则根据维护者 2026-10-17 的通用更新适配要求制定。
 
-发布前源码预适配记录在同一清单的 `sourceCandidates`，包含预计版本、官方源码完整 SHA 和证据路径。peer 精确枚举已发布支持目标与源码候选；`--github-output` 仍只输出 `supportedHosts`，不会尝试下载尚未发布的 npm 版本。doctor 将候选标为 `source-preview`，保留完整依赖闭包检查，不将文件版本检查当作正式产物验收。发布后核对最终 SHA 与分包产物，完成 npm 和桌面验收，再把该目标从 `sourceCandidates` 移入 `supportedHosts` 并按需要更新开发基线。当前工作见 [0.2.0 预适配](./harness-0.2.0-pre-adaptation/README.md)。
+发布前源码预适配记录在同一清单的 `sourceCandidates`，包含预计版本、官方源码完整 SHA 和证据路径。区间外源码候选仍精确加入声明；`--github-output` 只输出 `supportedHosts`，不会尝试下载尚未发布的 npm 版本。doctor 将候选标为 `source-preview`，保留完整依赖闭包检查，不将文件版本检查当作正式产物验收。发布后核对最终 SHA 与分包产物，完成运行时验收再移入 `supportedHosts`；桌面 GUI 验收单独记录。新旧主入口、预设、队员生命周期、冷恢复、真实 shell 和审批拒绝都应验证，不能用放宽版本范围替代。历史工作见 [0.2.0 预适配](./harness-0.2.0-pre-adaptation/README.md)。
 
 | 当前候选宿主 | 定位 | 安装与支持边界 |
 | --- | --- | --- |

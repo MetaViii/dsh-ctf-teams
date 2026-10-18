@@ -237,7 +237,7 @@ console.log('ctf-teams builtin profile')
   check('builtin profile leaves planning to the captain', resolved.taskPlanning === 'captain' && resolved.tasks.length === 0)
   check('agent prompts point at the knowledge topics and the parallel-angle contract', resolved.members.every(member => {
     const prompt = member.executionPrompt ?? ''
-    return prompt.includes('ctf_teams_knowledge') && prompt.includes('full-stack') && prompt.includes('SAME challenge') && prompt.includes('ctf_teams_report_finding') && prompt.includes('ctf_teams_submit_flag')
+    return prompt.includes('ctf_teams_knowledge') && prompt.includes('full-stack') && prompt.includes('single-challenge mode') && prompt.includes('In batch mode') && prompt.includes('challenge_id') && prompt.includes('ctf_teams_report_finding') && prompt.includes('ctf_teams_submit_flag')
   }))
   const overridden = withBuiltinCtfProfile({ [CTF_PROFILE_NAME]: { members: [{ name: 'solo' }] } })
   check('user profiles override the builtin on name collision', resolveTeamProfile(overridden, CTF_PROFILE_NAME, 8).members.length === 1)

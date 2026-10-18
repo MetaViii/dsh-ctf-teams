@@ -1,0 +1,18 @@
+{
+  "passed": false,
+  "exit": 1,
+  "timedOut": false,
+  "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-runtime-services-0IhYoG",
+  "hostVersion": "0.2.0-rc.2",
+  "boots": [
+    {
+      "boot": 0,
+      "exit": 1,
+      "timedOut": false
+    }
+  ],
+  "limits": [
+    "Deterministic LLM; cleanup fault injection reproduces stale callbacks, but the original outage trigger remains unproven.",
+    "No interactive Electron operations or provider authentication were exercised."
+  ]
+}

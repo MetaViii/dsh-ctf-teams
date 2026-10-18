@@ -9,6 +9,7 @@ import { CAPTAIN_KEY, readTeamSync, sanitizeKey } from './state.ts'
 import { memberActivity } from './members.ts'
 import { dashboardInputFromTeam, renderDashboard, renderDashboardHeader } from './dashboard.ts'
 import type { TeamState } from './types.ts'
+import { ctfTeamsSource } from './harness-compat.ts'
 
 export const CTF_TEAMS_COMMAND = 'ctf-teams'
 const PROFILE_COMMAND_PREFIX = `${CTF_TEAMS_COMMAND}-`
@@ -198,7 +199,7 @@ export function installCTFTeamsGestureBoundary(
     const decision = await next()
     if (decision.kind === 'reject') return decision
     let invocation: CTFTeamsInvocation | undefined
-    try { invocation = invokedCTFTeamsInvocation(messages, getProfiles) } catch (error: unknown) { return { kind: 'enter', messages: [...decision.messages, createUserMessage({ content: [{ type: 'text', text: `CTFTeams profile parsing failed: ${String(error)}` }], source: { kind: 'ctf-teams-command' } })] } }
+    try { invocation = invokedCTFTeamsInvocation(messages, getProfiles) } catch (error: unknown) { return { kind: 'enter', messages: [...decision.messages, createUserMessage({ content: [{ type: 'text', text: `CTFTeams profile parsing failed: ${String(error)}` }], source: ctfTeamsSource({ kind: 'ctf-teams-command' }) })] } }
     if (invocation === undefined) return decision
     signal.throwIfAborted()
     const profiles = getProfiles()
@@ -209,7 +210,7 @@ export function installCTFTeamsGestureBoundary(
     const text = !known
       ? `CTFTeams profile "${invocation.profile}" does not exist. Available profiles: ${Object.keys(profiles).join(', ') || '(none)'}. Do not create a team.`
       : buildActivationDirective(invocation.goal, invocation.profile, resolveProfileTaskPlanning(matched?.[1]), autoApprove)
-    return { kind: 'enter', messages: [...decision.messages, createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'ctf-teams-command', ...invocation.goal === '' ? {} : { goal: invocation.goal }, ...invocation.profile === undefined ? {} : { profile: invocation.profile } } })] }
+    return { kind: 'enter', messages: [...decision.messages, createUserMessage({ content: [{ type: 'text', text }], source: ctfTeamsSource({ kind: 'ctf-teams-command', ...invocation.goal === '' ? {} : { goal: invocation.goal }, ...invocation.profile === undefined ? {} : { profile: invocation.profile } }) })] }
   })
 }
 

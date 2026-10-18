@@ -1,0 +1,340 @@
+{
+  "date": "2026-10-15",
+  "timezone": "Asia/Shanghai",
+  "localOnly": true,
+  "committed": false,
+  "pushed": false,
+  "published": false,
+  "pluginVersion": "0.1.29",
+  "rootCause": {
+    "owner": "dsh-ops@0.3.0 workspace preparation hook",
+    "bootstrap": "Windows PowerShell 5.1",
+    "failure": "PS7 module paths inherited by WinPS5 bootstrap",
+    "ps7ActuallyInstalled": "7.6.6",
+    "bash": "optional runtime absent; system fallback disabled; existing Git MSYS differs from required confinement bridge"
+  },
+  "checks": [
+    {
+      "command": "node --test scripts/windows-shell.test.mjs",
+      "passed": true,
+      "tests": 5
+    },
+    {
+      "command": "pnpm verify",
+      "passed": true,
+      "exitCode": 0,
+      "log": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-shell-full-verify.log"
+    },
+    {
+      "command": "pnpm verify:readme",
+      "passed": true
+    }
+  ],
+  "sourceShellHarness": {
+    "passed": true,
+    "exit": 0,
+    "timedOut": false,
+    "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-windows-shell-5GLB2h",
+    "hostVersion": "0.2.0-rc.2",
+    "opsVersion": "0.3.0",
+    "result": {
+      "passed": true,
+      "preset": "ctf-teams",
+      "requests": 9,
+      "tools": [
+        "pwsh",
+        "ops_bash"
+      ],
+      "modes": [
+        {
+          "mode": "workspace-write",
+          "markers": [
+            "PWSH7_OK",
+            "BASH_OK",
+            "PWSH_OUTSIDE_BLOCKED",
+            "BASH_OUTSIDE_BLOCKED"
+          ],
+          "passed": true
+        },
+        {
+          "mode": "read-only",
+          "markers": [
+            "PWSH_READONLY_BLOCKED",
+            "BASH_READONLY_BLOCKED"
+          ],
+          "passed": true
+        },
+        {
+          "mode": "danger-full-access",
+          "markers": [
+            "PWSH_FULL_OK",
+            "BASH_FULL_OK"
+          ],
+          "passed": true
+        }
+      ]
+    }
+  },
+  "packagedShellHarness": {
+    "passed": true,
+    "exit": 0,
+    "timedOut": false,
+    "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-windows-shell-nLXTag",
+    "hostVersion": "0.2.0-rc.2",
+    "opsVersion": "0.3.0",
+    "result": {
+      "passed": true,
+      "preset": "ctf-teams",
+      "requests": 9,
+      "tools": [
+        "pwsh",
+        "ops_bash"
+      ],
+      "modes": [
+        {
+          "mode": "workspace-write",
+          "markers": [
+            "PWSH7_OK",
+            "BASH_OK",
+            "PWSH_OUTSIDE_BLOCKED",
+            "BASH_OUTSIDE_BLOCKED"
+          ],
+          "passed": true
+        },
+        {
+          "mode": "read-only",
+          "markers": [
+            "PWSH_READONLY_BLOCKED",
+            "BASH_READONLY_BLOCKED"
+          ],
+          "passed": true
+        },
+        {
+          "mode": "danger-full-access",
+          "markers": [
+            "PWSH_FULL_OK",
+            "BASH_FULL_OK"
+          ],
+          "passed": true
+        }
+      ]
+    }
+  },
+  "packagedRegressionHarness": {
+    "passed": true,
+    "version": "0.2.0-rc.2",
+    "cohortCount": 278,
+    "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf2-harness-nt8P0y",
+    "runs": [
+      {
+        "scenario": "lifecycle",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "secondWake": true,
+          "fifoMessageOrder": true,
+          "messagesSentWhileBusy": true
+        }
+      },
+      {
+        "scenario": "lifecycle-cold-restore",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "driverCompleted": true,
+          "sameMemberRestored": true,
+          "routeRestored": true,
+          "reasoningRestored": true
+        }
+      },
+      {
+        "scenario": "fallback",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "secondWake": true,
+          "fallbackActivated": true,
+          "fallbackReasoningReset": true
+        }
+      },
+      {
+        "scenario": "fallback-cold-restore",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "driverCompleted": true,
+          "sameMemberRestored": true,
+          "routeRestored": true,
+          "reasoningRestored": true
+        }
+      },
+      {
+        "scenario": "failure",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "configurationRetainsOwner": true,
+          "routeRepairContinuesSameTask": true,
+          "noConfigurationRetryLoop": true
+        }
+      },
+      {
+        "scenario": "captain-idle-wakeup",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "captainActuallyYielded": true,
+          "notifiedAfterIdle": true
+        }
+      },
+      {
+        "scenario": "progressive-entry",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "allEntries": true,
+          "stablePrefixes": true,
+          "thirtyOrdinaryTurns": true
+        }
+      },
+      {
+        "scenario": "web-approval",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "driverCompleted": true,
+          "stagedBeforeApproval": true,
+          "independentApprovalWake": true,
+          "reportWakeAfterYield": true,
+          "singleCaptainApprovalAndNoPolling": true,
+          "oneUserMessageAndHttpApproval": true,
+          "invalidTeamRejected": true,
+          "repeatApprovalRejected": true,
+          "stableCaptainHeaders": true,
+          "memberToolContract": true,
+          "taskCompleted": true
+        }
+      },
+      {
+        "scenario": "protocol-compatibility",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "legacyAllowlistAndColdRestore": true,
+          "legacyProfileDirectory": true,
+          "actualPtcDiscard": true,
+          "actualPruning": true,
+          "actualCompaction": true,
+          "existingPlanRevised": true,
+          "lifecycleArchived": true
+        }
+      },
+      {
+        "scenario": "stability",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "lazy-start": true,
+          "running-plan-correction": true,
+          "steering": true,
+          "read-receipt-continuation": true,
+          "reassign": true,
+          "archive": true,
+          "batch-plan": true,
+          "terminal-evidence": true,
+          "report-retry": true,
+          "settlement-dedup": true,
+          "solved-quiescence": true,
+          "paused-quiescence": true
+        }
+      },
+      {
+        "scenario": "ctf2-regression",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "durableEvidence": true
+        }
+      }
+    ]
+  },
+  "artifact": {
+    "path": "dsh-ctf-teams-windows-shell-fix-0.1.29.tgz",
+    "sha256": "5d08a36eaab74abd91173ee55f9ed2d8377deb722ab3a239d2f0555ee1fb0b8e"
+  },
+  "bashProvision": {
+    "version": "2.56.0.2",
+    "officialUrl": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/PortableGit-2.56.0.2-64-bit.7z.exe",
+    "sha256": "075e158ef8e1f0ab80b347e245405d3eca735c2dc88fd8e032e137d0ca61f61b",
+    "verified": true,
+    "msysMatchesConfinementBridge": true,
+    "originalGitModified": false,
+    "systemFallbackEnabled": false
+  },
+  "deployment": {
+    "installedAt": "2026-10-15T14:26:56.805Z",
+    "backupDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-shell-install-20261015-222625",
+    "installedLibFilesMatched": 72,
+    "unrelatedDependenciesPreserved": true,
+    "desktopBundlesPreserved": true,
+    "idleLoopFixRetained": true,
+    "windowsModuleFixInstalled": true,
+    "bash": {
+      "available": true,
+      "file": "C:\\Users\\MetaVi\\.dsh\\dsh-ops\\shells\\bash\\2.56.0.2\\bin\\bash.exe",
+      "source": "provisioned"
+    },
+    "pwsh": {
+      "available": true,
+      "file": "C:\\Users\\MetaVi\\.dsh\\profiles\\desktop\\node_modules\\@dsh-ops\\pwsh-win32-x64\\bin\\pwsh.exe",
+      "source": "bundled"
+    },
+    "restarted": true,
+    "bootstrapEnvironmentRepaired": true,
+    "hostListening": true,
+    "existingSessionsModified": false,
+    "productionSessionTestPromptsSent": false
+  },
+  "wsl": {
+    "distro": "kali-linux",
+    "actualBashStartup": true,
+    "python3Found": true,
+    "sageFound": false,
+    "fullToolInventory": false
+  },
+  "sourceStamp": {
+    "schema": 1,
+    "source": "a31cc68de8f04fc8e772a21b3861e345f3018db9a463df07929d8b7c62437ae1",
+    "output": "73bfaebcb316aa7fc028a2c2bebbc5d5b2e1ed4905d2d2601391eadf44741908"
+  },
+  "unverified": [
+    "all WSL CTF tools",
+    "live paid model execution",
+    "live CTF2 challenge solving after this repair"
+  ]
+}

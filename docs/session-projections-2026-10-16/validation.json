@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "localOnly": true,
+  "pushed": false,
+  "published": false,
+  "pluginInstallationChanged": false,
+  "desktopConfigurationApplied": true,
+  "desktopRestarted": true,
+  "teamResumed": false,
+  "observations": {
+    "initialRecords": 1012,
+    "persistedRecordsAfterExit": 1013,
+    "toolResults": 173,
+    "observedRuntimeFailures": 18,
+    "evidence": "evidence/observed-session.json",
+    "triggerProven": false
+  },
+  "mitigation": {
+    "profile": "desktop",
+    "change": "Explicit hmr entry disabled in the user patch layer, applied while DSH was fully exited",
+    "evidence": "evidence/desktop-repair.json",
+    "backup": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-runtime-repair-20261016-114210",
+    "team": "ctf2-b7",
+    "teamChange": "Only halted and haltedAt were added; tasks, members, flags and findings compared equal to the backup",
+    "doesNotCover": "Direct Plugin Manager transactions and all possible causes of an inactive runtime"
+  },
+  "checks": [
+    {
+      "command": "node --test scripts/session-runtime-diagnose.test.mjs",
+      "passed": true,
+      "tests": 4
+    },
+    {
+      "command": "node scripts/runtime-services-smoke.mjs --artifact ./dsh-ctf-teams-windows-shell-fix-0.1.29.tgz",
+      "passed": true,
+      "hostVersion": "0.2.0-rc.2",
+      "artifactSha256": "5d08a36eaab74abd91173ee55f9ed2d8377deb722ab3a239d2f0555ee1fb0b8e",
+      "evidence": "evidence/runtime-services-smoke.json",
+      "coverage": ["HMR service absent", "two isolated profile edits during actual tool execution", "three rounds of get_goal, write, read, pwsh and CTF tools", "formal model selection switches and persisted request headers", "permissions projection stays registered"],
+      "originalRaceReproduced": false
+    },
+    {
+      "command": "pnpm build",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm verify",
+      "passed": true,
+      "exitCode": 0,
+      "evidence": "evidence/full-verify.txt"
+    },
+    {
+      "command": "git diff --check",
+      "passed": true,
+      "exitCode": 0
+    }
+  ],
+  "limits": [
+    "No live model requests or platform operations were sent to the user's running solve.",
+    "The original outage is established from actual tool results; its precise trigger is not established.",
+    "Service continuity under disabled HMR is tested with a deterministic model and real host tools; this is not a reproduced before/after fix of the unknown race.",
+    "Desktop validation covers restart, composed configuration, retained data and unchanged plugin installation; authenticated interactive desktop tool execution was not invoked.",
+    "Source diagnosis/docs were updated locally; the new diagnostic script and fifth-iteration plugin candidate were not installed into desktop."
+  ]
+}

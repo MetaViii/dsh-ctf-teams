@@ -10,7 +10,7 @@ export function textCandidates(input: { text: string; max_candidates?: number; d
   if (!input.text || input.text.length > 512) throw new Error('text must contain 1..512 characters')
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) throw new Error('max_candidates must be an integer from 1 to 128')
   if (!Number.isSafeInteger(preview) || preview < 1 || preview > 256) throw new Error('preview_bytes must be an integer from 1 to 256')
-  const groups = ['0O', '1Il', '5S', '@?']
+  const groups = ['0O', '1Il', '5S', '2Z', '@?']
   const original = [...input.text]
   const choices = original.map(char => [...(groups.find(group => group.includes(char)) ?? char)])
   const total = choices.reduce((product, chars) => product * BigInt(chars.length), 1n)

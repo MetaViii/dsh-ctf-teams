@@ -23,6 +23,8 @@ import { memberAvailable } from './availability.ts'
 import { taskBlockReason } from './task-admission.ts'
 import {
   markMailboxDelivered,
+  appendMailbox,
+  createMessage,
   discardMailboxMessages,
   beginTaskAttempt,
   CAPTAIN_KEY,
@@ -409,9 +411,12 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
               currentMember.status = 'idle'
             }
             await writeTeam(stateRoot, fresh)
-            // An idle member with nothing to claim still syncs: new board
-            // content may redirect its next round or tell it to stop.
-            if (delta.hasUpdates || delta.solved) {
+            // Only unseen board beats may wake an idle member. Solved is a
+            // persistent state: using it as a trigger re-sends the same digest
+            // after every settlement, spending requests and waking the parent
+            // indefinitely. Flag verification and explicit batch completion
+            // already advance the board sequences, so both still sync once.
+            if (delta.hasUpdates) {
               return { kind: 'digest', text: digestPrompt(fresh.id, currentMember.name, digest), upTo }
             }
             return undefined
@@ -566,16 +571,24 @@ export function installTeamScheduler(ctx: Context, config: SchedulerConfig): Tea
       await withTeamLock(teamLockKey(stateRoot, located.id), async () => {
         const fresh = await readTeam(stateRoot, located.id)
         if (fresh === undefined || fresh.captainSessionId !== agent.id) return
+        const notices = []
         for (const task of fresh.tasks) {
           if (task.assignee !== CAPTAIN_KEY
             || task.status === 'completed'
             || task.status === 'failed'
             || task.status === 'cancelled') continue
+          const oldAttempt = task.attemptId
+          task.checkpoint = task.output ?? task.checkpoint
           invalidateTaskAttempt(task)
           task.reassigning = false
+          notices.push(createMessage('scheduler', CAPTAIN_KEY,
+            `Captain takeover ${task.id} (${task.subject}) returned to the shared member pool because the captain became ${status}. Old attempt ${oldAttempt ?? '(none)'} is revoked: stop external work for it and check status before any environment operation. A member may claim it next; task completion does not release the actual platform environment.`))
           requeued = true
         }
-        if (requeued) await writeTeam(stateRoot, fresh)
+        if (requeued) {
+          await writeTeam(stateRoot, fresh)
+          for (const message of notices) await appendMailbox(stateRoot, fresh.id, CAPTAIN_KEY, message)
+        }
       })
       if (requeued) await runtime.kickTeam(workspace, located.id, agent)
       return

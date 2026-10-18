@@ -82,6 +82,8 @@ export declare function appendFlagCandidate(team: TeamState, input: {
     evidence?: string;
     challengeId?: string;
     variantOf?: string;
+    sourceKind?: NonNullable<FlagCandidate['sources']>[number]['kind'];
+    sourceUrl?: string;
 }): {
     candidate: FlagCandidate;
     duplicate: boolean;

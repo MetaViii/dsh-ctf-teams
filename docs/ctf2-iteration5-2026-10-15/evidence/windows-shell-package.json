@@ -1,0 +1,45 @@
+{
+  "passed": true,
+  "exit": 0,
+  "timedOut": false,
+  "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-windows-shell-UN3x80",
+  "hostVersion": "0.2.0-rc.2",
+  "opsVersion": "0.3.0",
+  "result": {
+    "passed": true,
+    "preset": "ctf-teams",
+    "requests": 9,
+    "tools": [
+      "pwsh",
+      "ops_bash"
+    ],
+    "modes": [
+      {
+        "mode": "workspace-write",
+        "markers": [
+          "PWSH7_OK",
+          "BASH_OK",
+          "PWSH_OUTSIDE_BLOCKED",
+          "BASH_OUTSIDE_BLOCKED"
+        ],
+        "passed": true
+      },
+      {
+        "mode": "read-only",
+        "markers": [
+          "PWSH_READONLY_BLOCKED",
+          "BASH_READONLY_BLOCKED"
+        ],
+        "passed": true
+      },
+      {
+        "mode": "danger-full-access",
+        "markers": [
+          "PWSH_FULL_OK",
+          "BASH_FULL_OK"
+        ],
+        "passed": true
+      }
+    ]
+  }
+}

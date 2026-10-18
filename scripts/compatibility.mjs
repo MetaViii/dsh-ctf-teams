@@ -28,6 +28,7 @@ export const serverRuntimePeers = [
 
 export function validatePolicy(input) {
   if (input.schemaVersion !== 1 || input.previewTag !== 'next') throw new Error('Unsupported compatibility policy')
+  compatibleLine(input)
   const hosts = input.supportedHosts
   if (!Array.isArray(hosts) || hosts.length === 0) throw new Error('supportedHosts must list exact tested host targets')
   const versions = new Set()
@@ -63,9 +64,37 @@ export function declaredHostVersions(input = policy) {
   return [...validatePolicy(input), ...(input.sourceCandidates ?? []).map(candidate => candidate.version)]
 }
 
+// Deliberately support one bounded API line, rather than arbitrary semver
+// expressions. This shipped diagnostic has no npm dependencies. Like Harness's
+// gate, the interval includes prereleases; its upper -0 excludes the next line.
+function compatibleLine(input) {
+  if (input.compatibleHostRange === undefined) return undefined
+  const match = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-0 <(0|[1-9]\d*)\.(0|[1-9]\d*)\.0-0$/.exec(input.compatibleHostRange)
+  if (!match || match[1] !== match[4] || Number(match[5]) !== Number(match[2]) + 1) {
+    throw new Error('compatibleHostRange must bound one API minor line: >=major.minor.patch-0 <major.nextMinor.0-0')
+  }
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) }
+}
+
+function inCompatibleLine(version, input) {
+  const line = compatibleLine(input)
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[\da-z-]*[a-z-][\da-z-]*)(?:\.(?:0|[1-9]\d*|[\da-z-]*[a-z-][\da-z-]*))*)?(?:\+[\da-z-]+(?:\.[\da-z-]+)*)?$/i.exec(version)
+  return Boolean(line && match && Number(match[1]) === line.major && Number(match[2]) === line.minor && Number(match[3]) >= line.patch)
+}
+
+/** Loading permission is broader than the exact tested/download matrix. */
+export function acceptsHostVersion(version, input = policy) {
+  return declaredHostVersions(input).includes(version) || inCompatibleLine(version, input)
+}
+
+export function hostPeerRange(input = policy) {
+  const versions = declaredHostVersions(input)
+  return [input.compatibleHostRange, ...versions.filter(version => !inCompatibleLine(version, input))].filter(Boolean).join(' || ')
+}
+
 export function validatePackageCompatibility(pkg, input = policy, workspace = workspacePolicy) {
   const versions = validatePolicy(input)
-  const declaredVersions = declaredHostVersions(input)
+  const expectedRange = hostPeerRange(input)
   for (const name of requiredHostPeers) {
     if (typeof pkg.peerDependencies?.[name] !== 'string' || pkg.peerDependencies[name].trim() === '') {
       throw new Error(`Missing required host peer declaration: ${name}`)
@@ -94,12 +123,12 @@ export function validatePackageCompatibility(pkg, input = policy, workspace = wo
   }
   for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
     if (name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) {
-      const declared = range.split('||').map(value => value.trim())
-      if (declared.length !== declaredVersions.length || declaredVersions.some(version => !declared.includes(version))) {
-        throw new Error(`${name} peer range must enumerate the supported host targets and source candidates`)
+      if (range !== expectedRange) {
+        throw new Error(`${name} peer range must match the bounded loading policy and enumerate legacy targets/source candidates`)
       }
     }
   }
+  if (pkg.engines?.dsh !== expectedRange) throw new Error('engines.dsh must match the bounded loading policy and peer requirements')
   return versions
 }
 

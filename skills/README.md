@@ -60,4 +60,6 @@ pnpm test:skills-updater
 8. **只读扫描避开维护资料本身。** planner 会扫描代码、配置和脚本，也会命中 vendored skills 的示例。分析生产仓库时使用清楚标识的源码快照，或逐条排除这些维护资料带来的结果；零命中不等于没有风险。
 9. **新增检查器也有版本范围。** `inject-lint` 面向 alpha.2，并把 Cordis peer 必须等于 `^4.0.1` 写死；AgentTeams 已使用 `^4.0.2`，不能按其 `FIX-REQUIRED` 机械降级。新版 publish-playbook 的 amend/re-tag/force-push 历史修复配方也不适用于本项目已发布产物；修复应使用新插件版本并遵循项目发布规则。
 
+10. **加载范围与实测矩阵分开。** 根据维护者 2026-10-17 的明确要求，同一 `0.2.x` API 线允许有界前向加载，避免每次 RC / 补丁更新都因精确白名单丢失预设。`supportedHosts` 仍为精确测试目标；区间内未知版本标为 `compatible-untested`，不能当作验收通过。保持精确开发闭包，保留运行时能力检查与次版本上界，不使用全局版本豁免；具体规则见[维护指南](../docs/maintenance-workflow.md)。此项为本地集成规则，不改写 vendored 上游 skills。
+
 统一治理方案见 [兼容性与发布生命周期审查](../docs/compatibility-audit-2026-09-05/README.md)，本次研究与扫描证据见 [升级 skill 接入研究](../docs/upgrade-skill-study-2026-09-06/README.md)。二者均为审查/方案，不能视为已完成兼容修复或渠道发布。

@@ -33,6 +33,7 @@ import {
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installDashboardRoute } from './dashboard-route.ts'
 import { installTeamCapabilities } from './capabilities.ts'
+import { installWindowsShellCompatibility } from './windows-shell.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
 import { CTF_PROFILE_NAME, withBuiltinCtfProfile } from './ctf-profile.ts'
 import { WRITEUP_COMPLETION } from './writeup.ts'
@@ -225,6 +226,7 @@ Tools: ${toolNames}${profilesText === '' ? '' : `\n\n${profilesText}`}`
 }
 
 export function apply(ctx: Context, config: Config): void {
+  installWindowsShellCompatibility(ctx)
   installProxySupervisor(ctx, config.ctf2)
   // The built-in ctf-teams squad ships under the user's own profiles; exact
   // name collisions resolve to the user's definition.

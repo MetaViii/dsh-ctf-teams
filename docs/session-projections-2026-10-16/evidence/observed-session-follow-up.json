@@ -1,0 +1,192 @@
+{
+  "records": 1128,
+  "toolResults": 180,
+  "runtimeFailures": 25,
+  "affectedTools": [
+    "ctf_teams_mark_flag",
+    "pwsh",
+    "ctf_teams_status",
+    "get_goal",
+    "write",
+    "ops_bash",
+    "read"
+  ],
+  "failures": [
+    {
+      "seq": 868,
+      "time": 1792077450161,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 870,
+      "time": 1792077450161,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 872,
+      "time": 1792077450162,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 874,
+      "time": 1792077450162,
+      "tool": "pwsh",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 886,
+      "time": 1792077462526,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 888,
+      "time": 1792077462527,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 890,
+      "time": 1792077462527,
+      "tool": "ctf_teams_mark_flag",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 892,
+      "time": 1792077462528,
+      "tool": "pwsh",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 897,
+      "time": 1792077467067,
+      "tool": "pwsh",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 902,
+      "time": 1792077472162,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 914,
+      "time": 1792077486467,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 919,
+      "time": 1792077495751,
+      "tool": "get_goal",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 932,
+      "time": 1792077532967,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 943,
+      "time": 1792077544874,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 956,
+      "time": 1792077565386,
+      "tool": "pwsh",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 969,
+      "time": 1792077625390,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 990,
+      "time": 1792077824547,
+      "tool": "pwsh",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 995,
+      "time": 1792077839155,
+      "tool": "write",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1053,
+      "time": 1792122614692,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1058,
+      "time": 1792122618660,
+      "tool": "ops_bash",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1063,
+      "time": 1792122622757,
+      "tool": "get_goal",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1077,
+      "time": 1792122633325,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1082,
+      "time": 1792122640232,
+      "tool": "read",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1096,
+      "time": 1792122648377,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    },
+    {
+      "seq": 1110,
+      "time": 1792122655865,
+      "tool": "ctf_teams_status",
+      "issue": "inactive_service",
+      "service": "sessionProjections"
+    }
+  ],
+  "diagnosis": "Host runtime/service failure observed. Repeating model tool calls cannot rebind disposed contexts; preserve work and restart the host. The trigger is not established by these records."
+}

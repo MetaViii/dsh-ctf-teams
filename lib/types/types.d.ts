@@ -252,6 +252,13 @@ export interface ChallengeInfo {
 }
 /** Lifecycle of one candidate flag. Only the captain confirms correctness. */
 export type FlagStatus = 'candidate' | 'verified' | 'rejected';
+export type FlagSource = {
+    kind: 'local_output' | 'writeup' | 'index' | 'manual' | 'unknown';
+    url?: string;
+    evidence?: string;
+    submittedBy: string;
+    ts: number;
+};
 /** One candidate flag on the team-wide flag board (append-only). */
 export interface FlagCandidate {
     /** Stable id (`f1`, `f2`, …). */
@@ -260,6 +267,8 @@ export interface FlagCandidate {
     flag: string;
     /** Where it came from, as reproducible evidence. */
     evidence?: string;
+    /** Reporter-supplied provenance, never a trust score or independent verification. */
+    sources?: FlagSource[];
     /** `captain` or the member name that submitted it. */
     submittedBy: string;
     status: FlagStatus;

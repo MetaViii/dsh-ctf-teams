@@ -27,6 +27,9 @@ import { dispatchState, taskBlockReason, validatePreflight } from './task-admiss
 import { collectParticipantInbox, formatInbox, syncInboxLimit } from './coordination.ts'
 import { textCandidates } from './text-candidates.ts'
 import { proxyHealth, readPlatformSnapshot, type PlatformConfig } from './platform.ts'
+import { ctfTeamsSource, drainMemberChildren } from './harness-compat.ts'
+import { memberRouteDiagnostics } from './model-routes.ts'
+import { detectRuntimeTools } from './env-runtime.ts'
 import { appendTeamEvent, captainSessionOf } from './events.ts'
 import {
   amendTaskContract,
@@ -183,6 +186,8 @@ export type StagedPlanMutation =
       description?: string | null
       assignee?: string | null
       dependencies: string[]
+      preflight?: string[]
+      preflightFindingId?: string | null
     }
   | {
       action: 'add_task'
@@ -399,7 +404,7 @@ async function stopTeamMemberActivations(
   // Every supported exact host has targeted recursive drain. Unlike interrupt,
   // it closes admission and clears queued work before awaiting descendants.
   signal?.throwIfAborted()
-  await ctx.subagents.drainContinuableChildren(captain, memberIds)
+  await drainMemberChildren(ctx.subagents, captain, memberIds)
 }
 
 export async function haltTeamWork(input: {
@@ -504,7 +509,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   const scheduler = installTeamScheduler(ctx, { stateDir: config.stateDir, executionPrompt: config.executionPrompt, dispatch: dispatchMember })
   const memberSelections = installMemberSelectionRuntime(ctx, config.stateDir, (workspace, teamId, memberName) => (
     scheduler.kickMember(workspace, teamId, memberName)
-  ))
+  ), { maxDepth: config.memberMaxDepth ?? 0, executionPrompt: config.executionPrompt })
 
   async function dispatchMember(captain: Agent, teamId: string, memberName: string, text: string, signal: AbortSignal, mode: 'queue' | 'steer', attemptId?: string): Promise<boolean> {
     const root = stateRootOf(workspaceOf(captain), config)
@@ -597,6 +602,12 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           task.description = trimmedOptional(mutation.description)
           task.assignee = trimmedOptional(mutation.assignee)
           task.dependencies = [...new Set(mutation.dependencies.map((item) => item.trim()).filter(Boolean))]
+          if (mutation.preflight !== undefined) {
+            validatePreflight(mutation.preflight)
+            task.preflight = [...new Set(mutation.preflight)]
+          }
+          if (mutation.preflightFindingId !== undefined) task.preflightFindingId = trimmedOptional(mutation.preflightFindingId)
+          task.blockedReason = taskBlockReason(fresh, task)
           task.updatedAt = Date.now()
         } else if (mutation.action === 'add_task') {
           const subject = mutation.subject.trim()
@@ -717,7 +728,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     try {
       captain.followup(createUserMessage({
         content: [{ type: 'text', text: stagedPlanFeedbackContext(prepared.teamName) }],
-        source: { kind: 'ctf-teams' },
+        source: ctfTeamsSource({ kind: 'ctf-teams' }),
       }))
     } catch (error: unknown) {
       // Do not leave the durable UI in a false waiting state when the live
@@ -755,7 +766,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     try {
       captain.inject(createUserMessage({
         content: [{ type: 'text', text: stagedPlanDiscardContext(discarded.teamName) }],
-        source: { kind: 'ctf-teams' },
+        source: ctfTeamsSource({ kind: 'ctf-teams' }),
       }))
     } catch (error: unknown) {
       // The archive is already authoritative. Cancellation still prevents a
@@ -784,6 +795,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       description: { type: 'string', description: 'Team purpose / the goal the team will work on.' },
       profile: { type: 'string', description: 'Optional configured profile name.' },
       mode: { type: 'string', enum: ['solo', 'squad'], description: 'Default squad; solo skips the default profile and all member/task setup.' },
+      challenge_mode: { type: 'string', enum: ['single', 'batch'], description: 'Default single. Set batch at creation for multiple platform challenges: verified flags do not stop other lanes; every candidate requires challenge_id. Independent from solo/squad execution mode.' },
       replaceExisting: { type: 'boolean', description: 'Explicitly end and archive the team you currently lead before creating a separate solve. Never use merely to continue work.' },
       plan: {
         type: 'object', additionalProperties: false,
@@ -817,6 +829,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           state_dir: { type: 'string', required: true },
           phase: { type: 'string', required: true },
           mode: { type: 'string', required: true },
+          challenge_mode: { type: 'string', required: true },
           archived_path: { type: 'string' },
           environment_notice: { type: 'string' },
           profile: { type: 'string' },
@@ -832,7 +845,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           : `Team "${value.team_name}" created (id ${value.team_id}) under ${value.state_dir}. You are the captain.`)
           + (value.tasks === undefined ? '' : '\n' + value.tasks.map(task => `${task.task_id} [${task.seed_id}]: ${task.subject}; assignee=${task.assignee ?? 'unassigned'}; dependencies=${task.dependencies.join(',')}`).join('\n'))
           + (value.archived_path ? `\nPrevious solve archived at ${value.archived_path}.` : '')
-          + (value.environment_notice ? `\n${value.environment_notice}` : ''),
+          + (value.environment_notice ? `\n${value.environment_notice}` : '')
+          + `\nChallenge mode: ${value.challenge_mode}. ${value.challenge_mode === 'batch' ? 'Every flag needs challenge_id; individual verification does not end other lanes. Close explicitly with mark_challenge_solved.' : 'A verified flag converges this single challenge.'}`,
       }],
     },
     async execute(args, exec) {
@@ -843,6 +857,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       if (teamName === '') throw new Error('team name must not be empty')
       const teamId = sanitizeKey(teamName)
       const mode = args.mode ?? 'squad'
+      const challengeMode = args.challenge_mode ?? 'single'
+      if (!['single', 'batch'].includes(challengeMode)) throw new Error('challenge_mode must be single or batch')
       if (mode === 'solo' && (args.profile !== undefined && args.profile.trim() !== '' || args.plan !== undefined)) throw new Error('solo mode cannot include profile or plan')
       const staged = args.approval === 'required'
       // Some models materialize optional parameters as "" instead of omitting
@@ -899,11 +915,13 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
               tasks: [],
               taskSeq: 0,
               mode,
+              challenge: { multiChallenge: challengeMode === 'batch' },
               ...staged ? { phase: 'staged' as const, planReviewState: 'awaiting_review' as const } : {},
             }
             await createTeamDir(stateRoot, state)
             return { committed: true as const, state }
           }
+          updateChallenge(prepared!.state, { multiChallenge: challengeMode === 'batch' })
           await createTeamDir(stateRoot, prepared!.state)
           return prepared!
         })
@@ -953,6 +971,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           state_dir: join(stateRoot, snapshot.id),
           phase: snapshot.phase ?? 'running',
           mode,
+          challenge_mode: snapshot.challenge?.multiChallenge ? 'batch' : 'single',
           ...archivedPath === undefined ? {} : { archived_path: archivedPath },
           ...environmentNotice === undefined ? {} : { environment_notice: environmentNotice },
         }
@@ -963,6 +982,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         state_dir: join(stateRoot, snapshot.id),
         phase: snapshot.phase ?? 'running',
         mode,
+        challenge_mode: snapshot.challenge?.multiChallenge ? 'batch' : 'single',
         ...archivedPath === undefined ? {} : { archived_path: archivedPath },
         ...environmentNotice === undefined ? {} : { environment_notice: environmentNotice },
         ...snapshot.profile === undefined ? {} : { profile: snapshot.profile.name },
@@ -1011,6 +1031,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
             description: { type: 'string', description: 'Optional task description.' },
             assignee: { type: 'string', description: 'Optional task assignee; an empty string moves it to the shared pool.' },
             dependencies: { type: 'array', items: { type: 'string' }, description: 'Complete replacement dependency list for a task.' },
+            preflight: { type: 'array', items: { type: 'string' }, description: 'update_task: replace preflight checks on a pending, never-started task. [] explicitly clears all checks; omission preserves them.' },
+            preflight_finding_id: { type: 'string', description: 'update_task: replace the offline verification finding reference. Empty string clears it; omission preserves it.' },
             role: { type: 'string', description: 'Optional member role.' },
             provider: { type: 'string', description: 'Optional member provider; defaults to the current staged route.' },
             model: { type: 'string', description: 'Optional member model; defaults to the current staged route.' },
@@ -1072,6 +1094,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
             description: operation.description ?? task.description,
             assignee: operation.assignee ?? task.assignee,
             dependencies: operation.dependencies ?? task.dependencies,
+            preflight: operation.preflight,
+            preflightFindingId: operation.preflight_finding_id,
           }
         }
         if (operation.action === 'add_task') {
@@ -2246,6 +2270,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           provider: member.provider ?? '',
           model: member.model ?? '',
           reasoning_effort: member.reasoningEffort ?? '',
+          route_diagnostics: memberRouteDiagnostics(ctx, team, member),
           status: member.status,
           availability: availabilityLabel(member),
           available: memberAvailable(member),
@@ -2261,6 +2286,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         ...dispatchState(team, task),
         ...task.resourceKey ? { resource_key: task.resourceKey } : {},
         ...task.challengeId ? { challenge_id: task.challengeId } : {},
+        ...task.preflight ? { preflight: [...task.preflight] } : {},
+        ...task.preflightFindingId ? { preflight_finding_id: task.preflightFindingId } : {},
         ...task.remainingItems ? { remaining_items: task.remainingItems } : {},
         ...task.checkpoint ? { checkpoint: task.checkpoint } : {},
         dependencies: task.dependencies,
@@ -2549,25 +2576,26 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
   ctx.tools.register(defineTool({
     name: 'ctf_teams_platform_check',
-    description: 'Captain-only read-only CTF2 preflight via the local proxy: health, whoami, challenge status and environment readiness. Never starts/stops targets or submits flags. Fresh facts unblock task gates; missing/unknown facts stay blocked.',
+    description: 'Read-only CTF2 preflight for active team participants: health, whoami, challenge status and environment readiness. Never starts/stops targets or submits flags. Fresh facts unblock task gates; missing/unknown facts stay blocked.',
     parameters: { challenge_id: { type: 'string' }, practice_ground_id: { type: 'string' }, health_only: { type: 'boolean' } },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
       render: (_args, value) => [{ type: 'text', text: `CTF2 preflight: ${JSON.stringify(value)}` }],
     },
     async execute(args, exec): Promise<Record<string, JsonValue>> {
-      const captain = requireCaptain(exec), workspace = workspaceOf(captain), stateRoot = stateRootOf(workspace, config)
+      const caller = requireCaptain(exec), workspace = workspaceOf(caller), stateRoot = stateRootOf(workspace, config)
+      const team = await requireParticipantTeam(workspace, config, caller)
       const health = await proxyHealth(config.ctf2)
       if (args.health_only || !health.up) return { proxy: health, checked_at: Date.now() }
-      const team = await requireCaptainTeam(workspace, config, captain)
       const snapshot = await readPlatformSnapshot(config.ctf2 ?? {}, args.practice_ground_id ?? team.challenge?.practiceGroundId ?? '', args.challenge_id)
       await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
-        const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
+        const { team: fresh } = await requireFreshParticipant(stateRoot, team.id, caller.id)
         fresh.platformSnapshot = snapshot
         for (const task of fresh.tasks) if (task.status === 'pending') task.blockedReason = taskBlockReason(fresh, task)
         await writeTeam(stateRoot, fresh)
       })
-      await scheduler.kickTeam(workspace, team.id, captain)
+      const captain = ctx.agents.get(team.captainSessionId as SessionId)
+      if (captain) await scheduler.kickTeam(workspace, team.id, captain)
       return { proxy: health, facts: JSON.parse(JSON.stringify(snapshot)) as JsonValue, note: 'Unknown fields are not passed checks. External environment slots require explicit release through the platform.' }
     },
   }))
@@ -2643,6 +2671,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       flag: { type: 'string', required: true, description: 'The candidate flag string.' },
       evidence: { type: 'string', description: 'How this flag was produced (script, command, path) so others can reproduce it.' },
       challenge_id: { type: 'string', description: 'Required in batch mode. Platform challenge id, used to count distinct solved challenges.' },
+      source_kind: { type: 'string', enum: ['local_output', 'writeup', 'index', 'manual', 'unknown'], description: 'Reporter-supplied origin, not a trust score. Match competition, year, attachment and challenge_id before platform verification.' },
+      source_url: { type: 'string', description: 'Optional HTTP(S) source URL without embedded credentials. Preserved alongside evidence; never fetched or trusted automatically.' },
       variants: { type: 'array', items: { type: 'string' }, description: 'Explicit alternative candidates. Each remains unverified with its own durable reference and review history.' },
       generate_variants: { type: 'boolean', description: 'Opt in to peel nested wrappers into additional candidates. Does not submit anything to the platform.' },
     },
@@ -2661,6 +2691,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           format_warning: { type: 'string' },
           variants: { type: 'array', items: { type: 'string' } },
           environment_warning: { type: 'string' },
+          challenge_id: { type: 'string' },
+          source_summary: { type: 'string' },
         },
       },
       render: (_args, value) => [{
@@ -2669,6 +2701,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           ? `Flag ${value.flag_id} is already on the board (${value.status}, submitted by ${value.submitted_by}). Do not resubmit; wait for the captain's verdict.`
           : `Candidate ${value.flag_id} recorded (${value.flag}). The captain will verify it against the platform.`)
           + ` Durable flag_ref=${value.flag_ref}; team_id=${value.team_id}.`
+          + (value.challenge_id ? ` Challenge=${value.challenge_id}.` : '')
+          + (value.source_summary ? `\nUnverified sources: ${value.source_summary}` : '')
           + (value.format_warning ? `\nRecorded with format warning: ${value.format_warning}` : '')
           + (value.variants?.length ? `\nSeparate unverified variants:\n${value.variants.join('\n')}` : '')
           + (value.environment_warning ? `\nENVIRONMENT WARNING: ${value.environment_warning}` : ''),
@@ -2690,10 +2724,12 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           submittedBy: identity.name,
           evidence: args.evidence,
           challengeId,
+          sourceKind: args.source_kind,
+          sourceUrl: args.source_url,
         })
         const variants = [...new Set([...(args.variants ?? []), ...(args.generate_variants ? nestedFlagVariants(args.flag) : [])])]
           .filter(flag => flag.trim() !== candidate.flag).map(flag => {
-            const item = appendFlagCandidate(fresh, { flag, submittedBy: identity.name, evidence: args.evidence, challengeId, variantOf: candidate.id }).candidate
+            const item = appendFlagCandidate(fresh, { flag, submittedBy: identity.name, evidence: args.evidence, challengeId, variantOf: candidate.id, sourceKind: args.source_kind, sourceUrl: args.source_url }).candidate
             return `${flagReference(fresh, item)} ${item.flag} (${item.status})`
           })
         const environmentWarning = fresh.challenge?.requiresRunningTargetForSubmit
@@ -2712,6 +2748,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           notifyCaptain = true
           notice = [
             `Flag candidate ${candidate.id} submitted by ${identity.name}: ${candidate.flag}`,
+            candidate.challengeId ? `Platform challenge_id: ${candidate.challengeId}` : 'No platform challenge_id supplied; do not guess an identity from the title.',
+            ...(candidate.sources ?? []).map(source => `Unverified source: ${source.kind}${source.url ? ` ${source.url}` : ''}`),
             candidate.evidence === undefined ? '' : `Evidence: ${candidate.evidence}`,
             candidate.formatWarning === undefined ? '' : `FORMAT WARNING (original retained): ${candidate.formatWarning}`,
             'Verify against the platform, then ctf_teams_mark_flag with the verdict.',
@@ -2739,6 +2777,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         submitted_by: result.candidate.submittedBy,
         team_id: result.teamId,
         flag_ref: result.flagRef,
+        ...result.candidate.challengeId ? { challenge_id: result.candidate.challengeId } : {},
+        ...result.candidate.sources?.length ? { source_summary: result.candidate.sources.map(source => `${source.kind}${source.url ? ` ${source.url}` : ''}`).join(' | ') } : {},
         variants: result.variants,
         ...result.environmentWarning ? { environment_warning: result.environmentWarning } : {},
         ...result.candidate.formatWarning === undefined ? {} : { format_warning: result.candidate.formatWarning },
@@ -3060,11 +3100,13 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
   ctx.tools.register(defineTool({
     name: 'ctf_teams_env',
-    description: 'CTF toolchain service: detect what this machine already has, then install what is missing. action=check (default) probes every managed tool in parallel (pwntools, pycryptodome, z3, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions; action=install builds a curated per-platform plan (apt/pip/brew/gem, executed argv-by-argv without a shell — heavy tools like sage/ghidra/pwndbg report their manual command instead) and runs it; pass dry_run=true to see the plan without executing; action=list shows the managed catalog. Run check at team start and before telling a lane to "just pip install" something.',
+    description: 'CTF toolchain service: check the local host or an explicitly selected WSL distribution, then plan local installs. runtime=wsl requires distribution; omitted distribution returns installed names without starting one. A failed WSL startup is a runtime error, never a list of missing tools. WSL checks do not install software. action=check (default) probes every managed tool in parallel (pwntools, pycryptodome, z3, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions; action=install builds a curated per-platform plan (apt/pip/brew/gem, executed argv-by-argv without a shell — heavy tools like sage/ghidra/pwndbg report their manual command instead) and runs it; pass dry_run=true to see the plan without executing; action=list shows the managed catalog. Run check at team start and before telling a lane to "just pip install" something.',
     parameters: {
       action: { type: 'string', enum: ['check', 'install', 'list'], description: 'check (default), install, or list the managed catalog.' },
       tools: { type: 'array', items: { type: 'string' }, description: 'Subset of tool ids (e.g. ["pwntools","volatility3"]); omitted = all managed tools for check, and the detected-missing set for install.' },
       dry_run: { type: 'boolean', description: 'install only: return the plan without executing.' },
+      runtime: { type: 'string', enum: ['local', 'wsl'], description: 'check only: local (default) or Windows WSL. Results always identify the inspected runtime.' },
+      distribution: { type: 'string', description: 'runtime=wsl: exact installed distribution name, e.g. kali-linux. Omit to list names without launching a distribution.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
@@ -3073,6 +3115,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     async execute(args, exec) {
       requireCaptain(exec)
       const envConfig = config.env ?? {}
+      if (args.runtime === 'wsl' && args.action === 'install') throw new Error('WSL runtime is check-only; inspect it first, then install explicitly inside that distribution. No local install was attempted.')
+      if (args.distribution !== undefined && args.runtime !== 'wsl') throw new Error('distribution requires runtime=wsl')
       if (envConfig.allowInstall === false && args.action === 'install' && args.dry_run !== true) {
         throw new Error('the env install service is disabled by plugin config (env.allowInstall=false); use dry_run or install manually')
       }
@@ -3092,12 +3136,21 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         return result
       }
       if (action === 'check') {
-        const statuses = await detectTools({
-          tools: args.tools,
-          timeoutMs: envConfig.probeTimeoutMs,
-          python: envConfig.pythonBin,
+        const inspected = await detectRuntimeTools({
+          runtime: args.runtime, distribution: args.distribution, tools: args.tools,
+          timeoutMs: envConfig.probeTimeoutMs, python: envConfig.pythonBin,
         })
-        result.statuses = statuses.map((status) => {
+        result.runtime = inspected.runtime
+        result.host_platform = inspected.host_platform
+        result.probe_platform = inspected.probe_platform
+        result.runtime_ready = inspected.runtime_ready
+        result.python = inspected.python
+        if (inspected.search_path !== undefined) result.search_path = inspected.search_path
+        result.unknown = inspected.unknown
+        if (inspected.distribution !== undefined) result.distribution = inspected.distribution
+        if (inspected.available_distributions !== undefined) result.available_distributions = inspected.available_distributions
+        if (inspected.error !== undefined) result.runtime_error = inspected.error
+        result.statuses = inspected.statuses.map((status) => {
           const row: Record<string, JsonValue> = {
             name: status.name,
             category: status.category,
@@ -3218,6 +3271,14 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
 /** The JSON shape the env tool returns (already JsonValue-safe). */
 interface EnvResultValue {
+  runtime?: string
+  host_platform?: string
+  probe_platform?: string
+  python?: string
+  distribution?: string
+  available_distributions?: string[]
+  runtime_error?: string
+  search_path?: string
   action?: string
   note?: string
   statuses?: { name: string; status: string; version?: string; path?: string; install_hint: string }[]
@@ -3270,12 +3331,15 @@ function scheduleReferenceAutoSync(ctx: Context, workspace: string, teamId: stri
 /** Render env check/install/list results for the transcript. */
 function renderEnvResult(value: EnvResultValue): string {
   if (value.statuses !== undefined) {
-    return value.statuses.map((status) => {
+    const header = `Runtime: ${value.runtime ?? 'local'}${value.distribution ? ` / ${value.distribution}` : ''} (${value.host_platform ?? 'unknown'} → ${value.probe_platform ?? 'unknown'}); Python: ${value.python ?? 'unknown'}`
+    if (value.runtime_error) return [header, `Runtime error: ${value.runtime_error}`, `Available distributions: ${(value.available_distributions ?? []).join(', ') || '(none reported)'}`].join('\n')
+    const lines = value.statuses.map((status) => {
       const mark = status.status === 'ok' ? '✓' : status.status === 'missing' || status.status === 'broken' ? '✗' : '○'
       const version = status.version === undefined || status.version === '' ? '' : ` ${status.version}`
       const detail = status.status === 'ok' ? `${status.path ?? 'python module'}${version}` : status.install_hint
       return `${mark} ${status.name.padEnd(16)} ${detail}`
-    }).join('\n')
+    })
+    return [header, ...(value.search_path ? [`Linux search PATH: ${value.search_path}`] : []), ...lines, ...(value.unknown?.length ? [`Unknown tools: ${value.unknown.join(', ')}`] : [])].join('\n')
   }
   if (value.note !== undefined) return value.note
   if (value.plan !== undefined) {
@@ -3572,6 +3636,7 @@ function renderStatus(value: JsonValue): string {
       status: string
       activity: string
       spawn_error?: string
+      route_diagnostics?: ReturnType<typeof memberRouteDiagnostics>
     }[]
     tasks: { id: string; subject: string; status: string; assignee: string; dependencies: string[]; attempt: number; attempt_id: string; reassigning: boolean; seed_id?: string; output?: string; kind?: string; round?: number; verdict?: string; findings_open?: number; supplemental_evidence?: string }[]
     captain_inbox: { from: string; content: string }[]
@@ -3605,7 +3670,8 @@ function renderStatus(value: JsonValue): string {
       const route = member.provider && member.model ? ` · ${member.provider}/${member.model}` : ''
       const effort = member.reasoning_effort ? ` · reasoning ${member.reasoning_effort}` : ''
       const failure = member.spawn_error === undefined ? '' : `\n      start failed: ${member.spawn_error.slice(0, 400)}`
-      return `  - ${member.name} [${member.role}] ${member.status}/${member.activity}${route}${effort}${failure}`
+      const routeNotice = member.route_diagnostics?.notice ? `\n      ${member.route_diagnostics.notice}` : ''
+      return `  - ${member.name} [${member.role}] ${member.status}/${member.activity}${route}${effort}${failure}${routeNotice}`
     }),
     `Tasks (${team.tasks.length}):`,
     ...team.tasks.map((task) => {

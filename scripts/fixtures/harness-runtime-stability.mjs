@@ -4,8 +4,12 @@ import { appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+const { startMemberContinuable, drainMemberChildren } = await import(new URL('harness-compat.js', pathToFileURL(createRequire(import.meta.url).resolve('@nanmicoder/dsh-ctf-teams'))));
 
 const requests = [], commands = [], gates = new Map(), memberResponses = new Map();
+const finishOnRequest = new Set();
 let captainId, seq = 0;
 const model = { provider: 'runtime-lab', id: 'fixture-model', name: 'Stability fixture', context: { contextWindow: 262144 }, defaultMaxTokens: 8192 };
 function record(data) { appendFileSync(process.env.LAB_TRACE, JSON.stringify({ ...data, time: Date.now() }) + '\n'); }
@@ -37,6 +41,7 @@ class StabilityAdapter extends LlmAdapter {
     const request = { event: 'stability-request', sessionId: options.sessionId, userText, messages: options.messages };
     requests.push(request); record(request);
     if (options.sessionId === captainId) { yield* chunks('CAPTAIN_IDLE', commands.shift()); return; }
+    if (finishOnRequest.has(options.sessionId)) { yield* chunks('Board update consumed. Idle.'); return; }
     await gate(options.sessionId, options.signal);
     const tool = memberResponses.get(options.sessionId) ?? { name: 'lab_step', args: {} };
     memberResponses.delete(options.sessionId);
@@ -115,7 +120,7 @@ export function apply(ctx) {
     assert.doesNotMatch(requests.filter(r => r.sessionId === workerId).at(-1).userText, /STALE_GUIDANCE_MUST_NOT_RUN/);
     record({ event: 'stability-reassign-passed', sameMember: true, staleInputExcluded: true });
     const liveWorker = ctx.agents.get(workerId);
-    const start = (parent, label) => ctx.subagents.startContinuable({ provider: 'spawn', label, request: { parent, prompt: [{ type: 'text', text: label }], maxDepth: 3, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } }, signal: new AbortController().signal });
+    const start = (parent, label) => startMemberContinuable(ctx.subagents, { provider: 'spawn', label, request: { parent, prompt: [{ type: 'text', text: label }], maxDepth: 3, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } }, signal: new AbortController().signal });
     const grandchild = await start(liveWorker, 'historical-nested-branch');
     const sibling = await start(captain.agent, 'unrelated-sibling');
     await until(() => gates.has(grandchild.childId) && gates.has(sibling.childId), 'concurrent independent branches');
@@ -136,7 +141,7 @@ export function apply(ctx) {
       : typeof runtime[Symbol.for('dsh.subagent.deliverPrompt')] === 'function' ? runtime[Symbol.for('dsh.subagent.deliverPrompt')](captain.agent, workerId, content, { kind: 'user' }, signal, 'queue')
       : runtime[Symbol.for('dsh.subagent.queuePrompt')](captain.agent, workerId, content, { kind: 'user' }, signal), /retired/);
     assert.equal(requests.filter(r => r.sessionId !== captainId && r.sessionId !== sibling.childId).length, callsBefore);
-    await ctx.subagents.drainContinuableChildren(captain.agent, [sibling.childId]);
+    await drainMemberChildren(ctx.subagents, captain.agent, [sibling.childId]);
     await captain.agent.whenIdle();
     record({ event: 'stability-archive-passed', pendingMessagesCleared: 32, descendantsStopped: true, siblingPreserved: true, retiredResumeRejected: true });
     const beforeBatchRequests = requests.filter(r => r.sessionId !== captainId).length;
@@ -196,6 +201,45 @@ export function apply(ctx) {
     await captain.agent.whenIdle();
     assert.equal(requests.filter(r => r.sessionId === captainId).length, parentAfterReport, 'a delivered completion must not wake the parent again');
     record({ event: 'stability-settlement-dedup-passed', reportWakes: parentAfterReport - parentBeforeReport, duplicateModelRequests: 0 });
+    // A consumed solved digest must not re-activate a settled child. Count
+    // real Agent requests and parent turns: pre-step rejection alone would
+    // save parent tokens but still leave the UI flooded with empty turns.
+    finishOnRequest.add(settledId);
+    const workerRequestsBeforeSolve = requests.filter(r => r.sessionId === settledId).length;
+    await run(cmd('submit_flag', { flag: 'flag{quiet_after_solve}' }), cmd('mark_flag', { flag: 'flag{quiet_after_solve}', verdict: 'verified', note: 'Deterministic platform acceptance' }));
+    await until(() => ctx.agents.get(settledId) === undefined && settledState().syncCursors.worker.flagSeq === settledState().flagSeq, 'solved digest delivered and activation released');
+    await captain.agent.whenIdle();
+    assert.equal(requests.filter(r => r.sessionId === settledId).length, workerRequestsBeforeSolve + 1, 'completion should wake the worker exactly once');
+    const quietSnapshot = () => ({ requests: requests.length, parentTurns: captain.agent.session.ownEvents().filter(e => e.type === 'turn/start').length });
+    async function assertQuiet(label) {
+      // Let the final native settlement cross the inbox boundary first.
+      await new Promise(r => setTimeout(r, 100));
+      await captain.agent.whenIdle();
+      const baseline = quietSnapshot();
+      await new Promise(r => setTimeout(r, 1000));
+      assert.deepEqual(quietSnapshot(), baseline, `${label}: requests and turns must stop growing`);
+      return { observationMs: 1000, additionalModelRequests: 0, additionalParentTurns: 0 };
+    }
+    const solvedQuiet = await assertQuiet('solved board');
+    const beforeCorrection = requests.filter(r => r.sessionId === settledId).length;
+    await run(cmd('report_finding', { content: 'One reproducible writeup correction after solving' }), cmd('status'));
+    await until(() => ctx.agents.get(settledId) === undefined, 'new finding activation released');
+    assert.equal(requests.filter(r => r.sessionId === settledId).length, beforeCorrection + 1, 'new evidence must still wake the worker once');
+    await assertQuiet('consumed correction');
+    record({ event: 'stability-solved-quiescence-passed', completionDigests: 1, correctionDigests: 1, ...solvedQuiet });
+    await run(cmd('delete'));
+    await run(cmd('create', { name: 'pause-quiet', plan: { members: [{ name: 'worker' }], tasks: [{ id: 'job', subject: 'Pause the active worker', assignee: 'worker' }] } }));
+    const pauseState = JSON.parse(readFileSync(join(root, 'pause-quiet/team.json'), 'utf8'));
+    const pauseId = pauseState.members[0].id;
+    await until(() => gates.has(pauseId), 'pause worker running');
+    await run(cmd('send_message', { to: 'worker', content: 'Unconsumed guidance before pause' }));
+    const { haltTeamWork } = await import(new URL('./lib/tools.js', import.meta.resolve('@nanmicoder/dsh-ctf-teams/package.json')));
+    await haltTeamWork({ ctx, stateRoot: root, teamId: 'pause-quiet', captain: captain.agent, signal: new AbortController().signal });
+    await captain.agent.whenIdle();
+    assert.equal(ctx.agents.get(pauseId), undefined, 'pause drains the member activation');
+    assert.equal(JSON.parse(readFileSync(join(root, 'pause-quiet/team.json'), 'utf8')).halted, true);
+    const pausedQuiet = await assertQuiet('paused team');
+    record({ event: 'stability-paused-quiescence-passed', drained: true, ...pausedQuiet });
     await run(cmd('delete'));
     await ctx.sessions.flush(captain.agent.session);
     await captain.dispose();

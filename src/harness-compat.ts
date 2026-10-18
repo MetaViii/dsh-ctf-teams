@@ -11,6 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import * as dshSession from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import { CAPTAIN_TOOL_NAMES } from './tool-names.ts'
@@ -50,10 +51,39 @@ function unsupported(detail: string): never {
   throw new Error(`ctf-teams: unsupported Harness subagent contract (${detail}); use an explicitly tested Harness version and a coherent dependency installation`)
 }
 
+/** rc.1 unifies foreground/background starts; CTF owns result reporting. */
+export async function startMemberContinuable(
+  runtime: Context['subagents'],
+  spec: Parameters<Context['subagents']['startContinuable']>[0],
+): ReturnType<Context['subagents']['startContinuable']> {
+  const modern = runtime as unknown as { startActivation?: (input: typeof spec & { delivery: 'caller' }) => ReturnType<Context['subagents']['startContinuable']> }
+  if (typeof modern.startActivation === 'function') return modern.startActivation.call(runtime, { ...spec, delivery: 'caller' })
+  if (typeof runtime.startContinuable === 'function') return runtime.startContinuable(spec)
+  return unsupported('missing continuable start or activation API')
+}
+
+/** Wait for exact owned child handles to release on both supported API generations. */
+export async function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: SessionId[]): Promise<void> {
+  const modern = runtime as unknown as { drainChildren?: (owner: Agent, ids: SessionId[]) => Promise<void> }
+  if (typeof modern.drainChildren === 'function') return modern.drainChildren.call(runtime, parent, childIds)
+  if (typeof runtime.drainContinuableChildren === 'function') return runtime.drainContinuableChildren(parent, childIds)
+  return unsupported('missing targeted child drain API')
+}
+
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'ctf-teams': { readonly kind: 'ctf-teams' }
   }
+}
+
+/** Adapted from AgentTeams 1094b84 (#160): older stored formats reject custom source kinds. */
+export function ctfTeamsSource(
+  modern: { readonly kind: 'ctf-teams' } | { readonly kind: 'ctf-teams-command'; readonly goal?: string; readonly profile?: string },
+  formatVersion = (dshSession as unknown as { SESSION_FORMAT_VERSION?: number }).SESSION_FORMAT_VERSION,
+): MessageSource {
+  return typeof formatVersion === 'number' && Number.isSafeInteger(formatVersion) && formatVersion >= 3
+    ? modern
+    : { kind: 'plugin', plugin: '@nanmicoder/dsh-ctf-teams' } as unknown as MessageSource
 }
 
 /**
@@ -148,7 +178,7 @@ export async function queueMemberPrompt(
   content: ContentBlock[], signal: AbortSignal,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'ctf-teams' }
+  const source = ctfTeamsSource({ kind: 'ctf-teams' })
   if (typeof host.followup === 'function') {
     return host.followup.call(runtime, parent, childId, content, { source, signal })
   }
@@ -165,7 +195,7 @@ export async function steerMemberPrompt(
   content: ContentBlock[], signal: AbortSignal, live?: Agent,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'ctf-teams' }
+  const source = ctfTeamsSource({ kind: 'ctf-teams' })
   const deliver = host[hostPromptDeliver]
   if (typeof deliver === 'function') return deliver.call(runtime, parent, childId, content, source, signal, 'steer')
   if (typeof host.sendMessage === 'function') return host.sendMessage.call(runtime, parent, childId, content, { signal })

@@ -1,0 +1,75 @@
+{
+  "state": 4,
+  "hooks": [
+    {
+      "id": "tool-jobs",
+      "name": "tool-jobs",
+      "state": 2,
+      "effects": [
+        {
+          "label": "ctx.on(\"tools/pre-execute\")",
+          "children": []
+        },
+        {
+          "label": "jobs.attachController()",
+          "children": []
+        },
+        {
+          "label": "systemPrompt.section()",
+          "children": []
+        },
+        {
+          "label": "jobs.events.subscribe()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "tool-jobs",
+      "name": "tool-jobs",
+      "state": 2,
+      "effects": [
+        {
+          "label": "ctx.on(\"tools/pre-execute\")",
+          "children": []
+        },
+        {
+          "label": "jobs.attachController()",
+          "children": []
+        },
+        {
+          "label": "systemPrompt.section()",
+          "children": []
+        },
+        {
+          "label": "jobs.events.subscribe()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        },
+        {
+          "label": "tools.register()",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

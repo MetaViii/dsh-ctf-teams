@@ -1,0 +1,176 @@
+{
+  "passed": true,
+  "exit": 0,
+  "timedOut": false,
+  "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-runtime-services-RAFrYY",
+  "hostVersion": "0.2.0-rc.2",
+  "result": {
+    "passed": true,
+    "cold": true,
+    "hmrDisabled": true,
+    "directConfig": true,
+    "teardownFault": true,
+    "configEdits": 3,
+    "requests": 23,
+    "reviewRequests": 19,
+    "rounds": [
+      {
+        "round": 0,
+        "model": "first",
+        "tools": [
+          "runtime_config_probe",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      },
+      {
+        "round": 1,
+        "model": "second",
+        "tools": [
+          "runtime_config_probe",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      },
+      {
+        "round": 2,
+        "model": "first",
+        "tools": [
+          "runtime_config_probe",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      }
+    ]
+  },
+  "boots": [
+    {
+      "boot": 0,
+      "exit": 0,
+      "timedOut": false,
+      "result": {
+        "passed": true,
+        "cold": false,
+        "hmrDisabled": true,
+        "directConfig": true,
+        "teardownFault": true,
+        "configEdits": 2,
+        "requests": 24,
+        "reviewRequests": 19,
+        "rounds": [
+          {
+            "round": 0,
+            "model": "first",
+            "tools": [
+              "ctf_teams_create",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          },
+          {
+            "round": 1,
+            "model": "second",
+            "tools": [
+              "runtime_config_probe",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          },
+          {
+            "round": 2,
+            "model": "first",
+            "tools": [
+              "runtime_config_probe",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "boot": 1,
+      "exit": 0,
+      "timedOut": false,
+      "result": {
+        "passed": true,
+        "cold": true,
+        "hmrDisabled": true,
+        "directConfig": true,
+        "teardownFault": true,
+        "configEdits": 3,
+        "requests": 23,
+        "reviewRequests": 19,
+        "rounds": [
+          {
+            "round": 0,
+            "model": "first",
+            "tools": [
+              "runtime_config_probe",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          },
+          {
+            "round": 1,
+            "model": "second",
+            "tools": [
+              "runtime_config_probe",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          },
+          {
+            "round": 2,
+            "model": "first",
+            "tools": [
+              "runtime_config_probe",
+              "get_goal",
+              "write",
+              "read",
+              "pwsh",
+              "ctf_teams_status"
+            ],
+            "passed": true
+          }
+        ]
+      }
+    }
+  ],
+  "limits": [
+    "Deterministic LLM; cleanup fault injection reproduces stale callbacks, but the original outage trigger remains unproven.",
+    "No interactive Electron operations or provider authentication were exercised."
+  ]
+}

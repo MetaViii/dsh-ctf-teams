@@ -1383,6 +1383,11 @@ try {
     recoveredParallel.length === 2
       && recoveredParallel.every(candidate => candidate.assignee !== 'captain')
       && recoveredParallel.every(candidate => candidate.status === 'claimed' || candidate.status === 'in_progress'))
+  const takeoverNotices = (await readMailbox(stateRoot, teamId, 'captain')).filter(message => message.from === 'scheduler' && message.content.includes('captain became idle'))
+  check('idle captain recovery records one durable revocation notice with the previous capability', takeoverNotices.length === 1 && takeoverNotices[0].content.includes('Old attempt') && takeoverNotices[0].content.includes('stop external work'))
+  publishStatus(captain, 'idle')
+  await new Promise(resolve => setTimeout(resolve, 25))
+  check('repeated idle edges do not duplicate the captain handoff notice', (await readMailbox(stateRoot, teamId, 'captain')).filter(message => message.from === 'scheduler' && message.content.includes('captain became idle')).length === takeoverNotices.length)
   for (const recoveredTask of recoveredParallel) {
     const owner = recoveredTask.assignee === 'beta' ? beta : gamma
     owner.status = 'running'
@@ -1625,6 +1630,47 @@ try {
   await call('ctf_teams_set_challenge', { environment_id: 'env-next' })
   const ended = await call('ctf_teams_delete', {})
   check('delete returns archive path and explicit environment cleanup reminder', ended.archive_path === join(stateRoot, 'archive', replacement.team_id) && ended.environment_notice.includes('env-next'))
+  // A solved board is a state, not an inexhaustible source of new input.
+  // Exercise the real tools, cursor delivery, idle observer and status kicks.
+  for (const challengeMode of ['single', 'batch']) {
+    const quietId = `quiet-${challengeMode}`
+    await call('ctf_teams_create', { name: quietId, challenge_mode: challengeMode, plan: {
+      members: [{ name: 'worker' }], tasks: [{ id: 'job', subject: 'Finish once', assignee: 'worker' }],
+    } })
+    const quietState = () => readTeam(stateRoot, quietId)
+    const quietWorker = liveAgents.get((await quietState()).members[0].id)
+    const quietTask = (await quietState()).tasks[0]
+    await call('ctf_teams_update_task', { task_id: quietTask.id, attempt_id: quietTask.attemptId, status: 'in_progress' }, quietWorker)
+    await call('ctf_teams_update_task', { task_id: quietTask.id, attempt_id: quietTask.attemptId, status: 'completed', output: 'Verified local result' }, quietWorker)
+    quietWorker.status = 'idle'
+    const quietFlag = await call('ctf_teams_submit_flag', { flag: 'flag{quiet}', challenge_id: 'quiet-challenge' })
+    await call('ctf_teams_mark_flag', { flag_id: quietFlag.flag_id, verdict: 'verified', note: 'Platform accepted' })
+    if (challengeMode === 'batch') await call('ctf_teams_mark_challenge_solved', { note: 'All selected challenges accepted by platform' })
+    await call('ctf_teams_status', {})
+    const afterCompletion = deliveries.length
+    check(`${challengeMode}: completion digest is delivered and its board cursor advances`, (await quietState()).challenge.solved
+      && (await quietState()).syncCursors.worker.flagSeq === (await quietState()).flagSeq
+      && deliveries.at(-1).childId === quietWorker.id)
+    for (let i = 0; i < 50; i++) {
+      publishStatus(quietWorker, 'idle')
+      await call('ctf_teams_status', {})
+    }
+    check(`${challengeMode}: 50 repeated idle edges and status reads never re-deliver a consumed solved board`, deliveries.length === afterCompletion)
+    await call('ctf_teams_report_finding', { content: 'One new writeup correction after completion' })
+    await call('ctf_teams_status', {})
+    check(`${challengeMode}: new evidence after completion still delivers once`, deliveries.length === afterCompletion + 1)
+    publishStatus(quietWorker, 'idle')
+    await call('ctf_teams_status', {})
+    check(`${challengeMode}: the new evidence also settles without another wake`, deliveries.length === afterCompletion + 1)
+    await haltTeamWork({ ctx, stateRoot, teamId: quietId, captain, signal: new AbortController().signal })
+    await call('ctf_teams_report_finding', { content: 'Durable evidence while paused' })
+    const afterPause = deliveries.length
+    publishStatus(quietWorker, 'idle')
+    await call('ctf_teams_status', {})
+    check(`${challengeMode}: paused team never dispatches pending board updates`, deliveries.length === afterPause)
+    await call('ctf_teams_delete', {})
+  }
+
   // Resource queue, honest dispatch receipts and in-place model repair.
   await call('ctf_teams_create', { name: 'runtime-checks', approval: 'automatic' })
   await call('ctf_teams_add_member', { name: 'one' })
@@ -1656,6 +1702,38 @@ try {
   check('route repair preserves checkpoint/remaining items and changes the child identity', repairedTask.checkpoint === 'partial script and 3 solved' && repairedTask.remainingItems.join(',') === 'ch-b,ch-c' && repaired.members.find(member => member.name === 'one').id !== firstChild.id)
   const preflight = await call('ctf_teams_create_task', { subject: 'guarded target', challenge_id: 'ch-preflight', preflight: ['challenge_unsolved'] })
   check('unknown platform facts remain blocked rather than starting a target', preflight.dispatch_state === 'waiting' && preflight.dispatch_reason.includes('preflight'))
+  const gateTask = async () => (await readTeam(stateRoot, 'runtime-checks')).tasks.find(task => task.id === preflight.task_id)
+  check('preflight receipt identifies the missing key', preflight.dispatch_reason.includes('challenge_unsolved'))
+  await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: preflight.task_id, preflight: ['access_ready'], preflight_finding_id: 'offline-test' }] })
+  check('pending preflight and finding reference can be replaced without recreating a task', (await gateTask()).preflight.join() === 'access_ready' && (await gateTask()).preflightFindingId === 'offline-test')
+  await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: preflight.task_id, description: 'preserve guards' }] })
+  check('omitted preflight edits preserve the guard', (await gateTask()).preflight.join() === 'access_ready')
+  let invalidPreflight = false
+  try { await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: preflight.task_id, subject: 'must roll back' }, { action: 'update_task', task_id: preflight.task_id, preflight: ['invented'] }] }) } catch { invalidPreflight = true }
+  check('invalid preflight rolls back the entire ordered edit batch', invalidPreflight && (await gateTask()).subject === 'guarded target' && (await gateTask()).preflight.join() === 'access_ready')
+  let activePreflightRejected = false
+  try { await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: other.task_id, preflight: [] }] }) } catch { activePreflightRejected = true }
+  check('preflight repair never edits an already started attempt', activePreflightRejected)
+  const originalFetch = globalThis.fetch
+  let platformCalls = []
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/health')) return new Response(JSON.stringify({service:'ctf2-mcp-proxy'}))
+    const rpc = JSON.parse(init.body); platformCalls.push(rpc)
+    const facts = rpc.params.name === 'ctf2_agent_whoami' ? {active_environments:0} : rpc.params.name === 'ctf2_get_practice_challenge' ? {is_solved:false} : {access_ready:true,running:true}
+    return new Response(JSON.stringify({jsonrpc:'2.0',id:rpc.id,result:{structuredContent:facts}}))
+  }
+  const member = liveAgents.get(repaired.members.find(member => member.name === 'two').id)
+  try {
+    const facts = await call('ctf_teams_platform_check', {practice_ground_id:'g',challenge_id:'ch-preflight'}, member)
+    check('active members can refresh strictly read-only preflight facts', facts.facts.accessReady === true && platformCalls.map(rpc=>rpc.params.name).join() === 'ctf2_agent_whoami,ctf2_get_practice_challenge,ctf2_get_environment')
+    let retiredRejected = false
+    try { await call('ctf_teams_platform_check', {health_only:true}, firstChild) } catch { retiredRejected = true }
+    check('a retired member cannot refresh another participant team', retiredRejected && platformCalls.length === 3)
+  } finally { globalThis.fetch = originalFetch }
+  await call('ctf_teams_edit_plan', { operations: [{ action: 'update_task', task_id: preflight.task_id, preflight: [], preflight_finding_id: '' }] })
+  check('empty preflight array and empty finding reference explicitly clear both fields', (await gateTask()).preflight.length === 0 && (await gateTask()).preflightFindingId === undefined && (await gateTask()).blockedReason === undefined)
+  const routingStatus = await call('ctf_teams_status', {}, member)
+  check('model-facing status exposes saved/live/captain route diagnostics as lossless JSON', routingStatus.members.every(row=>row.route_diagnostics?.saved_route?.model) && JSON.stringify(JSON.parse(JSON.stringify(routingStatus))) === JSON.stringify(routingStatus))
   await call('ctf_teams_delete', {})
 } finally {
   await rm(workspace, { recursive: true, force: true })

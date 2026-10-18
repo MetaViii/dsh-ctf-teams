@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-16",
+  "localOnly": true,
+  "pushed": false,
+  "published": false,
+  "originalTriggerProven": false,
+  "confirmedDefect": "Cordis generator effect skips earlier disposers when later teardown fails; Auto hook can survive disposal",
+  "desktopApplied": true,
+  "desktopRestarted": true,
+  "desktopRestartLocalTime": "2026-10-16 12:22:29",
+  "desktopMainPid": 1244,
+  "desktopComposedEntriesVerified": true,
+  "desktopAuthenticatedToolExecutionVerified": true,
+  "reviewPolicyChanged": false,
+  "userPermissionsChanged": false,
+  "teamResumed": false,
+  "teamAndManifestUnchanged": true,
+  "pluginPackageReplaced": false,
+  "backup": "C:/Users/MetaVi/.dsh/backups/auto-review-cleanup-2026-10-16T04-22-04-796Z",
+  "compatibilityDirectory": "C:/Users/MetaVi/.dsh/compat/ctf-auto-review-cleanup-rc2-20261016",
+  "checks": [
+    {
+      "name": "Build",
+      "passed": true
+    },
+    {
+      "name": "Four cleanup unit regressions",
+      "passed": true
+    },
+    {
+      "name": "Full pnpm verify",
+      "passed": true,
+      "evidence": "evidence/follow-up-full-verify.txt"
+    },
+    {
+      "name": "Real host baseline fault",
+      "expectedFailure": true,
+      "oldHookPresentAfterDisposed": true,
+      "evidence": "evidence/cleanup-runtime-baseline.json"
+    },
+    {
+      "name": "Real host fixed, new and restored session",
+      "passed": true,
+      "successfulTools": 36,
+      "rejectedInvalidReviews": 2,
+      "totalReviewRequests": 38,
+      "evidence": "evidence/cleanup-runtime-fixed.json"
+    },
+    {
+      "name": "Original desktop session, read-only CTF status and goal tools",
+      "passed": true,
+      "evidenceSource": "user_confirmation",
+      "tools": [
+        "ctf_teams_status",
+        "get_goal"
+      ],
+      "scope": "Two read-only calls only; no claim about shell, writes, or all future reloads"
+    }
+  ],
+  "notFixed": [
+    "Exact trigger of original session context failure is not proven",
+    "Online permission provider rebuild with existing Auto sessions fails before integration registration; use full offline restart"
+  ],
+  "source": "follow-up.md",
+  "desktopVerification": {
+    "date": "2026-10-16",
+    "source": "user_confirmation",
+    "tools": [
+      "ctf_teams_status",
+      "get_goal"
+    ],
+    "result": "Both tools normal in the original DSH session",
+    "readOnly": true,
+    "shellAndWriteOperationsVerified": false,
+    "originalTriggerProven": false
+  }
+}

@@ -118,7 +118,7 @@ export declare function resolveMemberLlmSelection(ctx: Context, captain: Agent, 
  * record. Legacy members without a complete saved route retain Harness's
  * descriptor provider/model behavior.
  */
-export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>): MemberSelectionRuntime;
+export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>, compositionConfig?: Pick<MemberRuntimeConfig, 'maxDepth' | 'executionPrompt'>): MemberSelectionRuntime;
 /**
  * The member's system prompt (persona), shadowing the deployment persona for
  * that child. Self-contained: it replaces the whole persona section.

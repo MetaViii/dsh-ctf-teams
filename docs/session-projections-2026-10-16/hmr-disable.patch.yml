@@ -1,0 +1,4 @@
+# Apply to the desktop profile while DSH is fully exited, then start it again.
+# Host-wide mitigation: profile file edits no longer trigger automatic HMR.
+- id: hmr
+  disabled: true

@@ -321,11 +321,12 @@ check('legacy findings are visibly unverified', live.includes('待验证'))
 withTeam({
   challenge: { ...baseTeam.challenge, flagFormat: null, environmentId: 'env-ctf2' },
   findings: [{ ...baseTeam.findings[0], evidenceKind: 'raw_output', confidence: 'high', evidence: 'xxd 附件.bin', verifications: [{ by: 'captain', method: 'independent xxd', result: 'confirmed', ts: Date.now() }] }],
-  flags: [{ ...baseTeam.flags[0], status: 'verified', verifiedFlag: 'CTF2{EaSyRe}', formatWarning: 'Observed wrapper: CTF2' }],
+  flags: [{ ...baseTeam.flags[0], status: 'verified', verifiedFlag: 'CTF2{EaSyRe}', formatWarning: 'Observed wrapper: CTF2', sources: [{kind:'writeup',url:'https://example.org/event/ch1',submittedBy:'agent-1',ts:1}] }],
 })
 await settle()
 const evidenceView = textOf(render()).join(' ')
 check('UI distinguishes registered flag, accepted flag and advisory warning', evidenceView.includes('登记原文') && evidenceView.includes('平台接受') && evidenceView.includes('CTF2{EaSyRe}') && evidenceView.includes('格式警告'))
+check('UI displays provenance as unverified rather than a domain trust score', evidenceView.includes('未复核来源') && evidenceView.includes('https://example.org/event/ch1'))
 check('UI shows evidence verification and platform environment', evidenceView.includes('confirmed') && evidenceView.includes('raw_output') && evidenceView.includes('xxd 附件.bin') && evidenceView.includes('以平台为准') && evidenceView.includes('env-ctf2'))
 withTeam({})
 await settle()

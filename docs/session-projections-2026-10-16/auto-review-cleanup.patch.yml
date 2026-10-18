@@ -1,0 +1,9 @@
+# Apply only while DSH is completely exited. Copy the two compiled compatibility
+# files into a stable machine-local directory first; replace the path below.
+# This replaces the entry with a wrapper around the SAME audited upstream reviewer.
+- id: auto-review
+  name: '@deepseek-ai/dsh-experimental-auto-review'
+  disabled: true
+- insert:
+    - id: ctf-auto-review-cleanup-compat
+      name: 'file:///C:/Users/MetaVi/.dsh/compat/ctf-auto-review-cleanup-rc2-20261016/auto-review-cleanup.js'

@@ -1,0 +1,86 @@
+{
+  "host": "0.2.1-rc.2",
+  "artifactSha256": "47391e58fe32e5c9473dfb4bce39345bce16fee460462187dacb0536fa5cbfad",
+  "buildPassed": true,
+  "fullVerifyPassed": true,
+  "exactRuntimePassed": true,
+  "runtimeScenarios": [
+    {
+      "name": "lifecycle",
+      "passed": true
+    },
+    {
+      "name": "lifecycle-cold-restore",
+      "passed": true
+    },
+    {
+      "name": "fallback",
+      "passed": true
+    },
+    {
+      "name": "fallback-cold-restore",
+      "passed": true
+    },
+    {
+      "name": "failure",
+      "passed": true
+    },
+    {
+      "name": "captain-idle-wakeup",
+      "passed": true
+    },
+    {
+      "name": "progressive-entry",
+      "passed": true
+    },
+    {
+      "name": "web-approval",
+      "passed": true
+    },
+    {
+      "name": "protocol-compatibility",
+      "passed": true
+    },
+    {
+      "name": "stability",
+      "passed": true
+    },
+    {
+      "name": "ctf2-regression",
+      "passed": true
+    }
+  ],
+  "native": {
+    "freshHost": {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "boots": 2,
+      "successfulTools": 36,
+      "reviewRequests": 38
+    },
+    "oldHost": {
+      "version": "0.2.0-rc.2",
+      "passed": true,
+      "boots": 2
+    }
+  },
+  "loadingRange": ">=0.2.1-0 <0.3.0-0",
+  "futureVersionsBehaviorTested": false,
+  "futureVersionGateTested": true,
+  "desktopInstalled": true,
+  "desktopRestarted": true,
+  "desktopComposedPresetPresent": true,
+  "desktopGuiNewSessionConfirmed": true,
+  "permissionsConfigChanged": false,
+  "upstreamReviewPolicyChanged": false,
+  "teamResumed": false,
+  "pushed": false,
+  "published": false,
+  "unverified": [
+    "Real model/provider APIs",
+    "Platform write operations",
+    "Other operating systems",
+    "Behavior on future untested host versions"
+  ],
+  "guiConfirmation": "用户确认：已能创建并正常回复（rc.2 通用兼容包）"
+}

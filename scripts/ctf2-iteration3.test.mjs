@@ -110,4 +110,9 @@ test('real CLI forwards every pair, filters solved entries, and exits nonzero wi
     assert.match(result.stderr, /ctf2 error:/)
   }
   assert.equal(requests.filter(request => request.params.name === 'ctf2_submit_flag').length, 1)
+  const scan = await run(['scan-unsolved', 'practice_ground_id=g', 'category=CRYPTO', 'max_pages=1', 'limit=5'])
+  assert.equal(scan.code, 2, 'unknown status produces an explicit partial scan')
+  assert.equal(JSON.parse(scan.stdout).items[0].id, 'todo')
+  assert.match(scan.stderr, /partial/)
+  assert.deepEqual(requests.at(-1).params.arguments, {practice_ground_id:'g',category:'CRYPTO',limit:5,unsolved_only:false,page:1})
 })

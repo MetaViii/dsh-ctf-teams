@@ -34,8 +34,8 @@
         plugins:
           # ── identity ─────────────────────────────────────────────────────
           # The mode's own persona, shadowing the deployment default for this
-          # agent. `{{model}}` and `{{cwd}}` resolve from the agent's own route
-          # and workspace.
+          # agent. Modern hosts supply the directory through their required
+          # working-directory context; older hosts still expose {{cwd}}.
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
@@ -50,7 +50,7 @@
                 Preserve the flag's original wrapper and letter case; only an
                 actual platform verdict confirms a solve. Findings remain claims
                 until independently checked and recorded by the captain.
-              suffix: Your working directory is {{cwd}}.
+              suffix: !!js "ctx.get('workingDirectory') ? '' : 'Your working directory is {{cwd}}.'"
 
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
@@ -58,6 +58,9 @@
               maxBytes: 65536
 
           # ── shell ────────────────────────────────────────────────────────
+          # Windows keeps the host's PowerShell executor. A composed dsh-ops
+          # supplies ops_bash through its independent, confined Bash executor;
+          # enabling tool-bash here would send Bash text to ctx.shell (PowerShell).
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
             disabled: !!js process.platform === 'win32'

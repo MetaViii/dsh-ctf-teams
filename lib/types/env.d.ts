@@ -50,7 +50,7 @@ export interface ToolStatus {
     name: string;
     category: ToolSpec['category'];
     summary: string;
-    status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual';
+    status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual' | 'unknown';
     version?: string;
     /** Where the binary was found (`which`/`where` line), for binaries. */
     path?: string;
@@ -80,6 +80,8 @@ export type CommandRunner = (argv: readonly string[], timeoutMs: number) => Prom
     stderr: string;
     error?: string;
 }>;
+/** WSL's Windows launcher may emit UTF-16LE even when invoked from Node. */
+export declare function decodeCommandOutput(argv: readonly string[], bytes: Buffer): string;
 /** Default runner: argv-spawn (never a shell), bounded by the timeout. */
 export declare const defaultCommandRunner: CommandRunner;
 /** The curated managed-tool registry. Names are the stable tool API. */
@@ -105,6 +107,8 @@ export declare function detectTools(options?: {
     timeoutMs?: number;
     python?: string;
     specs?: readonly ToolSpec[];
+    platform?: NodeJS.Platform;
+    concurrency?: number;
 }): Promise<ToolStatus[]>;
 /** Execute an install plan sequentially; re-probe installed tools afterwards. */
 export declare function runInstallPlan(steps: readonly InstallStep[], options?: {

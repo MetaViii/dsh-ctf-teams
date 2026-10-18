@@ -9,9 +9,13 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm';
+import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm';
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session';
 type Setup = (childCtx: Context, child: Agent) => () => void;
+/** rc.1 unifies foreground/background starts; CTF owns result reporting. */
+export declare function startMemberContinuable(runtime: Context['subagents'], spec: Parameters<Context['subagents']['startContinuable']>[0]): ReturnType<Context['subagents']['startContinuable']>;
+/** Wait for exact owned child handles to release on both supported API generations. */
+export declare function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: SessionId[]): Promise<void>;
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
         'ctf-teams': {
@@ -19,6 +23,14 @@ declare module '@deepseek-ai/dsh-llm' {
         };
     }
 }
+/** Adapted from AgentTeams 1094b84 (#160): older stored formats reject custom source kinds. */
+export declare function ctfTeamsSource(modern: {
+    readonly kind: 'ctf-teams';
+} | {
+    readonly kind: 'ctf-teams-command';
+    readonly goal?: string;
+    readonly profile?: string;
+}, formatVersion?: number | undefined): MessageSource;
 /**
  * 0.1.6 moved startup admission to serial agent/created. Older created events
  * have no source and precede session-start; ignore those until the old hook.

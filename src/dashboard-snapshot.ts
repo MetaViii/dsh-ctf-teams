@@ -31,6 +31,7 @@ import { dashboardInputFromTeam, nextStepHint } from './dashboard.ts'
 import { availabilityLabel, memberAvailable } from './availability.ts'
 import { batchProgress } from './findings.ts'
 import { dispatchState } from './task-admission.ts'
+import { memberRouteDiagnostics } from './model-routes.ts'
 import { directoryUsage } from './state.ts'
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts'
 
@@ -42,6 +43,7 @@ export interface DashboardMemberRow {
   provider: string
   model: string
   reasoningEffort: string
+  routeDiagnostics?: ReturnType<typeof memberRouteDiagnostics>
   status: string
   availability?: string
   /** `working` | `idle` | `ready` | `unspawned` | `removed`. */
@@ -221,6 +223,7 @@ export async function assembleDashboardTeam(
       provider: member.provider ?? '',
       model: member.model ?? '',
       reasoningEffort: member.reasoningEffort ?? '',
+      routeDiagnostics: memberRouteDiagnostics(ctx, team, member, options.archived === true),
       status: member.status,
       availability: availabilityLabel(member),
       activity: live,

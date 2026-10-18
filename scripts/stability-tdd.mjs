@@ -142,3 +142,17 @@ await test('member-relative delegation limit covers raw runtime calls and preser
   await h.ctx.subagents.start('spawn', { parent: captain })
   assert.deepEqual(created, ['captain'])
 })
+
+await test('preset-era activation obeys the delegation limit without inventing removed methods', async t => {
+  const h = await fixture(t), handles = new Map(), created = []
+  const captain = { id: 'captain', session: { header: { cwd: h.workspace }, ownEvents: () => [] } }
+  const worker = { id: 'worker', session: { header: { cwd: h.workspace, parentSession: 'captain' }, ownEvents: () => [{ type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: 'ctf-teams:team:worker' } }] } }
+  handles.set('captain', captain); handles.set('worker', worker)
+  h.ctx.agents = { get: id => handles.get(id) }
+  h.ctx.subagents = { async startActivation(spec) { created.push(spec.request.parent.id) } }
+  installMemberDelegationGuard(h.ctx, '.ctf-teams', 0)
+  assert.equal(h.ctx.subagents.start, undefined); assert.equal(h.ctx.subagents.startContinuable, undefined)
+  await assert.rejects(h.ctx.subagents.startActivation({ request: { parent: worker } }), /delegation limit/)
+  await h.ctx.subagents.startActivation({ request: { parent: captain } })
+  assert.deepEqual(created, ['captain'])
+})

@@ -5,7 +5,7 @@ The grab-bag lane: encoding towers, OSINT, esoteric formats, puzzle logic.
 ## OCR 歧义与二进制解码
 
 保留原图及原始识别结果。先用 `ctf_teams_image_to_text` 提取候选；存在
-`0/O`、`1/I/l`、`5/S`、`@/?` 歧义时，可显式调用
+`0/O`、`1/I/l`、`5/S`、`2/Z`、`@/?` 歧义时，可显式调用
 `ctf_teams_text_candidates({text:"...",max_candidates:32,decode_base64:true})`。
 它按替换次数从少到多枚举，保留原文为第一项；最多返回 128 项，并显示总组合数与
 `truncated`。达到上限后应根据图像、校验和或格式缩小范围，不做无界笛卡尔积。

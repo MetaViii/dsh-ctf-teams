@@ -66,6 +66,8 @@ export type StagedPlanMutation = {
     description?: string | null;
     assignee?: string | null;
     dependencies: string[];
+    preflight?: string[];
+    preflightFindingId?: string | null;
 } | {
     action: 'add_task';
     subject: string;

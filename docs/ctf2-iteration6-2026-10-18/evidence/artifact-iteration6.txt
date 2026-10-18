@@ -1,0 +1,15 @@
+✔ WSL discovery does not boot an implicit distribution and preserves Unicode names (1.372ms)
+✔ WSL uses Linux platform and interpreter, argv boundaries, and operation self-tests (0.9026ms)
+✔ WSL startup and discovery failures never masquerade as missing tools (0.6305ms)
+✔ concurrent WSL checks serialize launchers across lanes and keep catalog order (556.5303ms)
+✔ probe transport failures and missing interpreter never become missing-library/install claims (0.6789ms)
+✔ native runner retains split UTF-8 output and bounds command time (124.8038ms)
+✔ CLI atomic cache preserves old bytes on protocol/business/partial/write failures (898.0812ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1661.221

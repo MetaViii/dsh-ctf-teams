@@ -1,0 +1,78 @@
+{
+  "startedDate": "2026-10-15",
+  "completedDate": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "localOnly": true,
+  "committed": false,
+  "pushed": false,
+  "published": false,
+  "installedIntoDesktop": false,
+  "pluginVersion": "0.1.29",
+  "upstream": {
+    "repository": "https://github.com/NanmiCoder/dsh-agent-teams",
+    "commit": "1094b84add6f2fb19edf659367fe2fd5f7f14154",
+    "version": "0.1.23",
+    "adopted": ["legacy session message-source vocabulary compatibility (#160), adapted to CTFTeams identity"],
+    "review": "upstream-review.md",
+    "fullMerge": false
+  },
+  "artifact": {
+    "path": "E:\\dsh-ctf-teams-main\\dsh-ctf-teams-iteration5-0.1.29.tgz",
+    "sha256": "ff63a9d523db3b0ef1c0b9d4bf9de89eec048ef93cdfeb7ef8fb175264d4f864",
+    "matchesNativeReport": true
+  },
+  "checks": [
+    {
+      "command": "pnpm build",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "command": "node --test scripts/ctf2-iteration5.test.mjs",
+      "passed": true,
+      "tests": 7,
+      "initialRedCases": 3,
+      "coverage": ["structured/text business failures", "JSON and multiline SSE proxy transport", "CLI nonzero exit with empty success stdout", "read-only legacy MCP probe", "unrelated HTTP service rejected", "source format boundaries", "live/saved/captain routes and unavailable live headers"]
+    },
+    {
+      "command": "pnpm verify",
+      "passed": true,
+      "exitCode": 0,
+      "evidence": "evidence/full-verify.txt",
+      "coverage": ["atomic pending preflight replacement and clearing", "omitted fields preserved", "invalid batch rollback", "started attempt edits rejected", "active member read-only refresh", "retired member denied", "lossless Code Mode status", "existing completed/paused idle-loop regression"],
+      "repairDuringVerification": "Route diagnostics initially hid dashboard rows when a live Agent lacked a readable request header. The read-only enrichment now returns unknown; dashboard and full verification passed after correction."
+    },
+    {
+      "command": "node scripts/ctf2-harness-smoke.mjs --artifact ./dsh-ctf-teams-iteration5-0.1.29.tgz --all-scenarios",
+      "passed": true,
+      "exitCode": 0,
+      "hostVersion": "0.2.0-rc.2",
+      "cohortCount": 278,
+      "scenarios": 11,
+      "evidence": "evidence/harness-package.json",
+      "newCodeModeChecks": ["preflight edit and clear through real tools bridge", "nested route diagnostics survive structured serialization"]
+    },
+    {
+      "command": "node scripts/windows-shell-smoke.mjs --ops-root C:/Users/MetaVi/.dsh/profiles/desktop/node_modules/dsh-ops --artifact ./dsh-ctf-teams-iteration5-0.1.29.tgz",
+      "passed": true,
+      "exitCode": 0,
+      "hostVersion": "0.2.0-rc.2",
+      "opsVersion": "0.3.0",
+      "tools": ["pwsh", "ops_bash"],
+      "permissionModes": ["workspace-write", "read-only", "danger-full-access"],
+      "evidence": "evidence/windows-shell-package.json"
+    },
+    {
+      "command": "git diff --check",
+      "passed": true,
+      "exitCode": 0
+    }
+  ],
+  "limits": [
+    "Deterministic model and local platform response fixtures; no live model credentials or platform mutations were used.",
+    "Legacy source-version branches have regression coverage; this iteration did not rerun the full historical eight-host matrix or rewrite stored sessions.",
+    "Package loading and native shells were tested; an interactive Electron installation was not performed for this candidate.",
+    "Known top-level business errors are recognized; arbitrary future platform error codes and historical third-party caches remain outside this fix.",
+    "No automatic provider synchronization, wrapper submissions, task-terminal-state expansion, historical flag reconstruction or file cleanup was introduced."
+  ]
+}

@@ -66,6 +66,8 @@ for (const scenario of selectedScenarios) {
   disabled: true
 - id: headless-runner
   disabled: true
+- id: credentials
+  disabled: false
 - insert:
     - id: runtime-lab-webserver
       name: '@deepseek-ai/dsh-host-webserver'
@@ -144,7 +146,7 @@ for (const scenario of selectedScenarios) {
         continue;
     }
     if (scenario === 'stability') {
-        const checks = ['lazy-start', 'running-plan-correction', 'steering', 'read-receipt-continuation', 'reassign', 'archive', 'batch-plan', 'terminal-evidence', 'report-retry', 'settlement-dedup'];
+        const checks = ['lazy-start', 'running-plan-correction', 'steering', 'read-receipt-continuation', 'reassign', 'archive', 'batch-plan', 'terminal-evidence', 'report-retry', 'settlement-dedup', 'solved-quiescence', 'paused-quiescence'];
         const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('STABILITY_OK'), ...Object.fromEntries(checks.map(check => [check, trace.some(x => x.event === `stability-${check}-passed`)])) };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, evidence: trace.filter(x => checks.some(check => x.event === `stability-${check}-passed`)), exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
         continue;

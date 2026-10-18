@@ -19,18 +19,19 @@ export function taskBlockReason(team: TeamState, task: TeamTask, now = Date.now(
   }
   for (const raw of task.preflight ?? []) {
     const check = checks[raw]
+    if (!check) return `${raw}: unknown preflight; ask the captain to repair the pending task with edit_plan`
     if (check === 'offline_verified') {
       const finding = team.findings?.find(f => f.id === task.preflightFindingId)
-      if (finding?.verifications?.at(-1)?.result !== 'confirmed') return 'offline preflight needs a captain-confirmed finding with reproducible self-test output'
+      if (finding?.verifications?.at(-1)?.result !== 'confirmed') return `${raw}: offline preflight needs a captain-confirmed finding with reproducible self-test output`
       continue
     }
     const snapshot = team.platformSnapshot
-    if (!snapshot || now - snapshot.checkedAt > 60_000) return 'platform preflight missing/stale; run ctf_teams_platform_check (read-only)'
-    if (check !== 'environment_free' && snapshot.challengeId !== task.challengeId) return 'platform preflight belongs to another challenge; refresh this task challenge'
-    if (check === 'environment_free' && snapshot.activeEnvironments !== 0) return `environment slot not free (active=${snapshot.activeEnvironments ?? 'unknown'})`
-    if (check === 'challenge_unsolved' && snapshot.isSolved !== false) return `challenge already solved or status unknown (${snapshot.isSolved ?? 'unknown'})`
-    if (check === 'access_ready' && snapshot.accessReady !== true) return 'environment access is not confirmed ready'
-    if (check === 'target_running' && snapshot.targetRunning !== true) return 'target is not confirmed running'
+    if (!snapshot || now - snapshot.checkedAt > 60_000) return `${raw}: platform preflight missing/stale; run ctf_teams_platform_check (read-only)`
+    if (check !== 'environment_free' && snapshot.challengeId !== task.challengeId) return `${raw}: platform preflight belongs to another challenge; refresh this task challenge`
+    if (check === 'environment_free' && snapshot.activeEnvironments !== 0) return `${raw}: environment slot not free (active=${snapshot.activeEnvironments ?? 'unknown'})`
+    if (check === 'challenge_unsolved' && snapshot.isSolved !== false) return `${raw}: challenge already solved or status unknown (${snapshot.isSolved ?? 'unknown'})`
+    if (check === 'access_ready' && snapshot.accessReady !== true) return `${raw}: environment access is not confirmed ready`
+    if (check === 'target_running' && snapshot.targetRunning !== true) return `${raw}: target is not confirmed running`
   }
   return undefined
 }

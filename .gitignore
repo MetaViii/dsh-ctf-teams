@@ -17,6 +17,7 @@ blind*.py
 .ctf2-agent/
 
 # Build artifacts and ad-hoc archives.
+tmp/
 *.tgz
 *.zip
 __pycache__/

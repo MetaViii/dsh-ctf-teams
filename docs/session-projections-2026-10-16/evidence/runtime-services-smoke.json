@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "exit": 0,
+  "timedOut": false,
+  "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-runtime-services-SPE7b7",
+  "hostVersion": "0.2.0-rc.2",
+  "result": {
+    "passed": true,
+    "hmrDisabled": true,
+    "configEdits": 2,
+    "requests": 22,
+    "rounds": [
+      {
+        "round": 0,
+        "model": "first",
+        "tools": [
+          "ctf_teams_create",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      },
+      {
+        "round": 1,
+        "model": "second",
+        "tools": [
+          "runtime_config_probe",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      },
+      {
+        "round": 2,
+        "model": "first",
+        "tools": [
+          "runtime_config_probe",
+          "get_goal",
+          "write",
+          "read",
+          "pwsh",
+          "ctf_teams_status"
+        ],
+        "passed": true
+      }
+    ]
+  },
+  "limits": [
+    "Deterministic LLM; does not reproduce the unknown race from the original outage.",
+    "No interactive Electron operations or provider authentication were exercised."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "version": "0.2.1-rc.1",
+  "runtimeSource": "E:\\dsh-ctf-teams-main\\tmp\\0.2.0rc2-to-0.2.1rc1\\b",
+  "artifactSha256": "d1f7ba03864e918a06380e44a2553d4d02f11b033ecea33b5a35695f9ecc77aa",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "runs": [
+    {
+      "scenario": "progressive-entry",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "allEntries": true,
+        "stablePrefixes": true,
+        "thirtyOrdinaryTurns": true
+      },
+      "cases": [
+        "natural",
+        "natural-zh",
+        "raw-slash",
+        "command",
+        "profile-command",
+        "profile-raw"
+      ],
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ],
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model/provider APIs",
+    "Online platform submissions",
+    "Other operating systems",
+    "Live user-data migration"
+  ]
+}

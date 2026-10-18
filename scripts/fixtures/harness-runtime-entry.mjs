@@ -76,7 +76,7 @@ export function apply(ctx) {
             assert.equal(requests[1].called[0], 'ctf_teams_create');
             assert.ok(requests.every(request => !request.toolNames.includes('ctf_teams_open')));
             assert.equal(requests[1].toolNames.filter(n => n.startsWith('ctf_teams_')).length, TEAM_TOOL_NAMES.length);
-            if (input.startsWith('/')) assert.match(requests[0].userText, /Inspect existing team state with ctf_teams_status/);
+            if (input.startsWith('/')) assert.match(requests[0].userMessages.join('\n'), /Inspect existing team state with ctf_teams_status/);
             assert.equal((await teamNames(ordinary.agent)).length, TEAM_TOOL_NAMES.length);
             await measure(agent, label.startsWith('profile') ? 'captain-profile' : 'captain');
             await send(agent, 'REOPEN_ENTRY: inspect the existing CTFTeams plan.');

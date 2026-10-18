@@ -12,13 +12,26 @@ let diagnostic = '';
 try { await tools.ctf_teams_create({name:'bad-plan',plan:{members:[{name:'x',extra:'invalid'}],tasks:[{description:'中文'.repeat(1000)}]}}); }
 catch (error) { diagnostic = error.message; }
 if (!diagnostic.includes('Missing fields: plan.tasks[0].id, plan.tasks[0].subject') || !diagnostic.includes('Undeclared fields') || diagnostic.includes('missing required property "plan.tasks"')) throw Error('misleading plan diagnostics: '+diagnostic);
-const staged = await tools.ctf_teams_create({name:'ctf2-batch',approval:'required',plan:{members:[{name:'worker',executionPrompt:'Check raw bytes and preserve case'}],tasks:[{id:'recon',subject:'中文附件侦察',assignee:'worker'}]}});
+const staged = await tools.ctf_teams_create({name:'ctf2-batch',challenge_mode:'batch',approval:'required',plan:{members:[{name:'worker',executionPrompt:'Check raw bytes and preserve case'}],tasks:[{id:'recon',subject:'中文附件侦察',assignee:'worker'}]}});
+if (staged.challenge_mode !== 'batch' || !(await tools.ctf_teams_status({})).ctf.challenge.multiChallenge) throw Error('batch creation not persisted before dispatch');
+const guarded = await tools.ctf_teams_create_task({subject:'repair preflight through Code Mode',challenge_id:'gate-fixture',preflight:['access_ready']});
+await tools.ctf_teams_edit_plan({operations:[{action:'update_task',task_id:guarded.task_id,preflight:[],preflight_finding_id:''}]});
+const repairedPlan = await tools.ctf_teams_status({});
+if (repairedPlan.tasks.find(task=>task.id===guarded.task_id).preflight.length !== 0 || !repairedPlan.members[0].route_diagnostics.saved_route.model) throw Error('preflight edit or route diagnostics lost through Code Mode');
+let missingChallenge = false;
+try { await tools.ctf_teams_submit_flag({flag:'flag{unscoped}'}); } catch { missingChallenge = true; }
+if (!missingChallenge) throw Error('batch candidate without challenge_id accepted');
 await tools.ctf_teams_create({name:'ctf2-empty',approval:'required',replaceExisting:true});
 if ((await tools.ctf_teams_status({})).loop_state !== 'planning') throw Error('captain-planned empty graph incorrectly blocked');
 const solo = await tools.ctf_teams_create({name:'ctf2-solo',mode:'solo',replaceExisting:true});
 if (!solo.archived_path || solo.mode !== 'solo') throw Error('solo replacement failed');
 const soloStatus = await tools.ctf_teams_status({});
 if (soloStatus.loop_state !== 'running') throw Error('solo graph incorrectly blocked');
+const inspected = await tools.ctf_teams_env({action:'check',runtime:'local',tools:['python3','not-a-tool']});
+if (inspected.runtime !== 'local' || inspected.runtime_ready !== true || inspected.statuses.length !== 1 || inspected.unknown[0] !== 'not-a-tool' || !inspected.probe_platform || !inspected.python) throw Error('environment runtime report lost through Code Mode');
+let wslInstallDenied = false;
+try { await tools.ctf_teams_env({action:'install',runtime:'wsl',distribution:'kali-linux',tools:['sage']}); } catch { wslInstallDenied = true; }
+if (!wslInstallDenied) throw Error('WSL inspection must not install packages on the local host');
 const synced = await tools.ctf_teams_sync({inbox_limit:1});
 if (!Array.isArray(synced.inbox) || synced.inbox_remaining !== 0) throw Error('sync inbox schema failed');
 const textVariants = await tools.ctf_teams_text_candidates({text:'01S@',max_candidates:7,decode_base64:true});
@@ -26,7 +39,7 @@ if (textVariants.candidates.length !== 7 || textVariants.candidates[0].text !== 
 await tools.ctf_teams_set_challenge({title:'中文题目',remote:'http://ctf.local',environment_id:'env-ctf2',flag_format:'flag\\\\{[^}]+\\\\}'});
 const finding = await tools.ctf_teams_report_finding({content:'文件原始字节: EaSyRe',evidence_kind:'raw_output',confidence:'high',evidence:'xxd attachment.bin'});
 await tools.ctf_teams_verify_finding({finding_id:finding.finding_id,method:'independent byte check',result:'confirmed',note:'大小写一致'});
-const flag = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',evidence:'attachment bytes'});
+const flag = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',evidence:'attachment bytes',source_kind:'local_output'});
 if (!flag.format_warning || !flag.flag_ref) throw Error('original wrapper was not retained with a warning');
 const duplicate = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}'});
 if (!duplicate.duplicate || duplicate.flag_ref !== flag.flag_ref) throw Error('unstable flag reference');
@@ -35,7 +48,8 @@ await tools.ctf_teams_set_challenge({flag_format:null});
 const verdict = await tools.ctf_teams_mark_flag({flag_id:flag.flag_ref,flag:flag.flag,team_id:solo.team_id,verdict:'verified',note:'fixture platform accepted'});
 if (!verdict.solved || verdict.verified_flag !== 'CTF2{EaSyRe}') throw Error('platform verdict failed');
 await tools.ctf_teams_set_challenge({multi_challenge:true,expected_challenges:2,requires_running_target_for_submit:true});
-const nested = await tools.ctf_teams_submit_flag({flag:'flag{GWHT{aA01}}',challenge_id:'ch1',generate_variants:true,evidence:'nested output'});
+const nested = await tools.ctf_teams_submit_flag({flag:'flag{GWHT{aA01}}',challenge_id:'ch1',generate_variants:true,evidence:'nested output',source_kind:'writeup',source_url:'https://example.org/event/ch1'});
+if (nested.challenge_id !== 'ch1' || !nested.source_summary.includes('example.org/event/ch1')) throw Error('candidate attribution absent from tool response');
 if (nested.variants.length !== 2 || !nested.environment_warning) throw Error('variant/environment fallback failed');
 await tools.ctf_teams_mark_flag({flag_id:nested.flag_ref,verdict:'rejected',note:'fixture platform rejected outer wrapper'});
 const inner = await tools.ctf_teams_mark_flag({flag_id:nested.variants[0].split(' ')[0],verdict:'verified',note:'fixture platform accepted inner'});
@@ -104,10 +118,12 @@ export function apply(ctx) {
     assert.equal(archived.challenge.environmentId, 'env-ctf2')
     assert.equal(archived.flags[0].flag, 'CTF2{EaSyRe}')
     assert.equal(archived.flags[0].verifiedFlag, 'CTF2{EaSyRe}')
+    assert.equal(archived.flags[0].sources[0].kind, 'local_output')
     assert.equal(archived.findings[0].verifications[0].result, 'confirmed')
     assert.deepEqual(archived.members, [])
     assert.deepEqual(archived.tasks, [])
     const batch = JSON.parse(readFileSync(join(cwd, '.ctf-teams/archive/ctf2-batch/team.json'), 'utf8'))
+    assert.equal(batch.challenge.multiChallenge, true)
     assert.equal(batch.members[0].executionPrompt, 'Check raw bytes and preserve case')
     assert.equal(batch.tasks[0].subject, '中文附件侦察')
     appendFileSync(process.env.LAB_TRACE, JSON.stringify({ event: 'ctf2-regression-passed', captain: agent.id }) + '\n')

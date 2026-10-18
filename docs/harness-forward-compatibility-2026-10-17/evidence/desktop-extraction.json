@@ -1,0 +1,44 @@
+{
+  "archive": "E:/DSH/desktop/resources/app.asar",
+  "output": "E:\\dsh-ctf-teams-main\\tmp\\0.2.1rc1-to-0.2.1rc2\\b",
+  "version": "0.2.1-rc.2",
+  "files": 17262,
+  "unpacked": 1583,
+  "entryComparisons": [
+    {
+      "name": "dsh-app-boot",
+      "identical": true,
+      "sha256": "5135179ac810e4f626f32ec3bdc3293dc7d2028e8aa92e5e0c006f1a33b78e76"
+    },
+    {
+      "name": "dsh-agent-preset",
+      "identical": true,
+      "sha256": "23cd2dd62ac3b27522a2d377e14b5a93f80c2189e733937dcdd02b73a6d3d1da"
+    },
+    {
+      "name": "dsh-subagent",
+      "identical": true,
+      "sha256": "9a9572e70fffdb100deb63326167f32bbf63016ce49c0017495dabcb95b44168"
+    },
+    {
+      "name": "dsh-experimental-auto-review",
+      "identical": true,
+      "sha256": "14b0fec944f734a888468b75ee9d7ae121383f018ce5bf76c4506393a910787f"
+    },
+    {
+      "name": "dsh-system-prompt",
+      "identical": true,
+      "sha256": "7be9f7aafbf345d01ddcc12fd297b16e9a1d41283a6a04073b867becca0bf020"
+    },
+    {
+      "name": "dsh-tools",
+      "identical": true,
+      "sha256": "1e53932e7c4213ea24a7d87f06960b7a7702cb21f8a5741c97242b4a470a442a"
+    },
+    {
+      "name": "cordis",
+      "identical": true,
+      "sha256": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e"
+    }
+  ]
+}

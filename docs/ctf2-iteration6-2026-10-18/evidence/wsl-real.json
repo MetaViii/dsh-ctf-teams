@@ -1,0 +1,71 @@
+{
+  "elapsedMs": 31121,
+  "runtime": "wsl",
+  "host_platform": "win32",
+  "probe_platform": "linux",
+  "runtime_ready": true,
+  "python": "python3",
+  "statuses": [
+    {
+      "name": "python3",
+      "category": "misc",
+      "summary": "the Python interpreter every script lane builds on",
+      "status": "ok",
+      "version": "3.14.6",
+      "path": "/usr/bin/python3",
+      "installHint": "installed"
+    },
+    {
+      "name": "pycryptodome",
+      "category": "crypto",
+      "summary": "AES primitives with an actual encrypt/decrypt self-test (Crypto namespace)",
+      "status": "unknown",
+      "installHint": "Python probe did not run reliably; module presence is unknown: timed out after 10000ms"
+    },
+    {
+      "name": "strace",
+      "category": "binary",
+      "summary": "syscall tracing; protocol and anti-debug discovery",
+      "status": "unknown",
+      "installHint": "Binary lookup failed; presence is unknown: timed out after 10000ms"
+    },
+    {
+      "name": "sqlmap",
+      "category": "web",
+      "summary": "SQL injection automation for confirmed injection points",
+      "status": "unknown",
+      "installHint": "Binary lookup failed; presence is unknown: timed out after 10000ms"
+    },
+    {
+      "name": "exiftool",
+      "category": "forensics",
+      "summary": "metadata extraction from anything",
+      "status": "ok",
+      "version": "13.00",
+      "path": "/usr/bin/exiftool",
+      "installHint": "installed"
+    },
+    {
+      "name": "7z",
+      "category": "forensics",
+      "summary": "archive handling for odd/encrypted containers",
+      "status": "ok",
+      "path": "/usr/bin/7z",
+      "installHint": "installed"
+    },
+    {
+      "name": "sage",
+      "category": "crypto",
+      "summary": "SageMath: elliptic curves, lattices, Coppersmith",
+      "status": "missing",
+      "installHint": "manual: apt install sagemath (large) — or `pip install sagemath-standard` / conda-forge sagemath; see knowledge topic sage-math"
+    }
+  ],
+  "unknown": [],
+  "available_distributions": [
+    "kali-linux",
+    "docker-desktop"
+  ],
+  "distribution": "kali-linux",
+  "search_path": "/home/matavi/.local/bin:/home/matavi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+}

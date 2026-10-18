@@ -1,0 +1,357 @@
+{
+  "passed": true,
+  "version": "0.2.1-rc.2",
+  "runtimeSource": "E:\\dsh-ctf-teams-main\\tmp\\0.2.1rc1-to-0.2.1rc2\\b",
+  "artifactSha256": "8b1253e5abd77a19d05148df474e74cc81d56cee31c1863bb29f017c069f2651",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "runs": [
+    {
+      "scenario": "lifecycle",
+      "passed": true,
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "pluginToolsVisible": true,
+        "memberExecuted": true,
+        "explicitReasoning": true,
+        "taskTerminal": true,
+        "secondWake": true,
+        "fifoMessageOrder": true,
+        "messagesSentWhileBusy": true
+      },
+      "requests": 15,
+      "memberRequests": 6
+    },
+    {
+      "scenario": "lifecycle-cold-restore",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "driverCompleted": true,
+        "sameMemberRestored": true,
+        "routeRestored": true,
+        "reasoningRestored": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "fallback",
+      "passed": true,
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "pluginToolsVisible": true,
+        "memberExecuted": true,
+        "explicitReasoning": true,
+        "taskTerminal": true,
+        "secondWake": true,
+        "fallbackActivated": true,
+        "fallbackReasoningReset": true
+      },
+      "requests": 14,
+      "memberRequests": 7
+    },
+    {
+      "scenario": "fallback-cold-restore",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "driverCompleted": true,
+        "sameMemberRestored": true,
+        "routeRestored": true,
+        "reasoningRestored": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "failure",
+      "passed": true,
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "pluginToolsVisible": true,
+        "memberExecuted": true,
+        "explicitReasoning": true,
+        "taskTerminal": true,
+        "configurationRetainsOwner": true,
+        "routeRepairContinuesSameTask": true,
+        "noConfigurationRetryLoop": true
+      },
+      "requests": 14,
+      "memberRequests": 6
+    },
+    {
+      "scenario": "captain-idle-wakeup",
+      "passed": true,
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "pluginToolsVisible": true,
+        "memberExecuted": true,
+        "explicitReasoning": true,
+        "taskTerminal": true,
+        "captainActuallyYielded": true,
+        "notifiedAfterIdle": true
+      },
+      "requests": 10,
+      "memberRequests": 5
+    },
+    {
+      "scenario": "progressive-entry",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "allEntries": true,
+        "stablePrefixes": true,
+        "thirtyOrdinaryTurns": true
+      },
+      "cases": [
+        "natural",
+        "natural-zh",
+        "raw-slash",
+        "command",
+        "profile-command",
+        "profile-raw"
+      ],
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "web-approval",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "driverCompleted": true,
+        "stagedBeforeApproval": true,
+        "independentApprovalWake": true,
+        "reportWakeAfterYield": true,
+        "singleCaptainApprovalAndNoPolling": true,
+        "oneUserMessageAndHttpApproval": true,
+        "invalidTeamRejected": true,
+        "repeatApprovalRejected": true,
+        "stableCaptainHeaders": true,
+        "memberToolContract": true,
+        "taskCompleted": true
+      },
+      "evidence": {
+        "event": "web-approval-passed",
+        "sessionId": "session-f3b89a3f-27c2-46d0-a17b-a9423d87850e",
+        "teamId": "runtime-lab",
+        "memberId": "d998bf7d-414a-43d0-b7fb-faae71766a3b",
+        "taskStatus": "completed",
+        "captainRequests": 7,
+        "order": 31,
+        "time": 1792324433338
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "protocol-compatibility",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "legacyAllowlistAndColdRestore": true,
+        "legacyProfileDirectory": true,
+        "actualPtcDiscard": true,
+        "actualPruning": true,
+        "actualCompaction": true,
+        "existingPlanRevised": true,
+        "lifecycleArchived": true
+      },
+      "cases": [
+        {
+          "event": "protocol-case-passed",
+          "label": "legacy-allowlist-cold-compact",
+          "requests": 7,
+          "compactedHistory": true,
+          "persistedSubject": "Recovered task",
+          "archived": true,
+          "profile": "north"
+        },
+        {
+          "event": "protocol-case-passed",
+          "label": "ptc-discard-and-compact",
+          "requests": 9,
+          "compactedHistory": true,
+          "persistedSubject": "Recovered task",
+          "archived": true
+        }
+      ],
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "stability",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "lazy-start": true,
+        "running-plan-correction": true,
+        "steering": true,
+        "read-receipt-continuation": true,
+        "reassign": true,
+        "archive": true,
+        "batch-plan": true,
+        "terminal-evidence": true,
+        "report-retry": true,
+        "settlement-dedup": true,
+        "solved-quiescence": true,
+        "paused-quiescence": true
+      },
+      "evidence": [
+        {
+          "event": "stability-lazy-start-passed",
+          "readyRequests": 1,
+          "blockedRequests": 0,
+          "welcomeRequests": 0,
+          "time": 1792324437592
+        },
+        {
+          "event": "stability-running-plan-correction-passed",
+          "pendingEdit": true,
+          "captainCancellation": true,
+          "blockedRequests": 0,
+          "time": 1792324437683
+        },
+        {
+          "event": "stability-steering-passed",
+          "queuedMessages": 32,
+          "modelStepsUntilConsumed": 1,
+          "time": 1792324438535
+        },
+        {
+          "event": "stability-read-receipt-continuation-passed",
+          "modelContinued": true,
+          "time": 1792324438614
+        },
+        {
+          "event": "stability-reassign-passed",
+          "sameMember": true,
+          "staleInputExcluded": true,
+          "time": 1792324438813
+        },
+        {
+          "event": "stability-archive-passed",
+          "pendingMessagesCleared": 32,
+          "descendantsStopped": true,
+          "siblingPreserved": true,
+          "retiredResumeRejected": true,
+          "time": 1792324439782
+        },
+        {
+          "event": "stability-batch-plan-passed",
+          "members": 5,
+          "tasks": 6,
+          "setupToolCalls": 1,
+          "previousEquivalentToolCalls": 12,
+          "memberModelRequests": 0,
+          "time": 1792324439838
+        },
+        {
+          "event": "stability-terminal-evidence-passed",
+          "records": 1,
+          "duplicateAppend": false,
+          "originalResultPreserved": true,
+          "time": 1792324440113
+        },
+        {
+          "event": "stability-report-retry-passed",
+          "duplicateModelRequests": 0,
+          "time": 1792324440204
+        },
+        {
+          "event": "stability-settlement-dedup-passed",
+          "reportWakes": 1,
+          "duplicateModelRequests": 0,
+          "time": 1792324440220
+        },
+        {
+          "event": "stability-solved-quiescence-passed",
+          "completionDigests": 1,
+          "correctionDigests": 1,
+          "observationMs": 1000,
+          "additionalModelRequests": 0,
+          "additionalParentTurns": 0,
+          "time": 1792324442710
+        },
+        {
+          "event": "stability-paused-quiescence-passed",
+          "drained": true,
+          "observationMs": 1000,
+          "additionalModelRequests": 0,
+          "additionalParentTurns": 0,
+          "time": 1792324444017
+        }
+      ],
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "ctf2-regression",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "durableEvidence": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ],
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model/provider APIs",
+    "Online platform submissions",
+    "Other operating systems",
+    "Live user-data migration"
+  ]
+}

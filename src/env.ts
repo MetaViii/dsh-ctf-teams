@@ -17,6 +17,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { basename } from 'node:path'
 
 /** How a managed tool is probed. Absent → the tool reports its manual path. */
 export type ToolProbe =
@@ -48,7 +49,7 @@ export interface ToolStatus {
   name: string
   category: ToolSpec['category']
   summary: string
-  status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual'
+  status: 'ok' | 'missing' | 'broken' | 'unavailable' | 'manual' | 'unknown'
   version?: string
   /** Where the binary was found (`which`/`where` line), for binaries. */
   path?: string
@@ -80,6 +81,12 @@ export type CommandRunner = (
   timeoutMs: number,
 ) => Promise<{ code: number; stdout: string; stderr: string; error?: string }>
 
+/** WSL's Windows launcher may emit UTF-16LE even when invoked from Node. */
+export function decodeCommandOutput(argv: readonly string[], bytes: Buffer): string {
+  const wsl = /^wsl(?:\.exe)?$/i.test(basename(argv[0] ?? ''))
+  return bytes.toString(wsl && (bytes.includes(0) || bytes.subarray(0, 2).equals(Buffer.from([0xff, 0xfe]))) ? 'utf16le' : 'utf8').replace(/^\uFEFF/, '')
+}
+
 /** Default runner: argv-spawn (never a shell), bounded by the timeout. */
 export const defaultCommandRunner: CommandRunner = (argv, timeoutMs) => new Promise((resolve) => {
   let settled = false
@@ -90,26 +97,26 @@ export const defaultCommandRunner: CommandRunner = (argv, timeoutMs) => new Prom
   }
   let child
   try {
-    child = spawn(argv[0]!, argv.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] })
+    child = spawn(argv[0]!, argv.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   } catch (error) {
     finish({ code: -1, stdout: '', stderr: '', error: String(error) })
     return
   }
-  let stdout = ''
-  let stderr = ''
+  const stdout: Buffer[] = [], stderr: Buffer[] = []
+  const output = (): { stdout: string; stderr: string } => ({ stdout: decodeCommandOutput(argv, Buffer.concat(stdout)), stderr: decodeCommandOutput(argv, Buffer.concat(stderr)) })
   const timer = setTimeout(() => {
     child.kill()
-    finish({ code: -1, stdout, stderr, error: `timed out after ${timeoutMs}ms` })
+    finish({ code: -1, ...output(), error: `timed out after ${timeoutMs}ms` })
   }, timeoutMs)
-  child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
-  child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+  child.stdout?.on('data', (chunk: Buffer) => { stdout.push(chunk) })
+  child.stderr?.on('data', (chunk: Buffer) => { stderr.push(chunk) })
   child.on('error', (error) => {
     clearTimeout(timer)
-    finish({ code: -1, stdout, stderr, error: String(error) })
+    finish({ code: -1, ...output(), error: String(error) })
   })
   child.on('close', (code) => {
     clearTimeout(timer)
-    finish({ code: code ?? -1, stdout, stderr })
+    finish({ code: code ?? -1, ...output() })
   })
 })
 
@@ -207,22 +214,27 @@ async function probeSpec(spec: ToolSpec, runner: CommandRunner, timeoutMs: numbe
     if (unavailable) {
       return { ...base, status: 'unavailable', installHint: spec.manual ?? 'not available on this platform' }
     }
-    const lookup = await runner([binaryLookupCommand(platform), spec.probe.command], timeoutMs)
+    const command = spec.name === 'python3' ? python : spec.probe.command
+    const lookup = await runner([binaryLookupCommand(platform), command], timeoutMs)
+    if (lookup.error || ![0, 1].includes(lookup.code)) return { ...base, status: 'unknown', installHint: `Binary lookup failed; presence is unknown: ${(lookup.error || lookup.stderr || `exit ${lookup.code}`).trim().slice(-600)}` }
     const found = lookup.code === 0 && lookup.stdout.trim() !== ''
     if (!found) return { ...base, status: 'missing', installHint: installHintOf(spec, platform) }
     const path = lookup.stdout.split(/\r?\n/).find((line) => line.trim() !== '')
     let version: string | undefined
     if (spec.probe.args !== undefined) {
-      const probe = await runner([spec.probe.command, ...spec.probe.args], timeoutMs)
+      const probe = await runner([command, ...spec.probe.args], timeoutMs)
+      if (probe.error || probe.code < 0) return { ...base, status: 'unknown', path, installHint: `Binary found at ${path}; version probe failed: ${(probe.error || probe.stderr).trim().slice(-600)}` }
       version = firstMatch(`${probe.stdout}\n${probe.stderr}`, spec.probe.versionRe)
     }
     return { ...base, status: 'ok', version, path, installHint: 'installed' }
   }
   // Python import probe — works on every platform with a Python.
   const result = await runner([python, '-c', `import ${spec.probe.module}`], timeoutMs)
+  if (result.error || result.code < 0 || result.code === 127) return { ...base, status: 'unknown', installHint: `Python probe did not run reliably; module presence is unknown: ${(result.error || result.stderr || `exit ${result.code}`).trim().slice(-600)}` }
   if (result.code === 0) {
     if (spec.probe.selfTest) {
       const tested = await runner([python, '-c', spec.probe.selfTest], timeoutMs)
+      if (tested.error || tested.code < 0) return { ...base, status: 'unknown', installHint: `Import succeeded but operation self-test did not finish: ${(tested.error || tested.stderr).trim().slice(-600)}` }
       if (tested.code !== 0) return { ...base, status: 'broken', installHint: `Import succeeded, operation self-test failed: ${(tested.stderr || tested.error || tested.stdout).trim().slice(-600)}. Check env.pythonBin and isolate dependencies in a fresh environment.${spec.probe.module === 'Crypto' ? ' Probe an existing legacy pycryptodomex environment separately; do not rewrite every script or reinstall blindly.' : ''}` }
     }
     const versionProbe = await runner([python, '-c', `import ${spec.probe.module}; print(getattr(${spec.probe.module}, '__version__', ''))`], timeoutMs)
@@ -320,16 +332,22 @@ export function planInstall(
 
 /** Detect a set of tools (default: everything managed). */
 export async function detectTools(
-  options: { tools?: readonly string[]; runner?: CommandRunner; timeoutMs?: number; python?: string; specs?: readonly ToolSpec[] } = {},
+  options: { tools?: readonly string[]; runner?: CommandRunner; timeoutMs?: number; python?: string; specs?: readonly ToolSpec[]; platform?: NodeJS.Platform; concurrency?: number } = {},
 ): Promise<ToolStatus[]> {
   const specs = options.specs ?? TOOL_SPECS
   const runner = options.runner ?? defaultCommandRunner
   const timeoutMs = options.timeoutMs ?? 10_000
-  const platform = platformOf()
+  const platform = options.platform ?? platformOf()
   const selected = options.tools === undefined
     ? specs
     : specs.filter((spec) => options.tools?.includes(spec.name))
-  const statuses = await Promise.all(selected.map((spec) => probeSpec(spec, runner, timeoutMs, pythonBin(options.python, platform), platform)))
+  const statuses: ToolStatus[] = new Array(selected.length)
+  let next = 0
+  const concurrency = options.concurrency ?? 8
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32) throw new Error('Probe concurrency must be 1..32')
+  await Promise.all(Array.from({ length: Math.min(concurrency, selected.length) }, async () => {
+    for (let index = next++; index < selected.length; index = next++) statuses[index] = await probeSpec(selected[index]!, runner, timeoutMs, pythonBin(options.python, platform), platform)
+  }))
   const byName = new Map(statuses.map((status) => [status.name, status]))
   return specs
     .map((spec) => byName.get(spec.name))

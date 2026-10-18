@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-16",
+  "profile": "desktop",
+  "backupDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-runtime-repair-20261016-114210",
+  "hostPid": 5124,
+  "hostAlive": true,
+  "compiledHmrDisabled": true,
+  "pluginManifestUnchanged": true,
+  "profilePatchSha256": "fc93a20747c135d1807e8ce392ec4eb773b77621b448ccaec82c6ca399529129",
+  "team": "ctf2-b7",
+  "halted": true,
+  "protectedCollectionsCompared": [
+    "tasks",
+    "members",
+    "flags",
+    "findings"
+  ],
+  "protectedCollectionsPreserved": true,
+  "desktopToolExecution": "not invoked; endpoint requires normal desktop authentication",
+  "modelRequestsSent": false
+}

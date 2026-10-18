@@ -1,0 +1,51 @@
+{
+  "passed": true,
+  "version": "0.2.1-rc.1",
+  "runtimeSource": "E:\\dsh-ctf-teams-main\\tmp\\0.2.0rc2-to-0.2.1rc1\\b",
+  "artifactSha256": "d1f7ba03864e918a06380e44a2553d4d02f11b033ecea33b5a35695f9ecc77aa",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "runs": [
+    {
+      "scenario": "web-approval",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "driverCompleted": true,
+        "stagedBeforeApproval": true,
+        "independentApprovalWake": true,
+        "reportWakeAfterYield": true,
+        "singleCaptainApprovalAndNoPolling": true,
+        "oneUserMessageAndHttpApproval": true,
+        "invalidTeamRejected": true,
+        "repeatApprovalRejected": true,
+        "stableCaptainHeaders": true,
+        "memberToolContract": true,
+        "taskCompleted": true
+      },
+      "evidence": {
+        "event": "web-approval-passed",
+        "sessionId": "session-39fb8096-4f75-4d83-8070-840d7f7fc640",
+        "teamId": "runtime-lab",
+        "memberId": "07d0e77c-0c3b-4ecf-b8e8-76e6cc43929c",
+        "taskStatus": "completed",
+        "captainRequests": 7,
+        "order": 31,
+        "time": 1792228995634
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ],
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model/provider APIs",
+    "Online platform submissions",
+    "Other operating systems",
+    "Live user-data migration"
+  ]
+}

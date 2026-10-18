@@ -1,0 +1,372 @@
+{
+  "date": "2026-10-15",
+  "round": 4,
+  "localOnly": true,
+  "committed": false,
+  "pushed": false,
+  "published": false,
+  "baseCommit": "18bf393ce0e9209512c49ba6ce2e1d6bfdecbb47",
+  "pluginVersion": "0.1.29",
+  "sourceStamp": {
+    "schema": 1,
+    "source": "b98b2e2680fcf4cd785e6fa881b1e8bf3eedf05ea0f0ba035ba17be7f1c3e12a",
+    "output": "b8b52e53826be8e10b99407347521a3aa03c61765f3e599291a16dbb8b47ff6a"
+  },
+  "checks": [
+    {
+      "passed": true,
+      "command": "pnpm build"
+    },
+    {
+      "log": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf-iteration4-verify.log",
+      "passed": true,
+      "command": "pnpm verify",
+      "exitCode": 0
+    },
+    {
+      "tests": 7,
+      "passed": true,
+      "command": "new iteration 4 regressions"
+    },
+    {
+      "passed": true,
+      "command": "packed CLI byte identity and executable help"
+    }
+  ],
+  "sourceHarness": {
+    "passed": true,
+    "version": "0.2.0-rc.2",
+    "node": "v24.21.0",
+    "platform": "win32",
+    "cohortCount": 278,
+    "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf2-harness-kqldwO",
+    "runs": [
+      {
+        "scenario": "lifecycle",
+        "passed": true,
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        },
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "secondWake": true,
+          "fifoMessageOrder": true,
+          "messagesSentWhileBusy": true
+        },
+        "requests": 15,
+        "memberRequests": 6
+      },
+      {
+        "scenario": "lifecycle-cold-restore",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "driverCompleted": true,
+          "sameMemberRestored": true,
+          "routeRestored": true,
+          "reasoningRestored": true
+        },
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "fallback",
+        "passed": true,
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        },
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "secondWake": true,
+          "fallbackActivated": true,
+          "fallbackReasoningReset": true
+        },
+        "requests": 14,
+        "memberRequests": 7
+      },
+      {
+        "scenario": "fallback-cold-restore",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "driverCompleted": true,
+          "sameMemberRestored": true,
+          "routeRestored": true,
+          "reasoningRestored": true
+        },
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "failure",
+        "passed": true,
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        },
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "configurationRetainsOwner": true,
+          "routeRepairContinuesSameTask": true,
+          "noConfigurationRetryLoop": true
+        },
+        "requests": 14,
+        "memberRequests": 6
+      },
+      {
+        "scenario": "captain-idle-wakeup",
+        "passed": true,
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        },
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "pluginToolsVisible": true,
+          "memberExecuted": true,
+          "explicitReasoning": true,
+          "taskTerminal": true,
+          "captainActuallyYielded": true,
+          "notifiedAfterIdle": true
+        },
+        "requests": 10,
+        "memberRequests": 5
+      },
+      {
+        "scenario": "progressive-entry",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "allEntries": true,
+          "stablePrefixes": true,
+          "thirtyOrdinaryTurns": true
+        },
+        "cases": [
+          "natural",
+          "natural-zh",
+          "raw-slash",
+          "command",
+          "profile-command",
+          "profile-raw"
+        ],
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "web-approval",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "driverCompleted": true,
+          "stagedBeforeApproval": true,
+          "independentApprovalWake": true,
+          "reportWakeAfterYield": true,
+          "singleCaptainApprovalAndNoPolling": true,
+          "oneUserMessageAndHttpApproval": true,
+          "invalidTeamRejected": true,
+          "repeatApprovalRejected": true,
+          "stableCaptainHeaders": true,
+          "memberToolContract": true,
+          "taskCompleted": true
+        },
+        "evidence": {
+          "event": "web-approval-passed",
+          "sessionId": "session-cd07b658-95e1-42c5-a1f2-38e71fc9fbe1",
+          "teamId": "runtime-lab",
+          "memberId": "317bc192-f0ea-40f4-9837-4cf3d4e786bd",
+          "taskStatus": "completed",
+          "captainRequests": 7,
+          "order": 31,
+          "time": 1792050679136
+        },
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "protocol-compatibility",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "legacyAllowlistAndColdRestore": true,
+          "legacyProfileDirectory": true,
+          "actualPtcDiscard": true,
+          "actualPruning": true,
+          "actualCompaction": true,
+          "existingPlanRevised": true,
+          "lifecycleArchived": true
+        },
+        "cases": [
+          {
+            "event": "protocol-case-passed",
+            "label": "legacy-allowlist-cold-compact",
+            "requests": 7,
+            "compactedHistory": true,
+            "persistedSubject": "Recovered task",
+            "archived": true,
+            "profile": "north"
+          },
+          {
+            "event": "protocol-case-passed",
+            "label": "ptc-discard-and-compact",
+            "requests": 9,
+            "compactedHistory": true,
+            "persistedSubject": "Recovered task",
+            "archived": true
+          }
+        ],
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "stability",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "lazy-start": true,
+          "running-plan-correction": true,
+          "steering": true,
+          "read-receipt-continuation": true,
+          "reassign": true,
+          "archive": true,
+          "batch-plan": true,
+          "terminal-evidence": true,
+          "report-retry": true,
+          "settlement-dedup": true
+        },
+        "evidence": [
+          {
+            "event": "stability-lazy-start-passed",
+            "readyRequests": 1,
+            "blockedRequests": 0,
+            "welcomeRequests": 0,
+            "time": 1792050684381
+          },
+          {
+            "event": "stability-running-plan-correction-passed",
+            "pendingEdit": true,
+            "captainCancellation": true,
+            "blockedRequests": 0,
+            "time": 1792050684486
+          },
+          {
+            "event": "stability-steering-passed",
+            "queuedMessages": 32,
+            "modelStepsUntilConsumed": 1,
+            "time": 1792050685438
+          },
+          {
+            "event": "stability-read-receipt-continuation-passed",
+            "modelContinued": true,
+            "time": 1792050685547
+          },
+          {
+            "event": "stability-reassign-passed",
+            "sameMember": true,
+            "staleInputExcluded": true,
+            "time": 1792050685764
+          },
+          {
+            "event": "stability-archive-passed",
+            "pendingMessagesCleared": 32,
+            "descendantsStopped": true,
+            "siblingPreserved": true,
+            "retiredResumeRejected": true,
+            "time": 1792050687140
+          },
+          {
+            "event": "stability-batch-plan-passed",
+            "members": 5,
+            "tasks": 6,
+            "setupToolCalls": 1,
+            "previousEquivalentToolCalls": 12,
+            "memberModelRequests": 0,
+            "time": 1792050687191
+          },
+          {
+            "event": "stability-terminal-evidence-passed",
+            "records": 1,
+            "duplicateAppend": false,
+            "originalResultPreserved": true,
+            "time": 1792050687569
+          },
+          {
+            "event": "stability-report-retry-passed",
+            "duplicateModelRequests": 0,
+            "time": 1792050687662
+          },
+          {
+            "event": "stability-settlement-dedup-passed",
+            "reportWakes": 1,
+            "duplicateModelRequests": 0,
+            "time": 1792050687686
+          }
+        ],
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      },
+      {
+        "scenario": "ctf2-regression",
+        "passed": true,
+        "assertions": {
+          "exit0": true,
+          "productMarker": true,
+          "durableEvidence": true
+        },
+        "exit": {
+          "code": 0,
+          "timedOut": false
+        }
+      }
+    ]
+  },
+  "packageHarness": {
+    "passed": true,
+    "version": "0.2.0-rc.2",
+    "node": "v24.21.0",
+    "platform": "win32",
+    "cohortCount": 278,
+    "artifactSha256": "c5ac81b6cd28ff305faf012fbb74ce47abdd817d2fcc2066acad0127cdd97ea5",
+    "reportDir": "C:\\Users\\MetaVi\\AppData\\Local\\Temp\\ctf2-harness-lOYM6a"
+  },
+  "unverified": [
+    "Live CTF2 pagination / verdicts",
+    "Real provider credentials and spend",
+    "Permanent captain task holds",
+    "Automatic source trust / domain blocking",
+    "Automatic variant submissions"
+  ]
+}

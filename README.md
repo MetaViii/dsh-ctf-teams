@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.29-2563eb?style=flat-square" alt="源码版本 0.1.29"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.30-2563eb?style=flat-square" alt="源码版本 0.1.30"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
@@ -58,7 +58,7 @@
 | 模型 | 宿主中已有可用的模型配置。成员默认沿用队长模型，也可按团队模板指定。 |
 | 工作区 | 题目附件、解题脚本与输出所在的目录。工具链依题目需要准备。 |
 
-历史宿主支持范围见 [兼容性清单](./compatibility.json)；本轮验收结果见 [验证记录](./docs/ctf2-improvements-2026-10-15/validation.json)。
+宿主兼容采用两层策略：`0.2.1` 起的 `0.2.x`（含预发布）允许加载，运行时按实际 API 选择适配路径；精确验收版本单独记录在 [兼容性清单](./compatibility.json)。后续 RC / 补丁更新无需逐个加入白名单。`0.3.x` 及更高版本仍需审查；允许加载不等于已经验收。升级后可运行 `dsh-ctf-teams-doctor`，区分已测试版本、范围内未测试版本和依赖混装。见 [更新兼容说明](./docs/harness-forward-compatibility-2026-10-17/README.md)。
 
 ### 2. 安装本仓库版本
 
@@ -137,6 +137,8 @@ flowchart LR
 任务状态、当前尝试标识和邮箱消息均保存到工作区。成员交接会撤销旧尝试的写入权限，避免迟到结果覆盖新执行者；临时基础设施故障的检查点只用于续做，不作为完成证据。
 
 默认 `ctf-teams` 阵容由队长规划任务图，初建零任务显示 `planning`。`ctf_teams_sync` 同时读取看板增量与调用者自己的未读消息，默认每次 10 组、最多 50 组；重要结论仍需 `report_finding` 入板。队长通过 `reassign_task` 接管任务时，会直接收到任务约定、检查点、剩余事项、看板增量与自己的未读消息。
+
+本地第四轮增强可在建队时设置 `challenge_mode: "batch"`，从首轮启用多题语义。候选支持 `source_kind` / `source_url`，来源与真实题目 ID 随看板同步；来源记录不等于可信度认证。队长未完成的接管被回收时，邮箱会留下撤销通知。详见[第四轮选择性改进](./docs/ctf2-improvements-round4-2026-10-15/README.md)（当前尚未推送）。
 
 ### 解题面板
 
@@ -217,6 +219,8 @@ await tools.ctf_teams_mark_flag({
 
 同战队任务可通过 `resource_key` 排队使用独占资源；`preflight` 在派发、认领与接管前检查环境、题目状态或已复核的离线自测。平台事实通过 `ctf_teams_platform_check` 只读刷新，未知、过期或属于其他题目的事实会阻塞相关任务。
 
+本地第五轮增强允许有效队员刷新只读平台事实，队长可原地修正未启动任务的 preflight。代理与 CLI 会识别平台业务错误，防止把限流返回当作题目数据；status 和面板增加保存、在线及队长模型路由的差异诊断。详见[第五轮改进与取舍](./docs/ctf2-iteration5-2026-10-15/README.md)和[上游差异审查](./docs/ctf2-iteration5-2026-10-15/upstream-review.md)（尚未推送）。
+
 配置错误会暂停成员并提示修复，限流展示上游提供的恢复时间；临时基础设施故障保留任务进度，冷却后自动恢复一次，再次失败等待修复或重派。模型无法读取图片时，可使用 `ctf_teams_image_to_text` 提取 ASCII、OCR 或 QR/条码候选，或进行像素比较；所需依赖按环境准备。
 
 `ctf_teams_text_candidates` 可按需枚举 OCR 易混字符，最多 128 项，保留原文并提示截断；可查看 Base64 原始字节的 hex / 转义 ASCII。密码库检测执行基础 AES 运算，区分缺失与损坏的后端。附带的 CTF2 CLI 已修复多参数传递，并将空结果和工具错误作为非零退出处理。
@@ -282,7 +286,26 @@ profiles:
 
 ### 知识库与参考资料
 
-`ctf_teams_knowledge` 提供 Web、Pwn、Reverse、Crypto、Forensics、Misc 及 Kali、pwntools、SageMath、Volatility 3 等资料。`ctf_teams_env` 检查本机工具状态和安装路径。
+`ctf_teams_knowledge` 提供 Web、Pwn、Reverse、Crypto、Forensics、Misc 及 Kali、pwntools、SageMath、Volatility 3 等资料。`ctf_teams_env` 分别检查本机和明确选择的 WSL 发行版，不把 Windows PATH 的缺失结论套到 Linux。
+
+```js
+await tools.ctf_teams_env({ action: 'check', runtime: 'wsl' }); // 只列发行版
+await tools.ctf_teams_env({
+  action: 'check', runtime: 'wsl', distribution: 'kali-linux',
+  tools: ['python3', 'pycryptodome', 'sage', '7z']
+});
+```
+
+WSL 检查会显示实际发行版、Linux 搜索路径、解释器和逐项结果；超时或检查器故障标为 `unknown`，不算缺失，不触发自动安装。它只检查 Linux 系统目录和当前用户的 `~/.local/bin`、`~/bin`；自定义虚拟环境或其他路径需另行验证。WSL 模式只检查，安装仍需在对应发行版显式操作。
+
+CTF2 CLI 读取题目或生成题库快照时，使用原子 UTF-8 输出，避免 shell 重定向提前清空旧缓存：
+
+```powershell
+node scripts/ctf2-cli.mjs get <challenge_id> <ground_id> --output challenge.json
+node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output unsolved.json
+```
+
+限流、协议错误及分页未完成时，旧文件保留；输出目录须已存在。多条 lane 使用各自文件，原子替换不等于并发合并。完整范围见 [第六轮迭代记录](./docs/ctf2-iteration6-2026-10-18/README.md)。
 
 `ctf_teams_references` 按需同步 CTF 技能、PoC 和 CVE 索引，包括 [ctf-skills](https://github.com/ljagiello/ctf-skills)、[Awesome-POC](https://github.com/WyAtu/Awesome-POC) 等。仓库保存在工作区，供成员检索；大型库按实际需要同步。
 
@@ -304,6 +327,18 @@ profiles:
 
 ## 常见问题
 
+**Windows 上 `pwsh` 在命令执行前报 `Microsoft.PowerShell.Security` / `Get-Acl`，或者没有 Bash？**
+
+本地兼容修复会在 DSH 进程内优先放入 Windows PowerShell 自带模块目录，避免 dsh-ops 的 5.1 工作区引导误载继承的 PowerShell 7 模块；它不修改系统环境变量。PowerShell 工具可以使用 dsh-ops 自带的 7.x，不能只凭 PATH 搜索判断未安装。
+
+Windows 的原生 `bash` 工具不能直接与 PowerShell 共用一个执行器；搭配 dsh-ops 时使用其独立的 `ops_bash`。本次部署补齐了经过固定哈希校验的 Bash 运行时，保留原有权限约束。实际原因、支持边界和验证记录见 [Windows 双 shell 修复](./docs/windows-shell-2026-10-15/README.md)。
+
+**结束后反复出现“已完成，用时 1 秒”，轮次一直增长？**
+
+旧调度器会把持续存在的“已解出”状态当作新消息，反复唤醒空闲队员；队员结束后触发的原生通知又会在队长会话留下空白轮次。本地修复已改为仅投递尚未消费的看板更新。队长的空白轮次可能在模型请求前被拦截，但队员的重复同步仍会消耗 token。
+
+遇到此问题，先在 CTF 团队面板点击“暂停”，确认团队显示“已暂停”。修改源码不会更新已经安装的插件副本，需要重新构建、安装修复包并完整重启 DSH。暂停目标与暂停整队是不同操作。诊断、验证范围与安装步骤见 [空转循环修复记录](./docs/ctf2-idle-loop-2026-10-15/README.md)。
+
 **候选格式不符合正则，会被拒收吗？**
 
 会保留候选并附上格式警告。可以设置多个格式，或以 `flag_format: null` 交由平台判断。嵌套包装与显式变体分别记录，原文不会被静默改写。
@@ -315,6 +350,8 @@ profiles:
 **已经分配任务，为什么成员还没有开始？**
 
 查看 `dispatch_state` 和 `dispatch_reason`。依赖、忙碌成员、待投递邮件、资源占用、故障或 preflight 都可能让任务等待。就绪任务由调度器派发，消息用于沟通和补充指导。
+
+若状态、`get_goal`、文件和 shell 等工具同时报 `sessionProjections ... inactive context`，请按宿主运行时故障处理，停止反复重试并保留工作；这不是 shell 权限错误。只读诊断、关闭 profile 自动 HMR 的缓解配置及恢复边界见[运行时服务故障记录](./docs/session-projections-2026-10-16/README.md)。
 
 **删除战队会释放平台容器吗？**
 

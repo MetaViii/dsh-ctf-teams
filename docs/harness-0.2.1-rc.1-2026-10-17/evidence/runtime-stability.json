@@ -1,0 +1,127 @@
+{
+  "passed": true,
+  "version": "0.2.1-rc.1",
+  "runtimeSource": "E:\\dsh-ctf-teams-main\\tmp\\0.2.0rc2-to-0.2.1rc1\\b",
+  "artifactSha256": "d1f7ba03864e918a06380e44a2553d4d02f11b033ecea33b5a35695f9ecc77aa",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "runs": [
+    {
+      "scenario": "stability",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "lazy-start": true,
+        "running-plan-correction": true,
+        "steering": true,
+        "read-receipt-continuation": true,
+        "reassign": true,
+        "archive": true,
+        "batch-plan": true,
+        "terminal-evidence": true,
+        "report-retry": true,
+        "settlement-dedup": true,
+        "solved-quiescence": true,
+        "paused-quiescence": true
+      },
+      "evidence": [
+        {
+          "event": "stability-lazy-start-passed",
+          "readyRequests": 1,
+          "blockedRequests": 0,
+          "welcomeRequests": 0,
+          "time": 1792228993332
+        },
+        {
+          "event": "stability-running-plan-correction-passed",
+          "pendingEdit": true,
+          "captainCancellation": true,
+          "blockedRequests": 0,
+          "time": 1792228993472
+        },
+        {
+          "event": "stability-steering-passed",
+          "queuedMessages": 32,
+          "modelStepsUntilConsumed": 1,
+          "time": 1792228994574
+        },
+        {
+          "event": "stability-read-receipt-continuation-passed",
+          "modelContinued": true,
+          "time": 1792228994699
+        },
+        {
+          "event": "stability-reassign-passed",
+          "sameMember": true,
+          "staleInputExcluded": true,
+          "time": 1792228994913
+        },
+        {
+          "event": "stability-archive-passed",
+          "pendingMessagesCleared": 32,
+          "descendantsStopped": true,
+          "siblingPreserved": true,
+          "retiredResumeRejected": true,
+          "time": 1792228996187
+        },
+        {
+          "event": "stability-batch-plan-passed",
+          "members": 5,
+          "tasks": 6,
+          "setupToolCalls": 1,
+          "previousEquivalentToolCalls": 12,
+          "memberModelRequests": 0,
+          "time": 1792228996242
+        },
+        {
+          "event": "stability-terminal-evidence-passed",
+          "records": 1,
+          "duplicateAppend": false,
+          "originalResultPreserved": true,
+          "time": 1792228996529
+        },
+        {
+          "event": "stability-report-retry-passed",
+          "duplicateModelRequests": 0,
+          "time": 1792228996622
+        },
+        {
+          "event": "stability-settlement-dedup-passed",
+          "reportWakes": 1,
+          "duplicateModelRequests": 0,
+          "time": 1792228996637
+        },
+        {
+          "event": "stability-solved-quiescence-passed",
+          "completionDigests": 1,
+          "correctionDigests": 1,
+          "observationMs": 1000,
+          "additionalModelRequests": 0,
+          "additionalParentTurns": 0,
+          "time": 1792228999188
+        },
+        {
+          "event": "stability-paused-quiescence-passed",
+          "drained": true,
+          "observationMs": 1000,
+          "additionalModelRequests": 0,
+          "additionalParentTurns": 0,
+          "time": 1792229000513
+        }
+      ],
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ],
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model/provider APIs",
+    "Online platform submissions",
+    "Other operating systems",
+    "Live user-data migration"
+  ]
+}

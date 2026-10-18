@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { policy, serverRuntimePeers, validatePolicy } from './compatibility.mjs'
+import { policy, serverRuntimePeers, validatePolicy, acceptsHostVersion } from './compatibility.mjs'
 
 function manifest(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
@@ -73,7 +73,8 @@ export function inspectInstallation(hostRoot, profileRoot, support = policy) {
   if (plugin && plugin.version !== policyPackage.version) {
     problems.push(`Installed plugin ${plugin.version} differs from this policy's plugin ${policyPackage.version}; verify its own host compatibility`)
   }
-  if (!allowed.includes(host.version) && !sourceCandidate) problems.push(`Unsupported host ${host.version}; recommended target is ${support.recommendedHost}`)
+  const accepted = acceptsHostVersion(host.version, support)
+  if (!accepted) problems.push(`Unsupported host ${host.version}; recommended target is ${support.recommendedHost}`)
   if (mixed.length) problems.push(`${mixed.length} resolved DSH packages differ from host ${host.version}`)
   if (missing.length) problems.push(`Missing packages: ${[...new Set(missing)].join(', ')}`)
   const identities = new Map()
@@ -89,10 +90,12 @@ export function inspectInstallation(hostRoot, profileRoot, support = policy) {
     host: { version: host.version, path: dirname(hostPath) },
     ...(plugin ? { plugin } : {}),
     checkedPackages: packages.length, supportedHosts: allowed,
-    validation: sourceCandidate ? { kind: 'source-preview', ...sourceCandidate, sourceCommitVerified: false } : { kind: allowed.includes(host.version) ? 'published-matrix' : 'unsupported' },
+    compatibleHostRange: support.compatibleHostRange,
+    validation: sourceCandidate ? { kind: 'source-preview', ...sourceCandidate, sourceCommitVerified: false } : { kind: allowed.includes(host.version) ? 'published-matrix' : accepted ? 'compatible-untested' : 'unsupported' },
     problems, packages,
     limits: [
       'Checks files resolved from the supplied roots; does not identify the running process or prove plugin behavior.',
+      ...(accepted && !allowed.includes(host.version) && !sourceCandidate ? ['This host is admitted by the bounded compatibility range but has not passed the exact runtime matrix; verify preset, tools and member lifecycle before solving.'] : []),
       ...(sourceCandidate ? [`Host ${host.version} is pre-adapted against source ${sourceCandidate.commit}; this inspection does not verify that the installed release matches that source.`] : []),
     ],
   }
@@ -118,6 +121,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     const result = inspectInstallation(hostRoot, profileRoot)
     console.log(json ? JSON.stringify(result, null, 2) : [
       `Harness: ${result.host.version} (${result.host.path})`,
+      `Host validation: ${result.validation.kind}`,
       `DSH package identities checked: ${result.checkedPackages}`,
       ...result.problems.map(problem => `FAIL: ${problem}`),
       result.ok ? 'Dependency inspection passed.' : 'Use one supported host version and a matching locked profile.',

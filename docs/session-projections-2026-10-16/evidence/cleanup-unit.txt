@@ -1,0 +1,12 @@
+✔ Cordis 4.0.4 baseline reproduces a disposed callback reading inactive sessionProjections (15.7287ms)
+✔ scoped compatibility releases the hook and registrations despite the same teardown failure (3.0307ms)
+✔ cleanup preserves reverse order and reports all failures after every resource is released (2.2484ms)
+✔ unknown upstream implementations fail before installing any reviewer or permission override (1.3325ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 169.482

@@ -26,6 +26,8 @@ A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-t
 
 ## Quick start
 
+Host loading and exact validation are tracked separately. The bounded range `>=0.2.1-0 <0.3.0-0` admits subsequent `0.2.x` RC/patch updates under Harness's prerelease-inclusive gate; runtime adapters select the available APIs. Exact tested targets remain in [compatibility.json](./compatibility.json). An admitted version is not automatically a tested version. `0.3.x` and later require review. Run `dsh-ctf-teams-doctor` after upgrading to check the dependency cohort and validation status. See [upgrade compatibility](./docs/harness-forward-compatibility-2026-10-17/README.md).
+
 **DeepSeek Harness Desktop (primary target):** open 「Plugins → Add Plugin」 in the app sidebar, enter the package name and version (`@nanmicoder/dsh-ctf-teams`), click enable, and restart the app when the host asks. The desktop app ships its own Harness kernel and package manager, so it manages its own profiles.
 
 **CLI / Web:**

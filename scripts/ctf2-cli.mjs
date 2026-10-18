@@ -21,10 +21,34 @@
  * Env: CTF2_PROXY (default http://127.0.0.1:39528/mcp)
  */
 
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, open, rename, unlink } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { Ctf2ProtocolError, parseRpcResponse, unwrapToolResult, filterUnsolved } from '../lib/ctf2-protocol.js'
+import { scanUnsolved } from '../lib/ctf2-scan.js'
 
 const PROXY = process.env.CTF2_PROXY ?? 'http://127.0.0.1:39528/mcp'
+let outputFile
+
+/** The previous cache remains intact until a complete successful response exists. */
+async function printJson(value) {
+  const serialized = JSON.stringify(value, null, 2)
+  if (serialized === undefined) throw new Ctf2ProtocolError('Cannot cache an undefined response')
+  if (!outputFile) { console.log(serialized); return }
+  const target = resolve(outputFile), temporary = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`)
+  let handle
+  try {
+    handle = await open(temporary, 'wx')
+    await handle.writeFile(serialized + '\n', 'utf8')
+    await handle.sync()
+    await handle.close(); handle = undefined
+    await rename(temporary, target)
+  } finally {
+    await handle?.close()
+    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error })
+  }
+  console.error(`JSON cache updated: ${target} (${Buffer.byteLength(serialized + '\n')} UTF-8 bytes)`)
+}
 let nextId = 1
 async function rpc(method, params) {
   const id = nextId++
@@ -52,7 +76,7 @@ async function callTool(name, args, { print = true, unsolvedOnly = false } = {})
     payload = filtered.payload
     console.error(`local unsolved filter: ${filtered.returned}/${filtered.received} returned; ${filtered.unknown} unknown status omitted; server totals unchanged`)
   }
-  if (print) console.log(JSON.stringify(payload, null, 2))
+  if (print) await printJson(payload)
   return payload
 }
 
@@ -87,7 +111,7 @@ async function listTools() {
   return tools
 }
 
-const [verb, ...rest] = process.argv.slice(2)
+let verb, rest
 const arg = (i) => rest[i]
 
 /**
@@ -103,10 +127,25 @@ function where(challenge, ground) {
 }
 
 try {
+  const positional = [], argv = process.argv.slice(2)
+  let literal = false
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]
+    if (!literal && token === '--') { literal = true; continue }
+    if (!literal && (token === '--output' || token.startsWith('--output='))) {
+      if (outputFile !== undefined) throw new Error('--output may be supplied only once')
+      outputFile = token === '--output' ? argv[++i] : token.slice('--output='.length)
+      if (!outputFile || outputFile.startsWith('--')) throw new Error('--output requires a file path')
+    } else positional.push(token)
+  }
+  ;[verb, ...rest] = positional
+  const cacheable = ['tools', 'schema', 'call', 'whoami', 'grounds', 'next', 'challenges', 'scan-unsolved', 'get', 'attachment', 'env']
+  if (outputFile && !cacheable.includes(verb)) throw new Error('--output supports JSON read commands and raw call only; it does not wrap downloads or lifecycle/submission commands')
   switch (verb) {
     case 'tools': {
       const tools = await listTools()
-      for (const t of tools) console.log(`${t.name}\n    ${t.description?.split('\n')[0] ?? ''}`)
+      if (outputFile) await printJson({ tools })
+      else for (const t of tools) console.log(`${t.name}\n    ${t.description?.split('\n')[0] ?? ''}`)
       console.error(`\n${tools.length} tool(s)`)
       break
     }
@@ -114,7 +153,7 @@ try {
       const tools = await listTools()
       const hit = tools.find((t) => t.name === arg(0) || t.name === `ctf2_${arg(0)}`)
       if (!hit) throw new Ctf2ProtocolError(`no such tool: ${arg(0)}`)
-      console.log(JSON.stringify(hit, null, 2))
+      await printJson(hit)
       break
     }
     case 'call':
@@ -134,6 +173,13 @@ try {
     case 'challenges': {
       const args = argsFrom(rest.join(' '))
       await callTool('ctf2_list_practice_challenges', args, { unsolvedOnly: args.unsolved_only === true })
+      break
+    }
+    case 'scan-unsolved': {
+      const result = await scanUnsolved(argsFrom(rest.join(' ')), args => callTool('ctf2_list_practice_challenges', args, { print: false }))
+      if (!result.complete && outputFile) throw new Ctf2ProtocolError('scan-unsolved is partial/inconsistent; the previous cache was preserved', 2)
+      await printJson(result)
+      if (!result.complete) { console.error('scan-unsolved is partial/inconsistent; do not conclude there are no remaining challenges'); process.exitCode = 2 }
       break
     }
     case 'get':
@@ -194,6 +240,7 @@ try {
   grounds [json|k=v]                        ctf2_list_practice_grounds
   challenges <practice_ground_id=...>       ctf2_list_practice_challenges
   next [json|k=v]                           ctf2_agent_next_challenges
+  scan-unsolved practice_ground_id=...      bounded unfiltered pagination; optional category, limit, max_pages
   get <challenge_id> [ground_id]            ctf2_get_practice_challenge
   attachment <challenge_id> <file_id> [gid] ctf2_get_attachment_url
   start <challenge_id> [ground_id]          ctf2_start_challenge_environment
@@ -205,6 +252,7 @@ try {
   submit <challenge_id> <flag> [ground_id]  ctf2_submit_flag (confirmation: true)
 
 Every practice tool needs the ground: pass it positionally or export CTF2_GROUND.`)
+      console.log('Use --output <file.json> for atomic UTF-8 JSON caching (no shell redirect); failures and partial scans preserve the old file. The parent directory must exist. Use -- before literal arguments named --output.')
   }
 } catch (error) {
   console.error(`ctf2 error: ${error.message}`)

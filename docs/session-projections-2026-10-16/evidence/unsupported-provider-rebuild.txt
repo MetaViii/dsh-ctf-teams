@@ -1,0 +1,14 @@
+Error: dsh: warning: 1 entry did not activate
+permission (@deepseek-ai/dsh-permission-presets): Error: permission: cannot restore preset "auto" without its active integration
+    at PermissionPresetService.pinInitialPermission (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-permission_e656fd83eedb48c293bf97b3fe1edeeb/node_modules/@deepseek-ai/dsh-permission-presets/lib/index.js:374:42)
+    at new PermissionPresetService (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-permission_e656fd83eedb48c293bf97b3fe1edeeb/node_modules/@deepseek-ai/dsh-permission-presets/lib/index.js:205:52)
+    at Fiber.execute (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+cordis@4.0.4_@_f26b922a7ef2f8fed990b442fc983a03/node_modules/@deepseek-ai/cordis/lib/index.js:1068:24)
+    at file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+cordis@4.0.4_@_f26b922a7ef2f8fed990b442fc983a03/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+    at file:///C:/Users/MetaVi/AppData/Local/Temp/ctf-runtime-services-0IhYoG/home/profiles/headless/#permission
+    at file:///C:/Users/MetaVi/AppData/Local/Temp/ctf-runtime-services-0IhYoG/home/profiles/headless/#include
+    at reconcileProfilePatches (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-app-boot@0_29a57175adbd788903e565fb9da60644/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:3492:35)
+    at async file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-config-edi_860893864abc538f2b94e178a4af004b/node_modules/@deepseek-ai/dsh-config-editor/lib/index.js:128:6
+    at async withFileLock (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-atomic-wri_53932133d6b90df1547fd5cf2bfd134d/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:211:10)
+    at async run (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-config-edi_860893864abc538f2b94e178a4af004b/node_modules/@deepseek-ai/dsh-config-editor/lib/index.js:72:4)
+    at async Proxy.edit (file:///E:/dsh-ctf-teams-main/node_modules/.pnpm/@deepseek-ai+dsh-config-edi_860893864abc538f2b94e178a4af004b/node_modules/@deepseek-ai/dsh-config-editor/lib/index.js:134:3)
+    at async file:///C:/Users/MetaVi/AppData/Local/Temp/ctf-runtime-services-0IhYoG/home/profiles/headless/fixture.mjs:100:9

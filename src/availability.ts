@@ -4,7 +4,8 @@ export interface FailureInput { code: string; message: string; status?: number; 
 
 /** Provider-neutral failure policy; only final turn failures enter this ledger. */
 export function classifyFailure(failure: FailureInput): MemberFault['kind'] {
-  if (['NO_ADAPTER', 'AUTH', 'MISSING_CREDENTIAL', 'MODEL_NOT_FOUND'].includes(failure.code)) return 'configuration'
+  if (['NO_ADAPTER', 'AUTH', 'MISSING_CREDENTIAL', 'MODEL_NOT_FOUND', 'INVALID_API_KEY', 'UNAUTHORIZED'].includes(failure.code)
+    || failure.status === 401 || /\binvalid_api_key\b|\bauthentication_error\b|\b401\b.*(?:invalid|unauthorized|API.?Key)|API\s*Key\s*无效/i.test(failure.message)) return 'configuration'
   if (['RATE_LIMIT', 'QUOTA'].includes(failure.code) || failure.status === 429) return 'rate_limit'
   if (['NETWORK', 'TIMEOUT'].includes(failure.code) || failure.status === 503 || /\b503\b|no_healthy_account|temporarily unavailable/i.test(failure.message)) return 'transient'
   return 'task'

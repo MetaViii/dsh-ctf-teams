@@ -105,7 +105,9 @@ export function nestedFlagVariants(raw: string): string[] {
 
 export function batchProgress(team: TeamState): { verified: number; expected?: number; unscoped: number } {
   const accepted = (team.flags ?? []).filter(f => f.status === 'verified')
-  return { verified: new Set(accepted.flatMap(f => f.challengeId ? [f.challengeId] : [])).size, expected: team.challenge?.expectedChallenges, unscoped: accepted.filter(f => !f.challengeId).length }
+  return { verified: new Set(accepted.flatMap(f => f.challengeId ? [f.challengeId] : [])).size,
+    ...team.challenge?.expectedChallenges === undefined ? {} : { expected: team.challenge.expectedChallenges },
+    unscoped: accepted.filter(f => !f.challengeId).length }
 }
 
 /** Explicit batch completion, after real platform checks; flags alone never close a batch. */
@@ -133,7 +135,7 @@ export function formatFinding(finding: TeamFinding): string {
 }
 
 export function formatFlag(flag: FlagCandidate): string {
-  return `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}${flag.challengeId ? `; challenge=${flag.challengeId}` : ''}${flag.variantOf ? `; variant of ${flag.variantOf}` : ''}${flag.verifiedFlag ? `; platform accepted: ${flag.verifiedFlag}` : ''}${flag.formatWarning ? `; FORMAT WARNING: ${flag.formatWarning}` : ''}${flag.note ? `; ${flag.note}` : ''}`
+  return `[${flag.id}] ${flag.flag} — ${flag.status} by ${flag.submittedBy}${flag.challengeId ? `; challenge=${flag.challengeId}` : ''}${flag.sources?.length ? `; unverified sources: ${flag.sources.map(source => `${source.kind}${source.url ? ` ${source.url}` : ''}`).join(' | ')}` : ''}${flag.variantOf ? `; variant of ${flag.variantOf}` : ''}${flag.verifiedFlag ? `; platform accepted: ${flag.verifiedFlag}` : ''}${flag.formatWarning ? `; FORMAT WARNING: ${flag.formatWarning}` : ''}${flag.note ? `; ${flag.note}` : ''}`
 }
 
 /** The team's challenge info with its default flag format filled in. */
@@ -219,15 +221,34 @@ export function flagReference(team: TeamState, candidate: FlagCandidate): string
 /** Append one candidate flag. Duplicates return the existing candidate. Caller must persist. */
 export function appendFlagCandidate(
   team: TeamState,
-  input: { flag: string; submittedBy: string; evidence?: string; challengeId?: string; variantOf?: string },
+  input: { flag: string; submittedBy: string; evidence?: string; challengeId?: string; variantOf?: string; sourceKind?: NonNullable<FlagCandidate['sources']>[number]['kind']; sourceUrl?: string },
 ): { candidate: FlagCandidate; duplicate: boolean } {
   const flag = normalizeFlag(input.flag)
   if (flag === '') throw new Error('flag must not be empty')
   const wrapper = flagWrapper(flag)
   const formatWarning = flagMatchesFormat(flag, team.challenge) ? undefined
     : `Does not match /${flagFormatLabel(team.challenge)}/.${wrapper ? ` Observed wrapper: ${wrapper}.` : ''} Preserve the original string; the platform decides.`
+  const sourceKind = input.sourceKind ?? (input.sourceUrl ? 'unknown' : undefined)
+  if (sourceKind && !['local_output', 'writeup', 'index', 'manual', 'unknown'].includes(sourceKind)) throw new Error('invalid source_kind')
+  let url: string | undefined
+  if (input.sourceUrl !== undefined) {
+    try {
+      const parsed = new URL(input.sourceUrl)
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || input.sourceUrl.length > 2048) throw new Error()
+      url = parsed.href
+    } catch { throw new Error('source_url must be an HTTP(S) URL without embedded credentials (maximum 2048 characters)') }
+  }
+  const source = sourceKind ? { kind: sourceKind, ...url ? { url } : {}, ...input.evidence?.trim() ? { evidence: input.evidence.trim().slice(0, FLAG_EVIDENCE_MAX_CHARS) } : {}, submittedBy: input.submittedBy, ts: Date.now() } : undefined
   const existing = team.flags?.find(entry => entry.flag === flag && entry.challengeId === input.challengeId)
-  if (existing !== undefined) return { candidate: existing, duplicate: true }
+  if (existing !== undefined) {
+    if (source && !(existing.sources ?? []).some(prior => prior.kind === source.kind && prior.url === source.url && prior.evidence === source.evidence && prior.submittedBy === source.submittedBy)) {
+      if ((existing.sources?.length ?? 0) >= 64) throw new Error('candidate already has 64 source records; add a finding for further evidence')
+      existing.sources = [...existing.sources ?? [], source]
+      existing.updateSeq = Math.max(team.flagSeq ?? 0, ...(team.flags ?? []).map(entry => Math.max(boardIdNumber(entry.id), entry.updateSeq ?? 0))) + 1
+      team.flagSeq = existing.updateSeq; team.round = (team.round ?? 0) + 1
+    }
+    return { candidate: existing, duplicate: true }
+  }
   const seq = Math.max(team.flagSeq ?? 0, ...(team.flags ?? []).map(entry => boardIdNumber(entry.id))) + 1
   const candidate: FlagCandidate = {
     id: `f${seq}`,
@@ -235,6 +256,7 @@ export function appendFlagCandidate(
     submittedBy: input.submittedBy,
     status: 'candidate',
     ts: Date.now(),
+    ...source ? { sources: [source] } : {},
     ...input.challengeId ? { challengeId: input.challengeId } : {},
     ...input.variantOf ? { variantOf: input.variantOf } : {},
     ...formatWarning === undefined ? {} : { formatWarning },

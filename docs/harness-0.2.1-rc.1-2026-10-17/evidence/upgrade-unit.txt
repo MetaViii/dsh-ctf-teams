@@ -1,0 +1,17 @@
+✔ Cordis 4.0.4 baseline reproduces a disposed callback reading inactive sessionProjections (5.0177ms)
+✔ scoped compatibility releases the hook and registrations despite the same teardown failure (2.1979ms)
+✔ cleanup preserves reverse order and reports all failures after every resource is released (0.3944ms)
+✔ unknown upstream implementations fail before installing any reviewer or permission override (0.2356ms)
+✔ compatibility owns the audited upstream dependency set including modern workingDirectory (69.5747ms)
+✔ host gate admits exact 0.2.1-rc.1, reproduces old omission, and rejects unknown future hosts (4.6291ms)
+✔ preset persona uses required modern directory context and retains legacy cwd interpolation (4.8489ms)
+✔ member activation uses caller reporting on the new API and retains legacy continuable routing (0.5739ms)
+✔ targeted member drain retains exact owner, ids, errors and receiver on both APIs (0.438ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 217.1137
