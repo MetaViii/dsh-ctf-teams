@@ -7,6 +7,7 @@
  * survives harness restarts.
  * @module dsh-ctf-teams/types
  */
+import type { ChallengeHypothesis } from './hypotheses.ts';
 /** Task lifecycle statuses in progression order. */
 export type TaskStatus = 'pending' | 'claimed' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 /** Statuses after which a task can no longer be claimed or worked on. */
@@ -401,6 +402,9 @@ export interface TeamState {
     findings?: TeamFinding[];
     /** Monotonic finding id counter. */
     findingSeq?: number;
+    /** Challenge-scoped hypotheses with append-only, unverified experiment reports. */
+    hypotheses?: ChallengeHypothesis[];
+    hypothesisSeq?: number;
     /** Team round counter; advances with each board beat (finding/flag). */
     round?: number;
     /** Per-participant sync cursors keyed by `captain` or member name. */

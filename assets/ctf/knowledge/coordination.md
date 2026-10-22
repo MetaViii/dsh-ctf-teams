@@ -2,6 +2,18 @@
 
 先核对任务所有权、证据和资源约束，再选择并行方式。
 
+## 先查台账，再做下一项实验
+
+同一题多成员或跨会话续做时，先用 `ctf_teams_hypothesis({action:"list",challenge_id:"平台真实题目 ID"})` 查已尝试的假设。离线题目使用稳定的附件标识；不要把不同题目混用同一个 ID。摘要有截断标记，使用 `hypothesis_id` 分页读取完整实验历史，不能仅凭最新结果推定整条路线已排除。
+
+1. `propose` 填写 `challenge_id`、`statement` 和 `prediction`。预测应具体到能被观察或反驳的条件；相同题目、假设和预测精确去重，不做语义去重。
+2. 实际运行实验后，`record_test` 带返回的 `ledger_ref`、`hypothesis_id`、`expected_revision`，以及稳定的 `test_key`、真实 `method`、`observation`、`outcome` 和 `basis`。修改测试内容或纠正输入时使用新 key，保留旧记录；版本冲突先重读并协调。
+3. `outcome` 是报告的 `supports/refutes/inconclusive`，不是平台裁决。`basis=construction` 表示构造或反例，`measurement` 表示计时、性能等测量，`observation` 表示其他观察。测量型反驳必须给出 `next_step`，继续检查噪声、环境、输入或构造反例；不能靠一次测量封死路线。
+4. 可选 `evidence_files` 绑定工作区相对文件，每次最多 8 个、每个最多 32 MiB。记录 SHA-256、大小和时间，不执行 method。查询单条假设时 `check_files:true` 检查**最新实验**的文件是否相同、变更、缺失或不可读；旧实验的快照保留在分页历史中。
+5. 文件哈希只证明字节一致，报告的原始输出仍可能不实。重要推导需队长独立复现，并在 `verify_finding` 中记录实际检查；平台接受 flag 也不能反推整篇推导正确。大输出和完整脚本保存为文件，不在台账中编造或裁剪成成功故事。
+
+新增假设或实验各产生一次未复核 finding，供原有同步流程读取。查询和重复写入不产生进度、不确认未读看板，也不唤醒成员；暂停后可以补记，不会自动恢复战队。归档摘要保留假设、预测、所有实验及文件快照，不自动删除失败路线。
+
 ## Windows shell 与工具探测
 
 Windows 上用 `pwsh` 执行 PowerShell；组合了 dsh-ops 且其 Bash 运行时可用时，用独立的 `ops_bash` 执行 POSIX 命令。不要只去掉预设的 Windows 禁用条件：宿主的 `tool-bash` 与 `tool-pwsh` 共享 `ctx.shell`，直接同时启用可能把 Bash 文本交给 PowerShell。WSL 命令可通过 `pwsh` 显式调用 `wsl.exe -d <实际发行版> --exec /bin/bash ...`，先验证实际启动成功及目标工具存在。
@@ -12,7 +24,7 @@ Windows 上用 `pwsh` 执行 PowerShell；组合了 dsh-ops 且其 Bash 运行�
 
 1. 显式 `create({name:"...",challenge_mode:"batch"})`，与 `mode:solo/squad` 独立。旧入口 `set_challenge({multi_challenge:true,expected_challenges:N})` 继续有效；仅在任务标题写“批量”不会切换模式。
 2. 根据平台配额、附件和服务需求安排 `resource_key`；不要把题型当成环境需求的证明。
-3. 怀疑未解列表漏题时，由一个协调者运行 `node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=... category=MISC limit=50 max_pages=100 > unsolved.json`。它关闭服务端未解过滤，从第一页分页、去重，再按明确的 `is_solved=false` 筛选。向成员提供输出路径，避免每条 lane 重扫全库。
+3. 怀疑未解列表漏题时，由一个协调者运行 `node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=... category=MISC limit=50 max_pages=100 --output unsolved.json`。它关闭服务端未解过滤，从第一页分页、去重，再按明确的 `is_solved=false` 筛选。向成员提供输出路径，避免每条 lane 重扫全库。
 4. 重复页、矛盾或未知状态、不完整分页会给出 `complete:false`、警告和退出码 2。不要以此时的空列表认定刷完；扫描不是原子实时快照，开工前再核对题目状态。工具不执行平台写操作。
 5. 批量候选必须带真实 `challenge_id`，外部来源附 `source_kind` / `source_url`。核对赛事、年份、附件和身份，不凭同名标题猜 UUID；域名和少量判定样本不是可靠性评分。
 6. 单题接受后继续其他 lane，整批完成才显式 `mark_challenge_solved`。不要要求成员忽略 solved 横幅：先核对版本与模式，再修正配置。

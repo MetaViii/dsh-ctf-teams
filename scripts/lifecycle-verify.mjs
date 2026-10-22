@@ -1574,6 +1574,27 @@ try {
   await call('ctf_teams_approve', { confirmation: 'Run the accepted batch' })
   const workingBatch = await readTeam(stateRoot, 'batch-plan')
   const batchWorker = liveAgents.get(workingBatch.members.find(m => m.name === 'worker').id)
+  const beforeLedgerDeliveries = deliveries.length
+  const hypothesis = await call('ctf_teams_hypothesis', { action: 'propose', challenge_id: 'ledger-crypto', statement: 'n is a square', prediction: 'isqrt(n)**2 == n' }, batchWorker)
+  const beforeDuplicateLedger = JSON.stringify(await readTeam(stateRoot, 'batch-plan'))
+  const repeatedHypothesis = await call('ctf_teams_hypothesis', { action: 'propose', challenge_id: 'ledger-crypto', statement: 'n is a square', prediction: 'isqrt(n)**2 == n' })
+  await call('ctf_teams_hypothesis', { action: 'list', challenge_id: 'ledger-crypto' }, batchWorker)
+  check('hypothesis reads and cross-member duplicate proposals do not write state', repeatedHypothesis.duplicate && JSON.stringify(await readTeam(stateRoot, 'batch-plan')) === beforeDuplicateLedger)
+  const testInput = { action: 'record_test', hypothesis_id: hypothesis.hypothesis_id, ledger_ref: hypothesis.ledger_ref, expected_revision: 1, test_key: 'test-square', method: 'python square.py n=49', observation: '49 == 7**2', outcome: 'supports', basis: 'construction' }
+  const racedTests = await Promise.allSettled([call('ctf_teams_hypothesis', testInput, batchWorker), call('ctf_teams_hypothesis', { ...testInput, test_key: 'parallel-square' }, batchWorker)])
+  check('concurrent tests fence stale revisions rather than overwrite history', racedTests.filter(result => result.status === 'fulfilled').length === 1 && racedTests.filter(result => result.status === 'rejected' && result.reason.message.includes('stale expected_revision')).length === 1)
+  const winningTest = racedTests[0].status === 'fulfilled' ? testInput : { ...testInput, test_key: 'parallel-square' }
+  const afterTestLedger = JSON.stringify(await readTeam(stateRoot, 'batch-plan'))
+  const retriedTest = await call('ctf_teams_hypothesis', winningTest, batchWorker)
+  check('idempotent test retry creates no board beat or state write', retriedTest.duplicate && JSON.stringify(await readTeam(stateRoot, 'batch-plan')) === afterTestLedger)
+  let staleLedgerBlocked = false
+  try { await call('ctf_teams_hypothesis', { ...testInput, ledger_ref: 'same-name-old-board', test_key: 'stale', expected_revision: 2 }, batchWorker) } catch (error) { staleLedgerBlocked = error.message.includes('ledger_ref') }
+  check('experiment writes reject old team generations', staleLedgerBlocked)
+  await call('ctf_teams_hypothesis', { ...testInput, expected_revision: 2, test_key: 'actual-attachment', observation: 'attachment n=50', outcome: 'refutes' })
+  const ledgerDetail = await call('ctf_teams_hypothesis', { action: 'list', hypothesis_id: hypothesis.hypothesis_id, limit: 1 }, batchWorker)
+  const ledgerNextPage = await call('ctf_teams_hypothesis', { action: 'list', hypothesis_id: hypothesis.hypothesis_id, offset: ledgerDetail.next_offset, limit: 1 }, batchWorker)
+  check('members see bounded append-only history and actual recorder identity', ledgerDetail.total === 2 && ledgerDetail.tests[0].by === 'worker' && ledgerNextPage.tests[0].by === 'captain' && ledgerDetail.summary.conflicts === 1)
+  check('ledger operations never dispatch a new turn', deliveries.length === beforeLedgerDeliveries)
   const reported = await call('ctf_teams_report_finding', { content: 'decoded bytes', evidence_kind: 'inference', confidence: 'high', evidence: 'python solve.py' }, batchWorker)
   let selfCheckBlocked = false
   try { await call('ctf_teams_verify_finding', { finding_id: reported.finding_id, method: 'self claim', result: 'confirmed' }, batchWorker) } catch { selfCheckBlocked = true }
@@ -1664,6 +1685,12 @@ try {
     check(`${challengeMode}: the new evidence also settles without another wake`, deliveries.length === afterCompletion + 1)
     await haltTeamWork({ ctx, stateRoot, teamId: quietId, captain, signal: new AbortController().signal })
     await call('ctf_teams_report_finding', { content: 'Durable evidence while paused' })
+    const pausedProposal = { action: 'propose', challenge_id: 'paused-challenge', statement: 'durable paused hypothesis', prediction: 'must not wake a worker' }
+    await call('ctf_teams_hypothesis', pausedProposal)
+    const pausedState = JSON.stringify(await readTeam(stateRoot, quietId))
+    await call('ctf_teams_hypothesis', { action: 'list', challenge_id: 'paused-challenge' })
+    await call('ctf_teams_hypothesis', pausedProposal)
+    check(challengeMode + ': paused ledger queries and duplicates leave state unchanged', JSON.stringify(await readTeam(stateRoot, quietId)) === pausedState)
     const afterPause = deliveries.length
     publishStatus(quietWorker, 'idle')
     await call('ctf_teams_status', {})
@@ -1692,6 +1719,9 @@ try {
   ctx.subagents.drainContinuableChildren = async function (parent, ids) {
     try { await call('ctf_teams_update_task', { task_id: exclusive.task_id, attempt_id: exclusive.attempt_id, output: 'stale result' }, firstChild) } catch { lateTaskRejected = true }
     try { await call('ctf_teams_report_finding', { content: 'stale report' }, firstChild) } catch { lateBoardRejected = true }
+    let staleLedgerRejected = false
+    try { await call('ctf_teams_hypothesis', { action: 'propose', challenge_id: 'old', statement: 'stale report', prediction: 'must fail' }, firstChild) } catch { staleLedgerRejected = true }
+    check('retired members cannot append hypothesis records', staleLedgerRejected)
     return originalDrain.call(this, parent, ids)
   }
   try { await call('ctf_teams_update_member', { member_name: 'one', provider: 'fake', model: 'repaired-model', reason: 'fix broken provider route' }) }

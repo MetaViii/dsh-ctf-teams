@@ -26,6 +26,8 @@ import { memberAvailable, availabilityLabel, foldFailureInbox } from './availabi
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
 import { collectParticipantInbox, formatInbox, syncInboxLimit } from './coordination.ts'
 import { textCandidates } from './text-candidates.ts'
+import { captureEvidenceFiles, inspectEvidenceFiles } from './evidence-files.ts'
+import { proposeHypothesis, recordHypothesisTest, requireHypothesis, hypothesisSummary, hypothesisArchive, type ChallengeHypothesis, type HypothesisTest } from './hypotheses.ts'
 import { proxyHealth, readPlatformSnapshot, type PlatformConfig } from './platform.ts'
 import { ctfTeamsSource, drainMemberChildren } from './harness-compat.ts'
 import { memberRouteDiagnostics } from './model-routes.ts'
@@ -2378,6 +2380,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           round: team.round ?? 0,
           created_at: team.createdAt,
           finding_count: team.findings?.length ?? 0,
+          hypothesis_summary: hypothesisSummary(team),
           flags: (team.flags ?? []).map((flag) => ({ ...flag, flag_ref: flagReference(team, flag) })),
           findings: (team.findings ?? []).slice(-10).map((finding) => ({ ...finding })),
           member_sync: memberSync,
@@ -2946,6 +2949,74 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_teams_hypothesis',
+    description: 'Shared challenge hypothesis/experiment ledger. List a challenge before repeating an attack; propose a falsifiable prediction; record_test appends a reported method, observation and outcome. Use hypothesis_id to page full experiment history. Reports never verify a solve. Optional evidence_files are workspace-relative SHA-256 snapshots (integrity only); check_files on a single hypothesis rechecks its latest test. No commands are executed, no member is woken, and reads/duplicate writes create no board beat.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['list', 'propose', 'record_test'] },
+      challenge_id: { type: 'string', description: 'Required for propose; exact platform challenge id, or a stable attachment identifier for offline challenges. Optional list filter.' },
+      hypothesis_id: { type: 'string', description: 'Required for record_test; use on list for full paginated history.' },
+      ledger_ref: { type: 'string', description: 'Required for record_test: exact ledger_ref from list/propose, fences same-name team recreation.' },
+      statement: { type: 'string', description: 'Required for propose; explicit hypothesis, at most 2000 characters.' },
+      prediction: { type: 'string', description: 'Required for propose; observable prediction or falsifying condition, at most 2000 characters.' },
+      expected_revision: { type: 'number', description: 'Required for a new test: latest hypothesis revision from list/propose.' },
+      test_key: { type: 'string', description: 'Required for record_test, at most 160 characters. Stable per-author retry key; corrections need a new key.' },
+      method: { type: 'string', description: 'Required for record_test; actual command, parameters and environment, at most 4000 characters. Recorded only, never executed.' },
+      observation: { type: 'string', description: 'Required for record_test; actual observed output/discrepancy, at most 4000 characters.' },
+      outcome: { type: 'string', enum: ['supports', 'refutes', 'inconclusive'] },
+      basis: { type: 'string', enum: ['construction', 'measurement', 'observation'], description: 'Required for record_test. A constructive counterexample differs from noisy timing/measurement.' },
+      next_step: { type: 'string', description: 'Next falsifying check, at most 2000 characters; required when a measurement is reported to refute a hypothesis.' },
+      evidence_files: { type: 'array', items: { type: 'string' }, description: 'Optional record_test files, at most 8 regular files of at most 32 MiB each, within workspace.' },
+      check_files: { type: 'boolean', description: 'List with hypothesis_id only: rehash files of the latest test. Read-only; matching bytes do not establish authenticity or correct reasoning.' },
+      offset: { type: 'number', description: 'List page offset, nonnegative integer. With hypothesis_id, pages its experiment history instead.' },
+      limit: { type: 'number', description: 'List page size: default 10, max 20 hypotheses; with hypothesis_id default 3, max 10 experiments.' },
+    },
+    output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }] },
+    async execute(args, exec) {
+      const caller = requireCaptain(exec)
+      const workspace = workspaceOf(caller)
+      const stateRoot = stateRootOf(workspace, config)
+      const located = await requireParticipantTeam(workspace, config, caller)
+      return withTeamLock(teamLockKey(stateRoot, located.id), async () => {
+        const { team: fresh, identity } = await requireFreshParticipant(stateRoot, located.id, caller.id)
+        const ledgerRef = fresh.id + '@' + (fresh.boardId ?? String(fresh.createdAt))
+        const base = { ledger_ref: ledgerRef, summary: hypothesisSummary(fresh), note: 'UNVERIFIED experiment reports. File hashes prove byte integrity only. Independently reproduce important conclusions; platform verdicts remain separate.' }
+        if (args.action === 'list') {
+          if (args.ledger_ref !== undefined && args.ledger_ref !== ledgerRef) throw new Error('stale ledger_ref; list the current team')
+          if (args.check_files && !args.hypothesis_id) throw new Error('check_files requires a single hypothesis_id')
+          const offset = args.offset ?? 0
+          const limit = args.limit ?? (args.hypothesis_id ? 3 : 10)
+          if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > (args.hypothesis_id ? 10 : 20)) throw new Error('invalid offset or limit')
+          if (args.hypothesis_id) {
+            const hypothesis = requireHypothesis(fresh, args.hypothesis_id)
+            if (args.challenge_id !== undefined && args.challenge_id !== hypothesis.challengeId) throw new Error('hypothesis challenge_id mismatch')
+            const { tests, ...header } = hypothesis
+            const page = tests.slice(offset, offset + limit)
+            return JSON.parse(JSON.stringify({ ...base, hypothesis: header, tests: page, total: tests.length, next_offset: offset + page.length < tests.length ? offset + page.length : null,
+              ...(args.check_files ? { latest_test_id: tests.at(-1)?.id ?? null, file_checks: await inspectEvidenceFiles(workspace, tests.at(-1)?.files ?? []) } : {}) })) as Record<string, JsonValue>
+          }
+          const all = (fresh.hypotheses ?? []).filter(item => args.challenge_id === undefined || item.challengeId === args.challenge_id)
+          const page = all.slice(offset, offset + limit).map(item => ({ id: item.id, challenge_id: item.challengeId, statement: item.statement.slice(0, 200), prediction: item.prediction.slice(0, 200), truncated: item.statement.length > 200 || item.prediction.length > 200,
+            revision: item.revision, test_count: item.tests.length, latest_outcome: item.tests.at(-1)?.outcome ?? 'untested', conflicting_reports: item.tests.some(test => test.outcome === 'supports') && item.tests.some(test => test.outcome === 'refutes') }))
+          return JSON.parse(JSON.stringify({ ...base, hypotheses: page, total: all.length, next_offset: offset + page.length < all.length ? offset + page.length : null })) as Record<string, JsonValue>
+        }
+        let result: { hypothesis: ChallengeHypothesis; test?: HypothesisTest; duplicate: boolean }
+        if (args.action === 'propose') {
+          result = proposeHypothesis(fresh, { by: identity.name, challengeId: args.challenge_id ?? '', statement: args.statement ?? '', prediction: args.prediction ?? '' })
+        } else if (args.action === 'record_test') {
+          if (args.ledger_ref !== ledgerRef) throw new Error('missing or stale ledger_ref; list the current team first')
+          requireHypothesis(fresh, args.hypothesis_id)
+          result = recordHypothesisTest(fresh, { by: identity.name, hypothesisId: args.hypothesis_id ?? '', expectedRevision: args.expected_revision ?? -1, key: args.test_key ?? '', method: args.method ?? '', observation: args.observation ?? '', outcome: args.outcome!, basis: args.basis!, nextStep: args.next_step,
+            files: await captureEvidenceFiles(workspace, args.evidence_files) })
+        } else throw new Error('unknown hypothesis action')
+        if (!result.duplicate) await writeTeam(stateRoot, fresh)
+        // Deliberately leave sync cursors untouched: a ledger write must not acknowledge unseen teammate findings.
+        return JSON.parse(JSON.stringify({ ...base, summary: hypothesisSummary(fresh), hypothesis_id: result.hypothesis.id, revision: result.hypothesis.revision,
+          ...result.test ? { test_id: result.test.id } : {}, duplicate: result.duplicate, round: fresh.round ?? 0 })) as Record<string, JsonValue>
+      })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_teams_verify_finding',
     description: 'Captain-only: record an independent check of a finding. method names the actual command/file/platform check; result is confirmed, refuted or inconclusive. Reporter confidence alone is never verification. Persists a verification history and publishes an audit beat to round sync.',
     parameters: {
@@ -3003,6 +3074,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           ...challenge.environmentId ? [`- Environment: ${challenge.environmentId} (check platform for cleanup)`] : [],
           '', '## Findings (claims require verification)', '',
           ...(team.findings ?? []).flatMap(finding => [formatFinding(finding), ...(finding.verifications ?? []).map(check => `  - ${check.result} by ${check.by}; method: ${check.method}; ${check.note ?? ''}`)]),
+          '', '## Hypotheses and experiments (unverified reports; hashes are integrity only)', '', ...hypothesisArchive(team),
           '', '## Flags', '', ...(team.flags ?? []).map(formatFlag),
           '', '## Tasks', '', ...team.tasks.map(task => `- ${task.id}: ${task.subject} [${task.status}]${task.output ? `\n${task.output}` : ''}`),
           '', '> Source material from durable state. Include only independently verified commands and real output in WRITEUP.md.',
@@ -3739,6 +3811,7 @@ function renderStatusPanel(value: JsonValue): string {
       round?: number
       created_at?: number
       finding_count?: number
+      hypothesis_summary?: { total: number; untested: number; tests: number; conflicts: number }
       flags?: import('./types.ts').FlagCandidate[]
       findings?: import('./types.ts').TeamFinding[]
       member_sync?: Record<string, { behind?: number; working_on?: string }>
@@ -3771,6 +3844,7 @@ function renderStatusPanel(value: JsonValue): string {
   })
   const detail = renderStatus(value)
   const board = [
+    ...(team.ctf?.hypothesis_summary ? ['Hypotheses: ' + team.ctf.hypothesis_summary.total + '; untested: ' + team.ctf.hypothesis_summary.untested + '; reported experiments: ' + team.ctf.hypothesis_summary.tests + '; conflicts: ' + team.ctf.hypothesis_summary.conflicts + '. Use ctf_teams_hypothesis for history.'] : []),
     ...(team.ctf?.findings?.length ? ['Findings detail (claims require verification):', ...team.ctf.findings.map(formatFinding)] : []),
     ...(team.ctf?.flags?.length ? ['Flag detail (preserve original strings):', ...team.ctf.flags.map(formatFlag)] : []),
   ].join('\n')

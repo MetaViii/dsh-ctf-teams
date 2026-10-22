@@ -1,0 +1,23 @@
+{
+  "version": "0.2.1-rc.1",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "artifactSha256": "c9452b73bd542d10e171596f8cfbaba83923125670f2f5e9f6d57de808f4d4c7",
+  "passed": true,
+  "runs": [
+    {
+      "scenario": "ctf2-regression",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "durableEvidence": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ]
+}

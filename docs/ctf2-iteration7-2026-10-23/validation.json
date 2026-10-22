@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-23",
+  "plugin": "@nanmicoder/dsh-ctf-teams",
+  "version": "0.1.31",
+  "artifact": {
+    "name": "dsh-ctf-teams-iteration7-0.1.31.tgz",
+    "sha256": "c9452b73bd542d10e171596f8cfbaba83923125670f2f5e9f6d57de808f4d4c7",
+    "publishedToNpm": false,
+    "installedInUserProfile": false
+  },
+  "fullRegression": {
+    "command": "pnpm verify",
+    "exit": 0,
+    "passed": true,
+    "evidence": "evidence/verify.txt"
+  },
+  "focusedCoverage": [
+    "challenge and prediction isolation; exact deduplication",
+    "idempotent experiment retries and conflicting append-only corrections",
+    "concurrent revision fencing, team-generation refs and retired-member rejection",
+    "paginated full history and real recorder identity",
+    "actual SHA-256 bytes, changed/missing/unreadable files, path traversal, junction escape and size/count bounds",
+    "legacy JSON state, durable reload and archive history",
+    "query/retry state equality and paused-team no-dispatch checks"
+  ],
+  "runtime": [
+    {
+      "version": "0.2.0-rc.2",
+      "cohortCount": 278,
+      "passed": true,
+      "scenarios": [
+        "ctf2-regression"
+      ],
+      "evidence": "evidence/recommended-host.json"
+    },
+    {
+      "version": "0.2.1-rc.1",
+      "passed": true,
+      "scenarios": [
+        "ctf2-regression"
+      ],
+      "evidence": "evidence/desktop-rc1-ctf.json"
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "scenarios": [
+        "lifecycle",
+        "lifecycle-cold-restore",
+        "fallback",
+        "fallback-cold-restore",
+        "failure",
+        "captain-idle-wakeup",
+        "progressive-entry",
+        "web-approval",
+        "protocol-compatibility",
+        "stability",
+        "ctf2-regression"
+      ],
+      "evidence": "evidence/desktop-rc2.json"
+    }
+  ],
+  "method": "Packaged native-Node CLI/Loader, real tools and Code Mode, scripted LLM, isolated synthetic workspaces. Assertions reread archived state and hash fixture files outside the model.",
+  "unverified": [
+    "Real model compliance and CTF solving improvement",
+    "Interactive GUI",
+    "Other operating systems",
+    "Online platform writes",
+    "Live user-data migration",
+    "Executable assertion runner and authenticity of reported observations"
+  ]
+}

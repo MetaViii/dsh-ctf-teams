@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.30-2563eb?style=flat-square" alt="源码版本 0.1.30"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.31-2563eb?style=flat-square" alt="源码版本 0.1.31"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
@@ -38,6 +38,7 @@
 | --- | --- |
 | **并行解题** | 默认四名全栈 CTF 成员，覆盖 Web、Pwn、Reverse、Crypto、Forensics、Misc；按攻击角度组织任务，阵容可自定义。 |
 | **共享发现与独立复核** | 记录原始输出、推断、猜测和复现依据；队长单独登记复核结果，死胡同与纠正同样保留。 |
+| **假设与实验台账** | 按题目共享可检验的预测、实验方法和观察结果，保留失败与纠正历史；可绑定工作区文件哈希，发现证据已变更。 |
 | **候选 flag 审计** | 保留包装和大小写，格式不符只警告；返回持久化引用，支持独立候选变体及判定历史。平台接受结果由队长记录。 |
 | **批量题目管理** | 按 `challenge_id` 统计不同题目的通过数；单题通过后继续其他任务，整批完成需要明确确认。 |
 | **任务调度与资源排队** | 依赖完成后派发就绪任务，显示实际派发状态和等待原因；同战队的独占资源可串行使用。 |
@@ -309,6 +310,8 @@ node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output 
 
 `ctf_teams_references` 按需同步 CTF 技能、PoC 和 CVE 索引，包括 [ctf-skills](https://github.com/ljagiello/ctf-skills)、[Awesome-POC](https://github.com/WyAtu/Awesome-POC) 等。仓库保存在工作区，供成员检索；大型库按实际需要同步。
 
+共享假设与实验的用法、文件证据边界和本轮验证见[第七轮迭代](./docs/ctf2-iteration7-2026-10-23/README.md)。
+
 ## 工具索引
 
 日常使用通过自然语言和面板即可。编写自定义工作流时，可按以下分组查找工具：
@@ -317,7 +320,7 @@ node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output 
 | --- | --- |
 | 战队与计划 | `create`、`approve`、`edit_plan`、`add_member`、`update_member`、`remove_member` |
 | 任务执行与交接 | `create_task`、`claim_task`、`update_task`、`reassign_task`、`amend_task` |
-| 发现与复核 | `report_finding`、`verify_finding`、`sync` |
+| 发现与复核 | `report_finding`、`verify_finding`、`hypothesis`、`sync` |
 | 题目与 flag | `set_challenge`、`submit_flag`、`mark_flag`、`mark_challenge_solved` |
 | 通信与状态 | `send_message`、`status`、`resume` |
 | 解题支持 | `knowledge`、`env`、`references`、`image_to_text`、`text_candidates`、`platform_check` |

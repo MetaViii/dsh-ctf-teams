@@ -1,6 +1,7 @@
 /** Real CLI/Loader + Code Mode CTF2 acceptance. Only the LLM is scripted. */
 import assert from 'node:assert/strict'
-import { readFileSync, appendFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -39,6 +40,19 @@ if (textVariants.candidates.length !== 7 || textVariants.candidates[0].text !== 
 await tools.ctf_teams_set_challenge({title:'中文题目',remote:'http://ctf.local',environment_id:'env-ctf2',flag_format:'flag\\\\{[^}]+\\\\}'});
 const finding = await tools.ctf_teams_report_finding({content:'文件原始字节: EaSyRe',evidence_kind:'raw_output',confidence:'high',evidence:'xxd attachment.bin'});
 await tools.ctf_teams_verify_finding({finding_id:finding.finding_id,method:'independent byte check',result:'confirmed',note:'大小写一致'});
+const hypothesis = await tools.ctf_teams_hypothesis({action:'propose',challenge_id:'fixture-crypto',statement:'n is square',prediction:'isqrt(n)**2 == n'});
+const duplicateHypothesis = await tools.ctf_teams_hypothesis({action:'propose',challenge_id:'fixture-crypto',statement:'n is square',prediction:'isqrt(n)**2 == n'});
+if (!duplicateHypothesis.duplicate || duplicateHypothesis.revision !== 1) throw Error('hypothesis duplicate created a new revision');
+const testInput = {action:'record_test',hypothesis_id:hypothesis.hypothesis_id,ledger_ref:hypothesis.ledger_ref,expected_revision:1,test_key:'square-fixture',method:'python square.py n=49',observation:'49 == 7**2',outcome:'supports',basis:'construction',evidence_files:['hypothesis-evidence.txt']};
+const recorded = await tools.ctf_teams_hypothesis(testInput);
+const repeatedTest = await tools.ctf_teams_hypothesis(testInput);
+if (!repeatedTest.duplicate || repeatedTest.revision !== 2 || recorded.test_id !== repeatedTest.test_id) throw Error('experiment retries are not idempotent');
+await tools.ctf_teams_hypothesis({...testInput,expected_revision:2,test_key:'correct-input',observation:'actual input n=50',outcome:'refutes',next_step:'verify attachment hash before factoring'});
+const ledger = await tools.ctf_teams_hypothesis({action:'list',hypothesis_id:hypothesis.hypothesis_id,check_files:true,limit:1});
+if (ledger.total !== 2 || ledger.next_offset !== 1 || ledger.file_checks[0].status !== 'matched' || ledger.tests[0].by !== 'captain' || ledger.summary.conflicts !== 1) throw Error('ledger history or real file evidence lost through Code Mode');
+const ledgerNext = await tools.ctf_teams_hypothesis({action:'list',hypothesis_id:hypothesis.hypothesis_id,offset:1});
+if (ledgerNext.tests[0].observation !== 'actual input n=50' || ledgerNext.next_offset !== null) throw Error('experiment pagination lost a correction');
+if ((await tools.ctf_teams_status({})).ctf.hypothesis_summary.tests !== 2) throw Error('ledger status summary missing');
 const flag = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',evidence:'attachment bytes',source_kind:'local_output'});
 if (!flag.format_warning || !flag.flag_ref) throw Error('original wrapper was not retained with a warning');
 const duplicate = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}'});
@@ -64,7 +78,7 @@ await tools.ctf_teams_mark_challenge_solved({note:'fixture platform accepted bot
 const archived = await tools.ctf_teams_delete({});
 if (!archived.archive_path || !archived.environment_notice.includes('env-ctf2')) throw Error('archive receipt failed');
 const summary = await tools.ctf_teams_archive_summary({team_id:solo.team_id,archived:true});
-if (!summary.summary.includes('文件原始字节') || !summary.summary.includes('platform accepted: CTF2{EaSyRe}')) throw Error('archive summary incomplete');
+if (!summary.summary.includes('REPORTED refutes') || !summary.summary.includes('sha256=') || !summary.summary.includes('文件原始字节') || !summary.summary.includes('platform accepted: CTF2{EaSyRe}')) throw Error('archive summary incomplete');
 return 'CTF2_REGRESSION_PASSED';
 `
 
@@ -102,6 +116,7 @@ export function apply(ctx) {
     await ctx.get('loader').await()
     const cwd = process.cwd()
     mkdirSync(cwd, { recursive: true })
+    writeFileSync(join(cwd, 'hypothesis-evidence.txt'), 'fixture raw bytes: n=49\n')
     const handle = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } })
     ctx.effect(() => () => handle.dispose())
     const agent = handle.agent
@@ -120,6 +135,10 @@ export function apply(ctx) {
     assert.equal(archived.flags[0].verifiedFlag, 'CTF2{EaSyRe}')
     assert.equal(archived.flags[0].sources[0].kind, 'local_output')
     assert.equal(archived.findings[0].verifications[0].result, 'confirmed')
+    assert.equal(archived.hypotheses[0].tests.length, 2)
+    assert.equal(archived.hypotheses[0].tests[0].observation, '49 == 7**2')
+    assert.equal(archived.hypotheses[0].tests[1].observation, 'actual input n=50')
+    assert.equal(archived.hypotheses[0].tests[0].files[0].sha256, createHash('sha256').update(readFileSync(join(cwd, 'hypothesis-evidence.txt'))).digest('hex'))
     assert.deepEqual(archived.members, [])
     assert.deepEqual(archived.tasks, [])
     const batch = JSON.parse(readFileSync(join(cwd, '.ctf-teams/archive/ctf2-batch/team.json'), 'utf8'))
