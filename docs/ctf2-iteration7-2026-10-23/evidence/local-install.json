@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-23",
+  "version": "0.1.31",
+  "hostVersion": "0.2.1-rc.2",
+  "artifactSha256": "c9452b73bd542d10e171596f8cfbaba83923125670f2f5e9f6d57de808f4d4c7",
+  "installationMethod": "Desktop installation-owned dsh plugin --profile desktop add file:<tested-tarball> --offline --ignore-scripts",
+  "backupContentVerified": true,
+  "allPackagedFilesMatched": true,
+  "comparedFiles": 143,
+  "otherPluginVersionsUnchanged": true,
+  "configBytesUnchanged": true,
+  "dataContentsUnchanged": true,
+  "metadataOnlyChanges": [
+    {
+      "root": "storages",
+      "kind": "projection-cache-mtime"
+    }
+  ],
+  "dataCounts": {
+    "sessions": 455,
+    "storages": 445,
+    "agent-presets": 3,
+    "ctf-teams": 306,
+    "agent-teams": 0
+  },
+  "composedCtfPresetPresent": true,
+  "ctfHostRowPresent": true,
+  "otherSkippedBundleCount": 0,
+  "desktopRunning": true,
+  "desktopObservedAfterInstallation": true,
+  "guiConfirmed": false,
+  "teamResumed": false,
+  "npmPublished": false,
+  "limitations": [
+    "GUI new-session reply awaits user confirmation",
+    "No live data-format migration was performed",
+    "One projection-cache file retained identical bytes with an updated modification time"
+  ]
+}

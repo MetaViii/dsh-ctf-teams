@@ -6,7 +6,7 @@
     "name": "dsh-ctf-teams-iteration7-0.1.31.tgz",
     "sha256": "c9452b73bd542d10e171596f8cfbaba83923125670f2f5e9f6d57de808f4d4c7",
     "publishedToNpm": false,
-    "installedInUserProfile": false
+    "installedInUserProfile": true
   },
   "fullRegression": {
     "command": "pnpm verify",
@@ -68,5 +68,12 @@
     "Online platform writes",
     "Live user-data migration",
     "Executable assertion runner and authenticity of reported observations"
-  ]
+  ],
+  "localInstallation": {
+    "version": "0.1.31",
+    "hostVersion": "0.2.1-rc.2",
+    "passed": true,
+    "evidence": "evidence/local-install.json",
+    "guiConfirmed": false
+  }
 }
