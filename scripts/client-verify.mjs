@@ -331,6 +331,26 @@ check('UI shows evidence verification and platform environment', evidenceView.in
 withTeam({})
 await settle()
 
+// Local exploration never posts or queues work, even for a halted team.
+withTeam({halted:true,captainHandover:{summary:{revision:2,stale:true,next_steps:['检查单行输入']},assessment:'500 不是损坏的证明',disputes:['核对前提']},findings:Array.from({length:12},(_,i)=>({...baseTeam.findings[0],id:'fd'+(i+1),reference:'baby-rsa-solve@gen/fd'+(i+1),content:'evidence '+(i+1),claimType:'interpretation',dependsOn:['baby-rsa-solve@gen/fd0'],verifications:[{result:'confirmed',method:'old check'}],recheckRequired:{causes:['baby-rsa-solve@gen/fd0']}}))})
+await settle();posts.length=0
+check('invalidated confirmed evidence is visibly marked pending recheck',textOf(render()).join(' ').includes('待复核')&&!findElement(render(),'summary',p=>textOf(p.children).join(' ').includes('confirmed')))
+findButton(render(),'证据下一页').props.onClick()
+check('evidence pagination reaches older records',textOf(render()).join(' ').includes('evidence 1')&&!textOf(render()).join(' ').includes('evidence 12'))
+findElement(render(),'input',p=>p['aria-label']==='搜索证据').props.onChange({target:{value:'evidence 12'}})
+findElement(render(),'select',p=>p['aria-label']==='筛选证据').props.onChange({target:{value:'待复核'}})
+check('search and filters reset pagination with no action requests',textOf(render()).join(' ').includes('evidence 12')&&posts.length===0)
+check('evidence details preserve dependencies and old verification history',textOf(render()).join(' ').includes('baby-rsa-solve@gen/fd0')&&textOf(render()).join(' ').includes('old check'))
+findButton(render(),'复核结论 fd12').props.onClick();await settle()
+check('an explicit review click sends exactly one typed action',posts.length===1&&posts[0].body.action==='review-finding'&&posts[0].body.findingRef==='baby-rsa-solve@gen/fd12')
+posts.length=0
+findButton(render(),'保存队长交接').props.onClick();await settle()
+check('handover card separates stale reports and sends one save request',textOf(render()).join(' ').includes('状态已变化')&&posts.length===1&&posts[0].body.action==='save-checkpoint')
+withTeam({role:'member',captainHandover:{summary:{revision:1,stale:false,next_steps:[]}},findings:[{...baseTeam.findings[0],reference:'baby-rsa-solve@gen/fd1',supersededBy:'baby-rsa-solve@gen/fd2',verifications:[{result:'confirmed',method:'old'}]}]});await settle()
+findElement(render(),'input',p=>p['aria-label']==='搜索证据').props.onChange({target:{value:''}})
+findElement(render(),'select',p=>p['aria-label']==='筛选证据').props.onChange({target:{value:'all'}})
+check('members see supersession but cannot request a captain review or handover',textOf(render()).join(' ').includes('已取代')&&findButton(render(),'复核结论 fd1').props.disabled===true&&findButton(render(),'保存队长交接')===undefined)
+withTeam({});await settle()
 failFetch = true
 await new Promise((resolve) => setTimeout(resolve, 1700))
 const stale = textOf(render()).join(' ')

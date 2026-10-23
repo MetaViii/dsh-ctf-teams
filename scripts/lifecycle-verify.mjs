@@ -1573,6 +1573,12 @@ try {
   const evidence=await call('ctf_teams_evidence',{needs_recheck:true},firstWorker)
   const duplicateReview=await call('ctf_teams_verify_finding',{finding_id:observation.finding_ref,method:'vary row count',result:'refuted',note:'single row succeeds'})
   check('dependency invalidation is visible to members; reads and duplicate verdicts do not write',refuted.affected_refs.includes(interpretation.finding_ref)&&evidence.findings.some(item=>item.finding_ref===interpretation.finding_ref)&&duplicateReview.duplicate&&JSON.stringify(await readTeam(stateRoot,'lane-budget'))===beforeReads)
+  const history=await call('ctf_teams_search',{action:'search',query:'parser',source:'finding'},firstWorker)
+  const historyDetail=await call('ctf_teams_search',{action:'get',record_ref:history.results[0].record_ref,content_limit:20},firstWorker)
+  check('members retrieve bounded durable reports without writes or cursor changes',history.results.some(row=>row.status==='needs_recheck')&&historyDetail.next_content_offset===20&&JSON.stringify(await readTeam(stateRoot,'lane-budget'))===beforeReads)
+  let oldRecordDenied=false
+  try{await call('ctf_teams_search',{action:'get',record_ref:'lane-budget@old/finding/fd1'},firstWorker)}catch{oldRecordDenied=true}
+  check('history references cannot read an older team generation',oldRecordDenied)
   let memberCheckpointDenied=false
   try{await call('ctf_teams_checkpoint',{action:'load'},firstWorker)}catch{memberCheckpointDenied=true}
   check('captain handover is not writable or readable through a member identity',memberCheckpointDenied)
@@ -1771,6 +1777,9 @@ try {
     let staleLedgerRejected = false
     try { await call('ctf_teams_hypothesis', { action: 'propose', challenge_id: 'old', statement: 'stale report', prediction: 'must fail' }, firstChild) } catch { staleLedgerRejected = true }
     check('retired members cannot append hypothesis records', staleLedgerRejected)
+    let retiredSearchDenied=false
+    try{await call('ctf_teams_search',{action:'search',query:'fixture'},firstChild)}catch{retiredSearchDenied=true}
+    check('retired member history access is fenced',retiredSearchDenied)
     return originalDrain.call(this, parent, ids)
   }
   try { await call('ctf_teams_update_member', { member_name: 'one', provider: 'fake', model: 'repaired-model', reason: 'fix broken provider route' }) }

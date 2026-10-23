@@ -1,6 +1,6 @@
 {
   "name": "@nanmicoder/dsh-ctf-teams",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "description": "CTFTeams for DeepSeek Harness: a multi-agent CTF squad (captain + recon/web/binary/crypto/forensics lanes) that solves challenges together with round-based progress sync, a shared findings & flag board, a shipped knowledge base (kali, pwntools, vol3, sage, fresh PoC/CVE hunting), and a terminal dashboard",
   "type": "module",
   "main": "lib/index.js",
@@ -111,7 +111,7 @@
     "verify:git-artifact": "node scripts/git-artifacts.mjs",
     "verify:client": "node scripts/build-client.mjs --check && node scripts/client-verify.mjs",
     "verify:dashboard": "node scripts/dashboard-route-verify.mjs",
-    "verify:ctf": "node scripts/ctf-verify.mjs && node --test --test-concurrency=1 scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs scripts/ctf2-iteration3.test.mjs scripts/ctf2-iteration4.test.mjs scripts/ctf2-iteration5.test.mjs scripts/ctf2-iteration6.test.mjs scripts/hypotheses.test.mjs scripts/evidence-checkpoint.test.mjs scripts/windows-shell.test.mjs scripts/session-runtime-diagnose.test.mjs scripts/effect-cleanup.test.mjs",
+    "verify:ctf": "node scripts/ctf-verify.mjs && node --test --test-concurrency=1 scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs scripts/ctf2-iteration3.test.mjs scripts/ctf2-iteration4.test.mjs scripts/ctf2-iteration5.test.mjs scripts/ctf2-iteration6.test.mjs scripts/hypotheses.test.mjs scripts/evidence-checkpoint.test.mjs scripts/team-search.test.mjs scripts/windows-shell.test.mjs scripts/session-runtime-diagnose.test.mjs scripts/effect-cleanup.test.mjs",
     "verify:ctf:harness": "node scripts/ctf2-harness-smoke.mjs"
   },
   "peerDependencies": {

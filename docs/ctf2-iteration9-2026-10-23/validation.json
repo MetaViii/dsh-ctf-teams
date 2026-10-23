@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-23",
+  "version": "0.1.33",
+  "artifact": {
+    "name": "dsh-ctf-teams-iteration9-0.1.33.tgz",
+    "sha256": "37db755eb58f9e02b33cca7183d5e693227629e3dea613c79f4668e357b3f083",
+    "installedInUserProfile": false,
+    "publishedToNpm": false
+  },
+  "fullRegression": {
+    "command": "pnpm verify",
+    "exit": 0,
+    "passed": true,
+    "evidence": "evidence/verify.txt"
+  },
+  "runtime": [
+    {
+      "version": "0.2.0-rc.2",
+      "passed": true,
+      "cohortCount": 278,
+      "evidence": "evidence/recommended-host.json"
+    },
+    {
+      "version": "0.2.1-rc.1",
+      "passed": true,
+      "scenarios": [
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "evidence": "evidence/desktop-rc1-ctf.json"
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "scenarios": [
+        "lifecycle",
+        "lifecycle-cold-restore",
+        "fallback",
+        "fallback-cold-restore",
+        "failure",
+        "captain-idle-wakeup",
+        "progressive-entry",
+        "web-approval",
+        "protocol-compatibility",
+        "stability",
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "evidence": "evidence/desktop-rc2.json"
+    }
+  ],
+  "featureValidation": {
+    "search": [
+      "Unicode pagination",
+      "recorded checkpoints and methods",
+      "stale references",
+      "no team writes",
+      "retired member fencing",
+      "Code Mode exposure and cold restore"
+    ],
+    "dashboard": [
+      "local search/filter/pagination without POST",
+      "invalidated and superseded status precedence",
+      "one request per explicit review/save click",
+      "captain authority",
+      "stale reference rejection",
+      "private handover omission"
+    ],
+    "newControls": "Compiled client and real route implementation exercised with test contexts; native Web approval covers the existing authenticated route. Interactive new controls remain unverified."
+  },
+  "installation": {
+    "passed": false,
+    "status": "waiting-for-full-DSH-exit",
+    "guiConfirmed": false
+  },
+  "method": "Native Node real CLI/Loader and Code Mode; scripted LLM and isolated synthetic workspaces. Cold restore resumes the original captain and asserts unchanged team bytes and pending candidate.",
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model compliance and solving benefit",
+    "Online platform submissions",
+    "Other operating systems",
+    "Raw session trace indexing",
+    "Time/token/subprocess hard budgets",
+    "Cross-session ownership transfer"
+  ]
+}

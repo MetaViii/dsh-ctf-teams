@@ -63,6 +63,12 @@ const refuted = await tools.ctf_teams_verify_finding({finding_id:observation.fin
 const duplicateReview = await tools.ctf_teams_verify_finding({finding_id:observation.finding_ref,method:'single-row fixture input',result:'refuted'});
 const evidence = await tools.ctf_teams_evidence({needs_recheck:true,limit:1});
 if (!duplicateReview.duplicate || refuted.affected_total !== 1 || evidence.findings[0].finding_ref !== interpretation.finding_ref || !evidence.findings[0].recheckRequired) throw Error('finding provenance lost through Code Mode');
+const searched = await tools.ctf_teams_search({action:'search',query:'square.py',source:'experiment',limit:1});
+if (searched.total !== 2 || searched.next_offset !== 1) throw Error('history search lost experiment methods');
+const searchedDetail = await tools.ctf_teams_search({action:'get',record_ref:searched.results[0].record_ref,content_limit:40});
+if (searchedDetail.next_content_offset !== 40 || Array.from(searchedDetail.content).length !== 40) throw Error('bounded history expansion failed');
+const searchableEvidence=await tools.ctf_teams_search({action:'search',query:'fixture parser may be broken',source:'finding'});
+if (!searchableEvidence.results.some(row=>row.status==='needs_recheck')) throw Error('search presented invalidated evidence as confirmed');
 await tools.ctf_teams_set_challenge({max_parallel_lanes:2});
 const checkpointLoad = await tools.ctf_teams_checkpoint({action:'load'});
 const checkpointInput = {action:'save',ledger_ref:checkpointLoad.ledger_ref,state_ref:checkpointLoad.current_state.state_ref,expected_revision:0,assessment:'Need an independent countercheck',disputes:['500 is an observation, broken parser is an explanation'],next_steps:['vary the fixture input'],evidence_files:['hypothesis-evidence.txt']};
@@ -105,6 +111,8 @@ return 'CTF2_REGRESSION_PASSED';
 `
 
 const coldCode = `
+const coldHistory = await tools.ctf_teams_search({action:'search',query:'handover',source:'finding'});
+if (!Array.isArray(coldHistory.results)) throw Error('history tool unavailable after cold restore');
 const handover = await tools.ctf_teams_checkpoint({action:'load',check_files:true});
 if (handover.latest_revision !== 1 || handover.stale || handover.current_state.facts.pending_candidate_count !== 1 || handover.saved.notes.nextSteps[0] !== 'verify the actual platform response after restoring' || handover.file_checks[0].status !== 'matched') throw Error('cold checkpoint not restored');
 const evidence = await tools.ctf_teams_evidence({});

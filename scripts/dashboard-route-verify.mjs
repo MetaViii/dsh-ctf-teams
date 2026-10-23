@@ -266,6 +266,24 @@ try {
     writeupPrompt.includes('不要凭记忆编造') && writeupPrompt.includes('原样复制执行'),
     writeupPrompt.slice(-200))
 
+  const reviewCount=sent.length
+  const reviewFinding=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',action:'review-finding',findingRef:snapshot.findings[0].reference}),reviewFinding)
+  check('finding review sends one bounded captain turn without embedding untrusted finding text',reviewFinding.status===200&&sent.length===reviewCount+1&&sent.at(-1).message.content[0].text.includes('不恢复战队')&&!sent.at(-1).message.content[0].text.includes('两个附件'))
+  const handoverAction=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',action:'save-checkpoint'}),handoverAction)
+  check('checkpoint action asks for fresh CAS state without direct team changes',handoverAction.status===200&&sent.length===reviewCount+2&&sent.at(-1).message.content[0].text.includes('expected_revision'))
+  for(const action of ['review-finding','save-checkpoint']) {
+    const denied=recorder()
+    await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-member',action,teamId:'baby-rsa-solve',findingRef:snapshot.findings[0].reference}),denied)
+    check('member cannot request '+action,denied.status===403)
+  }
+  const staleFinding=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',action:'review-finding',findingRef:'baby-rsa-solve@old/fd1'}),staleFinding)
+  check('stale finding refs do not dispatch',staleFinding.status===409&&sent.length===reviewCount+2)
+  const memberState=recorder()
+  await routes.get(DASHBOARD_STATE_PATH).handler(request(DASHBOARD_STATE_PATH+'?session=session-member'),memberState)
+  check('dashboard omits captain handover from member snapshots',JSON.parse(memberState.body).teams.every(team=>team.captainHandover===undefined))
   const queued = sent.length
 
   /* ── action: authority and validation ─────────────────────────────────── */

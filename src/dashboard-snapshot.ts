@@ -12,6 +12,8 @@
  * @module dsh-ctf-teams/dashboard-snapshot
  */
 
+import { checkpointSummary } from './captain-checkpoint.ts'
+import { findingReference } from './evidence-graph.ts'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -111,6 +113,7 @@ export interface DashboardTeamSnapshot {
   tasks: DashboardTaskRow[]
   findings: TeamFinding[]
   flags: FlagCandidate[]
+  captainHandover?: { summary: ReturnType<typeof checkpointSummary>; assessment?: string; disputes?: string[] }
   captainUnread: number
   counts: {
     members: number
@@ -308,7 +311,8 @@ export async function assembleDashboardTeam(
       ...task.inScope === undefined ? {} : { inScope: [...task.inScope] },
       ...task.verify === undefined ? {} : { verify: [...task.verify] },
     })),
-    findings: team.findings ?? [],
+    findings: (team.findings ?? []).map(finding=>({...finding,reference:findingReference(team,finding)})),
+    ...(roleOf(team,options.sessionId)==='captain' ? {captainHandover:{summary:checkpointSummary(team),assessment:team.captainCheckpoints?.at(-1)?.notes.assessment,disputes:team.captainCheckpoints?.at(-1)?.notes.disputes}} : {}),
     flags: team.flags ?? [],
     captainUnread,
     counts: {

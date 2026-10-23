@@ -1,0 +1,39 @@
+{
+  "version": "0.2.1-rc.1",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "artifactSha256": "37db755eb58f9e02b33cca7183d5e693227629e3dea613c79f4668e357b3f083",
+  "passed": true,
+  "runs": [
+    {
+      "scenario": "ctf2-regression",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "durableEvidence": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "ctf2-handover-cold-restore",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "productMarker": true,
+        "sameCaptain": true,
+        "pendingCandidatePreserved": true,
+        "noTeamWrites": true
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ]
+}

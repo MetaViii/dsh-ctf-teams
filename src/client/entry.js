@@ -376,28 +376,69 @@ function tasksSection(team) {
   ])
 }
 
-function findingsSection(team, now) {
-  var findings = team.findings.slice(-8)
-  return h('div', { key: 'findings' }, [
-    sectionTitle('Findings（最新）', team.counts.findings + ' 条'),
-    findings.length === 0
-      ? row([h('span', { key: 'empty', style: { color: TONE.muted } }, '还没有进展上报——成员每轮会把结果发上看板（死胡同也算结果）')], 'empty')
-      : h('div', { key: 'rows' }, findings.map(function (finding) {
-        var tag = finding.category ? finding.from + '/' + finding.category : finding.from
-        var deadEnd = finding.category === 'dead-end'
-        var check = finding.verifications && finding.verifications.length ? finding.verifications[finding.verifications.length - 1] : null
-        return row([
-          h('span', { key: 'id', style: { width: 96, flex: '0 0 auto', whiteSpace: 'nowrap', color: TONE.muted } }, ['r' + finding.round + ' ', mono(finding.id)]),
-          h('span', { key: 'tag', style: { width: 150, flex: '0 0 auto', overflow: 'hidden' } }, chip(tag, deadEnd ? TONE.bad : TONE.info, 'tag')),
-          h('span', { key: 'text', style: { flex: 1, minWidth: 0 } }, [
-            chip(check ? check.result : '待验证', check && check.result === 'confirmed' ? TONE.ok : check && check.result === 'refuted' ? TONE.bad : TONE.warn, 'verification'),
-            ' [' + (finding.evidenceKind || '未注明证据类型') + (finding.confidence ? ' / ' + finding.confidence : '') + '] ', finding.content,
-            finding.evidence ? h('div', { key: 'evidence', style: { color: TONE.muted } }, finding.evidence) : null,
-            check ? h('div', { key: 'check', style: { color: TONE.muted } }, ['核验: ', check.method, check.note ? '；' + check.note : '']) : null,
-          ]),
-          h('span', { key: 'age', style: { width: 68, flex: '0 0 auto', textAlign: 'right', color: TONE.muted, whiteSpace: 'nowrap' } }, age(finding.ts, now)),
-        ], finding.id)
-      })),
+function findingState(finding) {
+  if (finding.supersededBy) return '已取代'
+  if (finding.recheckRequired) return '待复核'
+  var checks = finding.verifications || []
+  return checks.length ? checks[checks.length - 1].result : '待验证'
+}
+
+function EvidenceSection(props) {
+  var team = props.team
+  var queryState = REACT.useState(''), query = queryState[0], setQuery = queryState[1]
+  var filterState = REACT.useState('all'), filter = filterState[0], setFilter = filterState[1]
+  var pageState = REACT.useState(0), page = pageState[0], setPage = pageState[1]
+  var matching = (team.findings || []).filter(function (item) {
+    var state = findingState(item)
+    var selected = filter === 'all' || filter === state || filter === item.claimType
+    return selected && JSON.stringify(item).toLowerCase().indexOf(query.trim().toLowerCase()) >= 0
+  }).slice().reverse()
+  var current = Math.min(page, Math.max(0, Math.ceil(matching.length / 10) - 1))
+  var canAct = team.role === 'captain' && !team.archived && !props.busy
+  return h('div', {key:'evidence'}, [
+    sectionTitle('证据与结论', matching.length + ' / ' + team.findings.length + ' 条 · 查看与筛选不调用模型'),
+    h('div', {key:'controls',style:{display:'flex',gap:8,padding:8}}, [
+      h('input', {key:'query','aria-label':'搜索证据',placeholder:'搜索内容、方法或引用',value:query,maxLength:200,onChange:function(e){setQuery(e.target.value);setPage(0)},style:{flex:1,minWidth:0}}),
+      h('select', {key:'filter','aria-label':'筛选证据',value:filter,onChange:function(e){setFilter(e.target.value);setPage(0)}}, ['all','待复核','已取代','observation','interpretation','decision','confirmed','refuted','inconclusive','待验证'].map(function(value){return h('option',{key:value,value:value},value==='all'?'全部证据':value)})),
+    ]),
+    matching.length === 0 ? row(['没有匹配的证据记录'], 'empty') : h('div', {key:'rows'}, matching.slice(current*10,current*10+10).map(function(finding){
+      var state = findingState(finding), checks = finding.verifications || []
+      var color = state === 'confirmed' ? TONE.ok : state === 'refuted' ? TONE.bad : TONE.warn
+      return h('details', {key:finding.id,style:{padding:8,borderBottom:'1px solid '+TONE.line}}, [
+        h('summary', {key:'summary',style:{cursor:'pointer',overflowWrap:'anywhere'}}, [chip(state,color,'state'),' ',mono(finding.id),' ['+(finding.claimType||'未分类')+'] ',finding.content]),
+        h('div', {key:'detail',style:{padding:'8px 0',overflowWrap:'anywhere',whiteSpace:'pre-wrap'}}, [
+          h('div',{key:'ref'},'引用: '+(finding.reference||finding.id)+' · '+finding.from+(finding.challengeId?' · 题目: '+finding.challengeId:'')),
+          h('div',{key:'kind'},'证据: '+(finding.evidenceKind||'未注明证据类型')+(finding.confidence?' / '+finding.confidence:'')),
+          h('div',{key:'evidence'},finding.evidence||'无复现材料'),
+          h('div',{key:'depends'},'依赖: '+((finding.dependsOn||[]).join(', ')||'无')),
+          finding.supersededBy ? h('div',{key:'replacement'},'取代记录: '+finding.supersededBy) : null,
+          finding.recheckRequired ? h('div',{key:'causes',style:{color:TONE.warn}},'待复核原因: '+finding.recheckRequired.causes.join(', ')) : null,
+          h('div',{key:'checks'},checks.map(function(check,index){return h('div',{key:index},'核验 '+(index+1)+': '+check.result+' · '+check.method+(check.note?'；'+check.note:''))})),
+          h(ActionButton,{key:'review',label:'复核结论 '+finding.id,disabled:!canAct||!finding.reference,title:'向队长发送一次有界复核请求；保持战队当前状态',onClick:function(){props.onAction({action:'review-finding',findingRef:finding.reference})}}),
+        ]),
+      ])
+    })),
+    h('div',{key:'pages',style:{display:'flex',gap:8,padding:8}},[
+      h(ActionButton,{key:'prev',label:'证据上一页',disabled:current===0,onClick:function(){setPage(current-1)}}),
+      h('span',{key:'page'},(current+1)+' / '+Math.max(1,Math.ceil(matching.length/10))),
+      h(ActionButton,{key:'next',label:'证据下一页',disabled:(current+1)*10>=matching.length,onClick:function(){setPage(current+1)}}),
+    ]),
+  ])
+}
+
+function HandoverSection(props) {
+  var handover = props.team.captainHandover
+  if (!handover || props.team.role !== 'captain') return null
+  var summary = handover.summary
+  return h('div',{key:'handover'},[
+    sectionTitle('队长交接',summary?'版本 '+summary.revision+(summary.stale?' · 状态已变化，请核对':' · 与当前状态一致'):'尚未保存'),
+    summary ? h('details',{key:'detail',style:{padding:8}},[
+      h('summary',{key:'title'},'展开交接记录（队长报告）'),
+      h('div',{key:'assessment',style:{whiteSpace:'pre-wrap'}},handover.assessment||''),
+      h('div',{key:'disputes'},'争议: '+((handover.disputes||[]).join('；')||'无记录')),
+      h('div',{key:'next'},'下一步: '+summary.next_steps.join('；')),
+    ]) : null,
+    h(ActionButton,{key:'save',label:'保存队长交接',disabled:props.team.archived||props.busy,title:'发送一次保存请求，不恢复战队',onClick:function(){props.onAction({action:'save-checkpoint'})}}),
   ])
 }
 
@@ -437,7 +478,8 @@ function TeamView(props) {
     headerRow(team, props.now),
     agentsSection(team),
     tasksSection(team),
-    findingsSection(team, props.now),
+    h(EvidenceSection,{key:'evidence:'+team.teamId,team:team,onAction:props.onAction,busy:props.busy}),
+    h(HandoverSection,{key:'handover',team:team,onAction:props.onAction,busy:props.busy}),
     flagsSection(team),
     nextStepRow(team),
   ])
@@ -1108,7 +1150,7 @@ function DashboardView(props) {
           h('div', { key: 'title', style: { fontSize: 15, color: 'inherit', marginBottom: 6 } }, '这个会话还没有 CTFTeams 战队'),
           h('div', { key: 'body' }, '点上面的「开始解题」填题目信息，面板会把它作为你的一条消息发给会话；也可以直接说「用 CTFTeams 解这道题」。'),
         ]))
-      : h(TeamView, { key: 'view:' + selected.teamId, team: selected, now: now }),
+      : h(TeamView, { key: 'view:' + selected.teamId, team: selected, now: now, onAction: runAction, busy: busy }),
     dialogs,
   ])
 }

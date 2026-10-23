@@ -11,6 +11,7 @@
  *
  * @module dsh-ctf-teams/dashboard-snapshot
  */
+import { checkpointSummary } from './captain-checkpoint.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import { memberRouteDiagnostics } from './model-routes.ts';
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts';
@@ -92,6 +93,11 @@ export interface DashboardTeamSnapshot {
     tasks: DashboardTaskRow[];
     findings: TeamFinding[];
     flags: FlagCandidate[];
+    captainHandover?: {
+        summary: ReturnType<typeof checkpointSummary>;
+        assessment?: string;
+        disputes?: string[];
+    };
     captainUnread: number;
     counts: {
         members: number;

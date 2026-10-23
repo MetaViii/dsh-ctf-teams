@@ -17,7 +17,7 @@
 import type { TeamState } from './types.ts';
 import type { DashboardTeamSnapshot } from './dashboard-snapshot.ts';
 /** Actions the panel may request. */
-export type DashboardActionName = 'start' | 'approve' | 'halt' | 'resume' | 'verify-flag' | 'nudge' | 'attachments' | 'writeup';
+export type DashboardActionName = 'start' | 'approve' | 'halt' | 'resume' | 'verify-flag' | 'review-finding' | 'save-checkpoint' | 'nudge' | 'attachments' | 'writeup';
 /** Actions the host performs itself, because they only touch durable files. */
 export type DashboardMutationName = 'delete-team' | 'purge-archive';
 /** What the action needs before it may be sent. */
@@ -36,6 +36,7 @@ export interface DashboardActionBody {
     points?: number;
     flagFormat?: string;
     attachments?: string[];
+    findingRef?: string;
     flagId?: string;
     reason?: string;
 }
