@@ -1,0 +1,29 @@
+{
+  "version": "0.1.32",
+  "hostVersion": "0.2.1-rc.2",
+  "artifactSha256": "649734fec8597537e386ecf7f5dd4b243ebd48d2c26b5ae03e08911a79665b5d",
+  "allPackagedFilesMatched": true,
+  "comparedFiles": 148,
+  "otherPluginVersionsUnchanged": true,
+  "configBytesUnchanged": true,
+  "dataContentsUnchanged": true,
+  "dataHashesAndMetadataUnchanged": true,
+  "metadataOnlyChanges": [],
+  "dataCounts": {
+    "sessions": 456,
+    "storages": 446,
+    "agent-presets": 3,
+    "ctf-teams": 306,
+    "agent-teams": 0
+  },
+  "backupContentVerified": true,
+  "desktopRestarted": true,
+  "composedCtfPresetPresent": true,
+  "guiConfirmed": false,
+  "teamResumed": false,
+  "npmPublished": false,
+  "ctfHostRowPresent": true,
+  "otherSkippedBundleCount": 0,
+  "desktopRunning": true,
+  "guiValidation": "User said GUI validation is temporarily inconvenient; remains unverified."
+}

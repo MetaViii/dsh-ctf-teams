@@ -143,6 +143,15 @@ for (const scenario of selectedScenarios) {
     if (scenario === 'ctf2-regression') {
         const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('CTF2_REGRESSION_PASSED'), durableEvidence: trace.some(x => x.event === 'ctf2-regression-passed') };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });
+        if(Object.values(assertions).every(Boolean)) {
+            const handover=JSON.parse(readFileSync(join(workspace,'.ctf-teams/ctf2-handover/team.json'),'utf8'));
+            const coldTrace=join(report,scenario,'handover-cold-trace.jsonl');
+            const cold=await command([process.execPath,join(runtime,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','headless'],workspace,environment({DSH_HOME:home,DSH_PERMISSION_MODE:'danger-full-access',DSH_TELEMETRY_DISABLED:'1',LAB_TRACE:coldTrace,LAB_TEAMS:'1',LAB_SCENARIO:scenario,LAB_CTF_COLD:'1',LAB_PARENT_SESSION:handover.captainSessionId}),scenario+'-handover-cold',90000);
+            const events=existsSync(coldTrace)?readFileSync(coldTrace,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[];
+            const restored=events.find(event=>event.event==='ctf2-handover-restored');
+            const checks={exit0:cold.code===0&&!cold.timedOut,productMarker:cold.stdout.includes('CTF2_HANDOVER_RESTORED'),sameCaptain:restored?.sameCaptain===true,pendingCandidatePreserved:restored?.pendingCandidatePreserved===true,noTeamWrites:restored?.noTeamWrites===true};
+            runs.push({scenario:'ctf2-handover-cold-restore',passed:Object.values(checks).every(Boolean),assertions:checks,exit:{code:cold.code,signal:cold.signal,timedOut:cold.timedOut}});
+        }
         continue;
     }
     if (scenario === 'stability') {

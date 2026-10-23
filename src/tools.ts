@@ -26,6 +26,8 @@ import { memberAvailable, availabilityLabel, foldFailureInbox } from './availabi
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
 import { collectParticipantInbox, formatInbox, syncInboxLimit } from './coordination.ts'
 import { textCandidates } from './text-candidates.ts'
+import { boardReference, findingReference, resolveFindingReference, affectedFindings, evidenceSummary } from './evidence-graph.ts'
+import { runtimeBrief, saveCaptainCheckpoint, checkpointSummary, planningSignals } from './captain-checkpoint.ts'
 import { captureEvidenceFiles, inspectEvidenceFiles } from './evidence-files.ts'
 import { proposeHypothesis, recordHypothesisTest, requireHypothesis, hypothesisSummary, hypothesisArchive, type ChallengeHypothesis, type HypothesisTest } from './hypotheses.ts'
 import { proxyHealth, readPlatformSnapshot, type PlatformConfig } from './platform.ts'
@@ -2381,8 +2383,11 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           created_at: team.createdAt,
           finding_count: team.findings?.length ?? 0,
           hypothesis_summary: hypothesisSummary(team),
+          evidence_summary: evidenceSummary(team),
+          planning_signals: planningSignals(team),
+          ...identity.kind === 'captain' ? { captain_checkpoint: checkpointSummary(team) } : {},
           flags: (team.flags ?? []).map((flag) => ({ ...flag, flag_ref: flagReference(team, flag) })),
-          findings: (team.findings ?? []).slice(-10).map((finding) => ({ ...finding })),
+          findings: (team.findings ?? []).slice(-10).map((finding) => ({ ...finding, reference: findingReference(team, finding) })),
           member_sync: memberSync,
           ...team.challenge?.multiChallenge ? { batch_progress: batchProgress(team) } : {},
         },
@@ -2617,6 +2622,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       environment_id: { type: 'string', description: 'Platform environment/container id; archive reminds you to release its slot. Empty string clears it.' },
       multi_challenge: { type: 'boolean', description: 'Keep the team running across multiple challenges. Individual verified flags never close the batch.' },
       expected_challenges: { type: 'number', description: 'Positive integer count of distinct challenge ids required before explicit batch completion.' },
+      max_parallel_lanes: { type: 'number', description: 'Optional integer 1..16 (0 clears the cap): maximum simultaneous claimed/in-progress task lanes per challenge_id. Omit to preserve the current policy. Lowering does not preempt active work; queued tasks wait. Unscoped tasks share a separate bucket.' },
       requires_running_target_for_submit: { type: 'boolean', description: 'Platform requires a running target at submission time; warn when environment state is unknown or stopped.' },
       practice_ground_id: { type: 'string', description: 'CTF2 practice ground for read-only platform checks.' },
     },
@@ -2652,6 +2658,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           multiChallenge: args.multi_challenge,
           expectedChallenges: args.expected_challenges,
           requiresRunningTargetForSubmit: args.requires_running_target_for_submit,
+          maxParallelLanes: args.max_parallel_lanes,
           practiceGroundId: args.practice_ground_id,
         })
         await writeTeam(stateRoot, fresh)
@@ -2880,6 +2887,9 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     name: 'ctf_teams_report_finding',
     description: 'Publish one finding to the shared board (recon result, attack path, dead end, extracted artifact) and receive everything teammates reported since your last sync in the same response. This is the round-sync heartbeat: report every meaningful result the round you get it, exact commands and paths included. Dead ends count — category "dead-end" saves your teammates a round.',
     parameters: {
+      challenge_id: { type: 'string', description: 'Actual platform challenge id or stable offline attachment identifier.' },
+      claim_type: { type: 'string', enum: ['observation', 'interpretation', 'decision'], description: 'Separate measured output from its explanation and the resulting decision.' },
+      depends_on: { type: 'array', items: { type: 'string' }, description: 'Up to 16 generation-bound finding_ref values from report/evidence. A refuted premise marks dependent claims for recheck; dependencies are never independent proof.' },
       content: { type: 'string', required: true, description: 'The finding, one self-contained paragraph: what you tried, what you observed, what it means for the others.' },
       category: { type: 'string', description: 'Free tag: the attack angle (web, pwn, crypto, …), "recon", or "dead-end".' },
       evidence_kind: { type: 'string', enum: ['raw_output', 'inference', 'guess'], description: 'Evidence type; raw output is still an unverified claim until the captain reproduces it.' },
@@ -2892,6 +2902,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         additionalProperties: false,
         properties: {
           finding_id: { type: 'string', required: true },
+          finding_ref: { type: 'string', required: true },
           batch_progress: { type: 'string' },
           round: { type: 'number', required: true },
           has_updates: { type: 'boolean', required: true },
@@ -2922,7 +2933,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         // just-appended finding. Advancing afterwards marks the whole board
         // (including the new finding) as seen.
         const delta = deltaSince(fresh, identity.name)
-        const finding = appendFinding(fresh, { from: identity.name, category: args.category, content: args.content, evidenceKind: args.evidence_kind, confidence: args.confidence, evidence: args.evidence })
+        const finding = appendFinding(fresh, { from: identity.name, category: args.category, content: args.content, evidenceKind: args.evidence_kind, confidence: args.confidence, evidence: args.evidence, challengeId: args.challenge_id, claimType: args.claim_type, dependsOn: args.depends_on })
         advanceCursor(fresh, identity.name)
         await writeTeam(stateRoot, fresh)
         appendTeamEvent(ctx, captainSessionOf(ctx, fresh.captainSessionId, caller.session), 'ctf-teams/finding-reported', {
@@ -2938,6 +2949,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       })
       return {
         finding_id: result.finding.id,
+        finding_ref: result.finding.reference!,
         round: result.finding.round,
         has_updates: result.delta.hasUpdates,
         new_findings: result.delta.findings.map(formatFinding),
@@ -3017,17 +3029,79 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_teams_evidence',
+    description: 'Read-only, paginated finding provenance. Returns generation-bound finding_ref, observation/interpretation/decision type, dependencies, invalidation, supersession and recent captain checks. Prefer original observations over inherited interpretations. A confirmed label is a recorded captain check, not automatic proof. Querying never writes or dispatches.',
+    parameters: {
+      finding_ref: { type: 'string', description: 'Optional single generation-bound finding reference.' },
+      challenge_id: { type: 'string' }, needs_recheck: { type: 'boolean' },
+      offset: { type: 'number', description: 'Nonnegative integer, default 0.' },
+      limit: { type: 'number', description: 'Integer 1..20, default 10.' },
+    },
+    output: {schema:{type:'object',additionalProperties:true,properties:{}},render:(_args,value)=>[{type:'text',text:JSON.stringify(value,null,2)}]},
+    async execute(args,exec) {
+      const caller=requireCaptain(exec),workspace=workspaceOf(caller),stateRoot=stateRootOf(workspace,config)
+      const located=await requireParticipantTeam(workspace,config,caller)
+      return withTeamLock(teamLockKey(stateRoot,located.id),async()=>{
+        const {team}=await requireFreshParticipant(stateRoot,located.id,caller.id)
+        const offset=args.offset??0,limit=args.limit??10
+        if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>20)throw new Error('invalid evidence offset or limit')
+        const all=(args.finding_ref?[resolveFindingReference(team,args.finding_ref)]:(team.findings??[])).filter(finding=>(args.challenge_id===undefined||finding.challengeId===args.challenge_id)&&(args.needs_recheck===undefined||Boolean(finding.recheckRequired)===args.needs_recheck))
+        const findings=all.slice(offset,offset+limit).map(finding=>({...finding,finding_ref:findingReference(team,finding),verifications:(finding.verifications??[]).slice(-5),verification_total:finding.verifications?.length??0}))
+        return JSON.parse(JSON.stringify({ledger_ref:boardReference(team),summary:evidenceSummary(team),findings,total:all.length,next_offset:offset+findings.length<all.length?offset+findings.length:null})) as Record<string,JsonValue>
+      })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_teams_checkpoint',
+    description: 'Captain-only versioned handover. load returns saved reported notes and a fresh compact runtime snapshot separately; stale snapshots never restore or overwrite tasks. save requires current ledger_ref, state_ref and checkpoint revision from load. Optional files are integrity snapshots only. Writes do not advance board round, acknowledge inboxes or wake workers. No cross-session ownership takeover.',
+    parameters: {
+      action:{type:'string',required:true,enum:['load','save']},
+      revision:{type:'number',description:'load: optional historical revision; default latest.'},
+      ledger_ref:{type:'string',description:'save: exact ledger_ref from load.'},
+      state_ref:{type:'string',description:'save: exact current_state.state_ref from load; changed work requires reload.'},
+      expected_revision:{type:'number',description:'save: latest_revision from load (0 for the first handover).'},
+      assessment:{type:'string',description:'save: captain assessment, 1..2000 characters; unverified notes, not runtime truth.'},
+      disputes:{type:'array',items:{type:'string'},description:'save: at most 10 unresolved issues, at most 500 characters each.'},
+      next_steps:{type:'array',items:{type:'string'},description:'save: 1..10 concrete next steps, at most 500 characters each.'},
+      evidence_files:{type:'array',items:{type:'string'},description:'save: optional workspace files, same bounds as hypothesis evidence.'},
+      check_files:{type:'boolean',description:'load: explicitly rehash files of the selected saved checkpoint.'},
+    },
+    output:{schema:{type:'object',additionalProperties:true,properties:{}},render:(_args,value)=>[{type:'text',text:JSON.stringify(value,null,2)}]},
+    async execute(args,exec) {
+      const caller=requireCaptain(exec),workspace=workspaceOf(caller),stateRoot=stateRootOf(workspace,config)
+      const located=await requireCaptainTeam(workspace,config,caller)
+      return withTeamLock(teamLockKey(stateRoot,located.id),async()=>{
+        const fresh=await requireFreshCaptainTeam(stateRoot,located.id,caller.id)
+        if(args.action==='load') {
+          if(args.revision!==undefined&&(!Number.isSafeInteger(args.revision)||args.revision<1))throw new Error('invalid checkpoint revision')
+          const saved=args.revision===undefined?fresh.captainCheckpoints?.at(-1):fresh.captainCheckpoints?.find(item=>item.revision===args.revision)
+          if(args.revision!==undefined&&!saved)throw new Error('unknown checkpoint revision')
+          const current=runtimeBrief(fresh)
+          return JSON.parse(JSON.stringify({ledger_ref:boardReference(fresh),latest_revision:fresh.captainCheckpoints?.at(-1)?.revision??0,saved:saved??null,current_state:current,stale:saved?saved.stateRef!==current.state_ref:false,
+            ...(args.check_files?{file_checks:await inspectEvidenceFiles(workspace,saved?.files??[])}:{}),note:'Saved notes are captain reports. Reconcile stale state before acting; load never resumes or restores anything.'})) as Record<string,JsonValue>
+        }
+        if(args.action!=='save')throw new Error('unknown checkpoint action')
+        const result=saveCaptainCheckpoint(fresh,{boardRef:args.ledger_ref??'',stateRef:args.state_ref??'',expectedRevision:args.expected_revision??-1,assessment:args.assessment??'',disputes:args.disputes,nextSteps:args.next_steps??[],files:await captureEvidenceFiles(workspace,args.evidence_files)})
+        if(!result.duplicate)await writeTeam(stateRoot,fresh)
+        return {revision:result.checkpoint.revision,duplicate:result.duplicate,ledger_ref:boardReference(fresh),state_ref:result.checkpoint.stateRef}
+      })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_teams_verify_finding',
     description: 'Captain-only: record an independent check of a finding. method names the actual command/file/platform check; result is confirmed, refuted or inconclusive. Reporter confidence alone is never verification. Persists a verification history and publishes an audit beat to round sync.',
     parameters: {
-      finding_id: { type: 'string', required: true },
+      finding_id: { type: 'string', required: true, description: 'Prefer generation-bound finding_ref; legacy local ids remain accepted for existing workflows.' },
+      superseded_by: { type: 'string', description: 'Optional generation-bound reference of an independent replacement; requires result=refuted. History is retained.' },
       method: { type: 'string', required: true },
       result: { type: 'string', required: true, enum: ['confirmed', 'refuted', 'inconclusive'] },
       note: { type: 'string', description: 'Observed output or discrepancy from the independent check.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
-        finding_id: { type: 'string', required: true }, result: { type: 'string', required: true }, round: { type: 'number', required: true },
+        duplicate: { type: 'boolean', required: true }, affected_refs: { type: 'array', items: { type: 'string' }, required: true }, affected_total: { type: 'number', required: true }, finding_id: { type: 'string', required: true }, result: { type: 'string', required: true }, round: { type: 'number', required: true },
       } },
       render: (_args, value) => [{ type: 'text', text: `Finding ${value.finding_id}: ${value.result}. Verification recorded (round ${value.round}).` }],
     },
@@ -3038,9 +3112,12 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       const team = await requireCaptainTeam(workspace, config, captain)
       return withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
-        const finding = verifyFinding(fresh, args.finding_id, { by: CAPTAIN_KEY, method: args.method, result: args.result, note: args.note })
-        await writeTeam(stateRoot, fresh)
-        return { finding_id: finding.id, result: args.result, round: fresh.round ?? 0 }
+        const previousRound = fresh.round ?? 0
+        const finding = verifyFinding(fresh, args.finding_id, { by: CAPTAIN_KEY, method: args.method, result: args.result, note: args.note, supersededBy: args.superseded_by })
+        const duplicate = (fresh.round ?? 0) === previousRound
+        if (!duplicate) await writeTeam(stateRoot, fresh)
+        const affected = affectedFindings(fresh, finding).filter(item => item.recheckRequired).map(item => findingReference(fresh, item))
+        return { finding_id: finding.id, result: args.result, round: fresh.round ?? 0, duplicate, affected_refs: affected.slice(0,20), affected_total: affected.length }
       })
     },
   }))
@@ -3074,6 +3151,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           ...challenge.environmentId ? [`- Environment: ${challenge.environmentId} (check platform for cleanup)`] : [],
           '', '## Findings (claims require verification)', '',
           ...(team.findings ?? []).flatMap(finding => [formatFinding(finding), ...(finding.verifications ?? []).map(check => `  - ${check.result} by ${check.by}; method: ${check.method}; ${check.note ?? ''}`)]),
+          '', '## Captain handovers (reported notes, not runtime proof)', '', ...(team.captainCheckpoints??[]).map(checkpoint=>JSON.stringify(checkpoint)),
           '', '## Hypotheses and experiments (unverified reports; hashes are integrity only)', '', ...hypothesisArchive(team),
           '', '## Flags', '', ...(team.flags ?? []).map(formatFlag),
           '', '## Tasks', '', ...team.tasks.map(task => `- ${task.id}: ${task.subject} [${task.status}]${task.output ? `\n${task.output}` : ''}`),

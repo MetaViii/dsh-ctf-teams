@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-23",
+  "version": "0.1.32",
+  "artifact": {
+    "name": "dsh-ctf-teams-iteration8-0.1.32.tgz",
+    "sha256": "649734fec8597537e386ecf7f5dd4b243ebd48d2c26b5ae03e08911a79665b5d",
+    "installedInUserProfile": true,
+    "publishedToNpm": false
+  },
+  "fullRegression": {
+    "command": "pnpm verify",
+    "exit": 0,
+    "passed": true,
+    "evidence": "evidence/verify.txt"
+  },
+  "runtime": [
+    {
+      "version": "0.2.0-rc.2",
+      "passed": true,
+      "cohortCount": 278,
+      "scenarios": [
+        "ctf2-regression"
+      ],
+      "evidence": "evidence/recommended-host.json"
+    },
+    {
+      "version": "0.2.1-rc.1",
+      "passed": true,
+      "scenarios": [
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "evidence": "evidence/desktop-rc1-ctf.json"
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "scenarios": [
+        "lifecycle",
+        "lifecycle-cold-restore",
+        "fallback",
+        "fallback-cold-restore",
+        "failure",
+        "captain-idle-wakeup",
+        "progressive-entry",
+        "web-approval",
+        "protocol-compatibility",
+        "stability",
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "evidence": "evidence/desktop-rc2.json"
+    }
+  ],
+  "installation": {
+    "passed": true,
+    "version": "0.1.32",
+    "comparedFiles": 148,
+    "evidence": "evidence/local-install.json",
+    "guiConfirmed": false
+  },
+  "method": "Native Node real CLI/Loader and Code Mode; scripted LLM; synthetic isolated workspaces. Cold restore resumes the original captain session and externally asserts unchanged team bytes and preserved pending candidate.",
+  "unverified": [
+    "Real model compliance and solving improvement",
+    "Interactive GUI",
+    "Other operating systems",
+    "Online platform submission",
+    "Arbitrary assertion execution",
+    "Time/token/subprocess hard budgets",
+    "Cross-session ownership transfer"
+  ]
+}

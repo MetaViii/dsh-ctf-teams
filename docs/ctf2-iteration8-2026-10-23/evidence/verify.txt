@@ -1,0 +1,1401 @@
+$ node scripts/verify.mjs && pnpm verify:ctf && node scripts/fallback-tdd.mjs && node scripts/member-failure-tdd.mjs && pnpm verify:quality-gates && node scripts/lifecycle-verify.mjs && node scripts/stress-verify.mjs && node --test scripts/issue-159.test.mjs && pnpm verify:client && pnpm verify:dashboard && pnpm verify:release && pnpm verify:readme && pnpm verify:skill && pnpm verify:harness-contract && pnpm verify:compatibility && pnpm verify:capabilities && pnpm verify:member-spawn-recovery && pnpm test:git-install && pnpm verify:source-runner && pnpm verify:git-artifact
+dsh-ctf-teams offline verification
+  PASS  profile keys trim and assignees canonicalize
+  PASS  profile tasks are stable topological order
+  PASS  profile invocation supports --profile=
+  PASS  profile invocation leaves mid-goal profile text untouched
+  PASS  profile prompt omits empty config and truncates protocol
+  PASS  seed planning remains the default
+  PASS  fixed profile directory includes purpose when no protocol is configured
+  PASS  captain planning keeps the roster and drops seed tasks
+  PASS  profile prompt marks captain planning instead of unused seed counts
+  PASS  member persona includes completed/failed and claimed transition rules
+  PASS  member welcome reports assigned pending count
+  PASS  dependency outputs truncate and keep the newest seed id
+  PASS  recursive dependency collection stops on cycles
+  PASS  persona protocol is truncated
+  PASS  execution prompt is injected into persona and assignment
+1/6 packaging contract
+  PASS  cordis.patch.yml name matches the published package name
+  PASS  package name is the CTF plugin
+  PASS  dsh.bundle.patch lists the host layer and the preset layer in order
+  PASS  files[] ships the preset layer
+  PASS  preset layer declares the agent-preset row
+  PASS  preset id and display metadata are present
+  PASS  preset composes a full agent plane
+  PASS  exports declares the client bundle
+  PASS  dsh.client declares the web platform
+  PASS  client bundle is a harness ModuleLoader unit for this package
+  PASS  client bundle registers the conversation dashboard view
+  PASS  client devDependencies removed
+  PASS  files[] ships the knowledge assets
+  PASS  knowledge base ships the required topics
+  PASS  tool registry names are the ctf_teams_* API surface
+  PASS  usage section teaches the round-sync protocol
+  PASS  usage section pins the writeup completion contract
+  PASS  usage section defaults to running the submitted plan immediately
+  PASS  usage section restores the staged gate on request
+2/6 pure rules
+  PASS  sanitizeKey('My Team!') -> 'my-team'
+  PASS  CJK names survive folding
+  PASS  distinct non-Latin names stay distinct
+  PASS  names with no letters or digits get distinct keys, not a shared constant
+  PASS  folding is deterministic
+  PASS  long names stay inside the filesystem name limit
+  PASS  long names sharing a prefix stay distinct
+  PASS  keys stay a single safe path segment
+  PASS  pending -> claimed allowed
+  PASS  pending -> in_progress denied
+  PASS  in_progress -> completed allowed
+  PASS  completed -> in_progress denied
+  PASS  same status is a no-op
+3/6 dependency gating
+  PASS  all-done deps satisfied
+  PASS  pending dep blocks
+  PASS  failed dep blocks too
+4/6 on-disk team flow (temp dir)
+  PASS  team.json round-trips
+  PASS  team.json accepts a UTF-8 BOM
+  PASS  cold-resume ignores dirty optional profile and seed id
+  PASS  cold-resume recovers blank optional quality fields (#105)
+  PASS  cold-resume keeps non-blank optional quality fields (#105)
+  PASS  cold-resume rejects non-string acceptance items
+  PASS  cold-resume rejects non-string outOfScope items
+  PASS  cold-resume rejects non-string sourceFindingIds items
+  PASS  findTeamByCaptain finds the team
+  PASS  findTeamByCaptain ignores other captains
+  PASS  findTeamByParticipant finds the captain
+  PASS  findTeamByParticipant finds an active member
+  PASS  findTeamByParticipant rejects a removed member
+  PASS  mailbox append/read preserves backslashes
+  PASS  mailbox accepts BOM-prefixed JSONL records
+  PASS  mailbox skips malformed JSON and malformed shapes
+  PASS  missing mailbox reads empty
+  PASS  withTeamLock keeps same-key workers strictly serial and ordered
+  PASS  withTeamLock queue entry drains after the last waiter settles
+  PASS  withTeamLock keeps its queue entry while the lock is held or handed off
+  PASS  withTeamLock wakes the queued successor and drops the key afterwards
+  PASS  multiple teams for one captain fail as ambiguous
+  PASS  multiple teams for one member fail as ambiguous
+  PASS  invalid team.json shape is rejected at the durable boundary
+  PASS  removeTeamDir removes the team
+  PASS  archive moves the team out of live scan
+  PASS  archive keeps team.json readable
+  PASS  archive lists the team id
+  PASS  archive dir skips live readTeam
+5/6 member model selection and continuation restore
+  PASS  ordinary member snapshots the captain current route and effort
+  PASS  cross-provider route uses the target model default instead of captain effort
+  PASS  plugin memberModel route uses that target model default effort
+  PASS  explicit member effort overrides cross-provider target default
+  PASS  default sentinel opts out of same-route captain effort inheritance
+  PASS  explicit provider without model is rejected
+  PASS  empty explicit reasoning effort is rejected
+  PASS  approval model preflight caches one catalog lookup per provider
+  PASS  approval model preflight rejects an unlisted typo before spawn
+  PASS  #20: spawn receives the resolved per-member provider and model
+  PASS  fresh child request receives the resolved reasoning effort
+  PASS  cold-resumed child restores provider, model, and reasoning from team.json
+6/6 state-file atomic write hardening (Windows EPERM fallback)
+  PASS  persistent EPERM exhausts the rename retries (1 initial + 3 retries)
+  PASS  persistent EPERM falls back to a direct overwrite of the target
+  PASS  the temp file is removed after the fallback write
+  PASS  a transient EPERM recovers via rename retries without the fallback
+  PASS  failure of both the atomic and the direct path raises AggregateError
+  PASS  the temp file is removed even after a dual failure
+  PASS  writeTeam survives a real Windows lock without FILE_SHARE_DELETE
+  PASS  archiveTeamDir survives a transient Windows directory lock via rename retries
+
+all checks passed
+$ node scripts/ctf-verify.mjs && node --test --test-concurrency=1 scripts/ctf2-regression.test.mjs scripts/ctf2-runtime-regression.test.mjs scripts/ctf2-proxy-regression.test.mjs scripts/ctf2-iteration3.test.mjs scripts/ctf2-iteration4.test.mjs scripts/ctf2-iteration5.test.mjs scripts/ctf2-iteration6.test.mjs scripts/hypotheses.test.mjs scripts/evidence-checkpoint.test.mjs scripts/windows-shell.test.mjs scripts/session-runtime-diagnose.test.mjs scripts/effect-cleanup.test.mjs
+ctf round-sync board
+  PASS  normalizeFlag trims and strips quote pairs
+  PASS  default format accepts the standard wrapper
+  PASS  default format rejects bare text
+  PASS  challenge flag format overrides the default
+  PASS  broken regex falls back to the default shape
+  PASS  findings get stable monotonic ids
+  PASS  rounds advance with each board beat
+  PASS  empty findings are rejected
+  PASS  oversized findings are truncated
+  PASS  first candidate is appended as candidate
+  PASS  case-distinct flags remain separate candidates
+  PASS  exact resubmissions reuse the stable id
+  PASS  bad-format submissions are recorded with a warning
+  PASS  verified flag marks the challenge solved
+  PASS  rejected verdict keeps hunting
+  PASS  review of unknown flag id fails loud
+  PASS  fresh cursor sees everything as new
+  PASS  cursor advance clears the delta
+  PASS  cursor advance is bounded by the digest coverage (race-safe)
+  PASS  unbounded advance after delivery catches up fully
+  PASS  new beats reappear after the cursor
+  PASS  reporter cursor key matches member name
+  PASS  digest renders findings with author and tag
+  PASS  solved digest carries the convergence banner
+  PASS  empty delta renders empty digest
+  PASS  challenge update fills the dashboard fields
+  PASS  challengeOf always returns a flag format
+  PASS  blank optional fields drop out
+  PASS  board id numbers parse
+ctf terminal dashboard
+  PASS  panel rows all share the same border display width
+  PASS  panel shows the challenge title and category
+  PASS  panel marks unsolved state
+  PASS  panel lists lanes with live glyphs
+  PASS  stale members carry a sync badge
+  PASS  task board shows ids and owners
+  PASS  findings render CJK content inside the border
+  PASS  flags render with status glyph and author
+  PASS  captain unread mail is flagged
+  PASS  verified flag flips the header to SOLVED
+  PASS  CJK counts as two columns
+  PASS  truncation respects display width and marks the cut
+  PASS  padding reaches the exact width
+  PASS  empty team renders without throwing
+ctf knowledge base
+  PASS  knowledge lists the shipped topics
+  PASS  index file stays out of the topic listing
+  PASS  every topic has a title and summary
+  PASS  volatility3 doc covers the core plugins
+  PASS  pwntools doc covers process and ROP basics
+  PASS  cve-poc doc is a workflow, not a snapshot
+  PASS  unknown topic lists available topics
+  PASS  topic ids reject path traversal
+ctf-teams builtin profile
+  PASS  builtin profile ships under ctf-teams
+  PASS  builtin roster is a squad of interchangeable generalists
+  PASS  every agent is a full-stack expert, not a specialist lane
+  PASS  builtin profile leaves planning to the captain
+  PASS  agent prompts point at the knowledge topics and the parallel-angle contract
+  PASS  user profiles override the builtin on name collision
+  PASS  member tools include the CTF round-sync set
+  PASS  mark_flag and set_challenge stay captain-only
+ctf toolchain env service
+  PASS  managed tool catalog has unique stable ids
+  PASS  catalog covers the core stack the user asked for
+  PASS  probes never invoke a shell (binary names are plain commands)
+  PASS  probe-less tools carry their manual path
+  PASS  every tool resolves to an install path (curated or manual)
+  PASS  binary probe reports ok with extracted version
+  PASS  python module probe reports ok for installed libs
+  PASS  missing binary reports missing with an install hint
+  PASS  apt installs gain a non-interactive sudo prefix
+  PASS  pip installs go through the explicit python launcher
+  PASS  heavy tools plan as manual notes, never executed
+  PASS  unknown tool ids are reported back
+  PASS  windows plans prefer pip
+  PASS  linux-only apt tools plan as unavailable on windows
+  PASS  manual steps never execute and report their note
+  PASS  executed steps report success after a successful re-probe
+  PASS  failed installs capture the stderr tail
+  PASS  status render marks ok/missing/manual distinctly
+ctf references library
+  PASS  reference manifest has unique stable ids
+  PASS  manifest ships the requested PoC/CVE/skill collections
+  PASS  every manifest entry uses an https clone url and search hints
+  PASS  small reference ids are a subset of the manifest
+  PASS  repo ids resolve case-insensitively
+  PASS  unknown or traversal ids are rejected
+  PASS  clone commands are shallow single-branch git without a shell
+  PASS  provisioned repos update via git pull --ff-only
+  PASS  status read reports unprovisioned repos
+  PASS  listing shows size expectations and hints per repo
+  PASS  auto-sync small mode clones only the small repos at team creation
+  PASS  auto-sync all mode covers the whole manifest including huge repos
+  PASS  manifest holds the huge GB-scale repos out of the small auto-sync set
+digest-aware assignment prompt
+  PASS  assignment prompt carries the round-sync digest
+  PASS  assignments without a delta omit the sync section
+  PASS  temp cleanup works
+
+all CTF checks passed
+✔ RPC/MCP rejects null, tool errors, invalid JSON and unrelated SSE notifications (2.2306ms)
+✔ explicit unsolved filter keeps only actual false statuses and preserves server totals (0.3593ms)
+✔ OCR candidates are finite, original first, distance ordered and binary-safe (4.4661ms)
+✔ crypto probes run operations after import; successful pip exit cannot hide a broken backend (0.8303ms)
+✔ empty captain-planned graph is planning, solo is direct work, neither bypasses delivery gates (0.3045ms)
+✔ real CLI forwards every pair, filters solved entries, and exits nonzero without retrying failed mutations (512.932ms)
+✔ open-ended batch progress remains lossless JSON for the real Code Mode bridge (1.0128ms)
+✔ scan paginates the unfiltered set, deduplicates and preserves challenge objects (0.5588ms)
+✔ scan bounds repeated pages, inconsistent totals and unknown identities/statuses (0.7003ms)
+✔ scan reports an early empty page or changing total as partial, normal empty ground is complete (0.1682ms)
+✔ flag provenance survives reload and duplicate evidence retains id and independent verdict history (12.2765ms)
+✔ 401 unknown-code errors pause and preserve the current attempt without duplicating notices (32.9524ms)
+✔ 2/Z variants stay opt-in, bounded and keep the original first (0.3939ms)
+✔ source compatibility uses the released wrapper before session format 3 (1.1321ms)
+✔ route diagnostics distinguish live/saved/captain routes and never wake agents (0.406ms)
+✔ normalization preserves error payload/retry metadata and leaves successful objects untouched (0.2014ms)
+✔ business failures in structured or text payloads never become successful challenge data (0.5325ms)
+✔ legacy proxies without /health are identified by a valid read-only tools/list response (38.1361ms)
+✔ an HTTP 200 unrelated service is not a working CTF2 MCP proxy (12.3031ms)
+✔ the shipped proxy marks JSON and multiline SSE business errors; CLI never prints them as successful cache data (236.619ms)
+✔ WSL discovery does not boot an implicit distribution and preserves Unicode names (1.3834ms)
+✔ WSL uses Linux platform and interpreter, argv boundaries, and operation self-tests (0.8743ms)
+✔ WSL startup and discovery failures never masquerade as missing tools (0.6194ms)
+✔ concurrent WSL checks serialize launchers across lanes and keep catalog order (559.1939ms)
+✔ probe transport failures and missing interpreter never become missing-library/install claims (0.4321ms)
+✔ native runner retains split UTF-8 output and bounds command time (123.2736ms)
+✔ CLI atomic cache preserves old bytes on protocol/business/partial/write failures (842.1362ms)
+✔ proxy serves health with missing OAuth, preserves RPC id and CLI diagnoses an absent listener (261.227ms)
+✔ host supervisor leaves an external proxy alive; owned listener is disposed with the host only (252.2336ms)
+✔ slash activation allows solo and gives an executable profile task workflow (0.6054ms)
+✔ plan diagnostics distinguish real missing fields from extra fields (0.5398ms)
+✔ CTF2 wrapper is advisory, exact case matters, and format changes merge (0.9136ms)
+✔ verdicts sync after candidate was seen and can revoke solved state (0.5914ms)
+✔ finding checks are explicit, auditable and sync as a new beat (0.5523ms)
+✔ same-name team generations reject old flag references (0.1922ms)
+✔ UTF-8 board survives disk reload with null format, evidence and exact ids (11.6598ms)
+✔ configuration failure stops admission immediately; 429 unknown reset stays blocked; temporary failures have one bounded recovery (1.1173ms)
+✔ 100 final NO_ADAPTER reports persist one notice and retain task/checkpoint across reloads (96.8974ms)
+✔ historical duplicate failures fold while ordinary reports remain separate and all ids stay acknowledgeable (0.5023ms)
+✔ 23-challenge batch counts distinct challenges, does not stop early and requires explicit closure (1.9801ms)
+✔ nested wrapper variants preserve original bytes and independent platform histories without double counting (0.3854ms)
+✔ switching an old single solve to an uncounted batch requires scoped verification before completion (0.1712ms)
+✔ resource exclusivity and read-only preflight reject stale, unknown and mismatched facts; confirmed offline checks are explicit (0.3168ms)
+✔ CTF2 adapter calls only allowlisted read operations, handles SSE, preserves unknown state and reports proxy down (45.9668ms)
+✔ Cordis 4.0.4 baseline reproduces a disposed callback reading inactive sessionProjections (5.2264ms)
+✔ scoped compatibility releases the hook and registrations despite the same teardown failure (2.0508ms)
+✔ cleanup preserves reverse order and reports all failures after every resource is released (0.3795ms)
+✔ changed reviewer uses the complete official plugin unchanged, retaining denial and failures (0.3029ms)
+✔ native fallback installs a changed official reviewer with new dependencies and preserves denial (1.5174ms)
+✔ missing official reviewer fails explicitly without installing or overriding permissions (0.1237ms)
+✔ compatibility owns the audited upstream dependency set including modern workingDirectory (66.2622ms)
+✔ refuted premises invalidate transitive conclusions without deleting observations or emitting duplicate beats (2.2348ms)
+✔ generation fencing, cross-challenge edges, supersession independence and cycles fail atomically (0.4663ms)
+✔ handover captures runtime facts, preserves notes/history and rejects stale work or revisions (0.9647ms)
+✔ brief output is bounded while the state digest covers omitted rows and ordinary reports are not experiments (0.9071ms)
+✔ per-challenge active-lane admission is opt-in, independent of other targets and releases on terminal states (0.2984ms)
+✔ legacy state and all dependency/handover metadata survive durable reload (8.9805ms)
+✔ hypotheses distinguish challenge and prediction, deduplicate exact reports and preserve conflicting corrections (2.0494ms)
+✔ malformed or oversized inputs do not partially modify the durable board (0.3099ms)
+✔ workspace evidence binds real bytes and detects changes, missing files, directory and symlink escape (12.912ms)
+✔ legacy teams remain readable and the full ledger survives JSON reload without changing task lifecycle (3.7363ms)
+✔ reads every independently compressed host frame, including later runtime failures (7.475ms)
+✔ does not count assistant diagnosis or quoted user instructions as observed tool failures (0.1113ms)
+✔ recognizes missing permissions without mistaking normal sandbox denials for a runtime outage (0.1592ms)
+✔ refuses truncated or malformed data without modifying session files (0.4366ms)
+✔ native WinPS modules precede inherited PS7 modules without losing custom entries (1.3448ms)
+✔ Windows environment names are case insensitive and empty/quoted entries are normalized (0.6632ms)
+✔ effect restores the original environment on unload and can mount again (0.3767ms)
+✔ unload preserves subsequent owners and handles an initially absent key (0.1761ms)
+✔ non-Windows hosts and unrelated environment variables remain unchanged (0.1082ms)
+ℹ tests 70
+ℹ suites 0
+ℹ pass 70
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4355.7116
+  PASS  member fallback config is normalized
+  PASS  profile fallback config is normalized
+  PASS  member prompt config is normalized
+  PASS  fallback requires provider
+  PASS  fallback requires model
+  PASS  prompt is present in assignment
+  PASS  prompt is present in persona
+  PASS  assignment does not require process disclosure
+  PASS  fallback whitelist includes QUOTA
+  PASS  fallback whitelist includes RATE_LIMIT
+  PASS  fallback whitelist includes AUTH
+  PASS  fallback whitelist includes MISSING_CREDENTIAL
+  PASS  fallback whitelist includes NO_ADAPTER
+  PASS  fallback whitelist excludes CONTEXT_WINDOW_EXCEEDED
+  PASS  fallback whitelist excludes INVALID_CREDENTIAL
+  PASS  fallback whitelist excludes INVALID_ARGS
+  PASS  fallback whitelist excludes TASK_FAILED
+  PASS  eligible failure switches and retries
+  PASS  fallback switches at most once
+  PASS  non-eligible failure keeps primary route
+fallback TDD checks passed
+✔ 503 preserves owner/checkpoint, cannot move to other work and recovers at most once (56.3425ms)
+✔ always retry keeps the owned task open and sends no false failure report (12.2117ms)
+✔ request handler delegates recovery and leaves exhausted requests open until final error (15.2333ms)
+✔ fallback recovers once and exhausted fallback still delegates without failing the task (4.2149ms)
+✔ aborted request does not fail a task or consume its fallback route (3.6504ms)
+✔ final failure notifies idle captain once and flushes without an idle event (23.7567ms)
+✔ final failure notifies running captain once and flushes without an idle event (15.1307ms)
+✔ report a final error immediately but do not dispatch while the driver is still running (30.5071ms)
+✔ unavailable captain keeps failure notification readable: {"captainOffline":true} (14.9198ms)
+✔ unavailable captain keeps failure notification readable: {"rejectDelivery":true} (20.8362ms)
+✔ a queued error cannot fail a newer attempt created before it gets the team lock (4.4185ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 206.1716
+$ node scripts/quality-gates-tdd.mjs && node --test scripts/quality-gates-repair-scope.test.mjs scripts/quality-gates-amend.test.mjs
+quality-gates TDD — A. create contract
+  PASS  tdd.create.work-kind-remains-compatible
+quality-gates TDD — A2. blank optional normalization (#99/#105)
+  PASS  tdd.normalize.blank-optional-fields-to-omitted
+  PASS  tdd.normalize.non-blank-values-untouched
+  PASS  tdd.normalize.retains-invalid-list-item.123
+  PASS  tdd.normalize.retains-invalid-list-item.null
+  PASS  tdd.normalize.retains-invalid-list-item.{"path":"src/private/"}
+  PASS  tdd.create.implementation-requires-objective
+  PASS  tdd.create.implementation-requires-acceptance
+  PASS  tdd.create.implementation-requires-inscope-and-verify
+  PASS  tdd.create.review-requires-reviewed-task
+  PASS  tdd.create.repair-requires-source-and-findings
+  PASS  tdd.create.repair-must-not-depend-on-failed-review
+  PASS  tdd.create.overlapping-inscope-rejects-parallel-ready-tasks
+  PASS  tdd.create.overlapping-inscope-allowed-when-serialized
+  PASS  tdd.create.implementation-blocked-until-requirements-pass
+  PASS  tdd.create.staged-implementation-can-follow-pending-requirements
+  PASS  tdd.create.running-implementation-can-follow-pending-requirements
+  PASS  tdd.create.staged-implementation-must-depend-on-requirements
+quality-gates TDD — B. completion gates
+  PASS  tdd.complete.review-without-verdict-rejected
+  PASS  tdd.complete.review-needs-revision-cannot-complete
+  PASS  tdd.complete.review-pass-requires-no-open-high-findings
+  PASS  tdd.complete.implementation-requires-acceptance-results
+  PASS  tdd.complete.implementation-requires-all-verify-commands
+  PASS  tdd.complete.out-of-scope-path-cannot-complete
+  PASS  tdd.complete.undeclared-path-cannot-complete
+  PASS  tdd.complete.verify-failure-must-fail-task
+  PASS  tdd.complete.claimed-still-cannot-jump-to-completed
+  PASS  tdd.complete.work-kind-keeps-legacy-output-only-complete
+  PASS  tdd.complete.ordered-evidence-tolerates-model-paraphrase
+quality-gates TDD — C. path rules
+  PASS  tdd.scope.file-match
+  PASS  tdd.scope.directory-prefix-match
+  PASS  tdd.scope.out-of-scope-wins
+  PASS  tdd.scope.rejects-parent-escape
+  PASS  tdd.scope.rejects-absolute-path
+  PASS  tdd.scope.default-excludes-env-and-git
+quality-gates TDD — D. auto loop
+  PASS  tdd.loop.needs-revision-creates-repair-and-next-review
+  PASS  tdd.loop.repair-depends-on-source-not-failed-review
+  PASS  tdd.loop.next-review-assigned-to-original-reviewer
+  PASS  tdd.loop.next-review-cannot-be-implementer
+  PASS  tdd.loop.round-increments
+  PASS  tdd.loop.next-review-contract-is-not-a-gate-test
+  PASS  tdd.loop.stops-at-max-review-rounds
+  PASS  tdd.loop.reject-does-not-autoresume
+  PASS  tdd.loop.requirements-needs-revision-opens-next-requirements-round
+  PASS  tdd.loop.repair-skips-captain-assignee
+  PASS  tdd.loop.same-failed-review-does-not-duplicate-follow-up
+  PASS  tdd.plan.default-quality-graph-order
+  PASS  tdd.plan.prompt-explains-staged-full-dag-and-review-rewire
+  PASS  tdd.loop.pending-downstream-rewired-to-new-review-gate
+  PASS  tdd.plan.review-contract-strips-gate-tests
+  PASS  tdd.status.escalated-is-not-halted
+quality-gates TDD — E. halt / resume
+  PASS  tdd.resume.create-task-does-not-unhalt
+  PASS  tdd.resume.explicit-resume-clears-halt
+  PASS  tdd.resume.create-with-resume-reason-unhalts
+  PASS  tdd.resume.cancelled-tasks-stay-cancelled
+  PASS  tdd.resume.missing-reason-rejected
+quality-gates TDD — F. coverage / delivery
+  PASS  tdd.coverage.missing-item-blocks-delivery
+  PASS  tdd.coverage.passed-item-requires-completed-task
+  PASS  tdd.delivery.ok-only-when-all-gates-pass
+  PASS  tdd.delivery.failed-review-without-repair-blocks
+quality-gates TDD — G. persistence / prompts
+  PASS  tdd.state.old-team-json-without-new-fields-still-loads
+  PASS  tdd.state.invalid-verdict-rejected-at-durable-boundary
+  PASS  tdd.prompt.assignment-includes-kind-scope-acceptance
+  PASS  tdd.usage.mentions-explicit-resume-and-verdict
+quality-gates TDD — tool-level closed loop
+  PASS  tdd.create.work-kind-remains-compatible.tool
+  PASS  tdd.create.blank-optional-fields-normalized.tool
+  PASS  tdd.create.team-still-loadable-after-blank-optional.tool
+  PASS  tdd.create.review-blank-reviewedTaskId-rejected.tool
+  PASS  tdd.create.blank-profile-treated-as-omitted.tool
+  PASS  tdd.create.implementation-requires-objective.tool
+  PASS  tdd.resume.create-task-does-not-unhalt.tool
+  PASS  tdd.resume.explicit-resume-clears-halt.tool-exists
+  PASS  tdd.resume.explicit-resume-clears-halt.tool
+quality-gates TDD — H. generated repair scope (#173)
+  PASS  tdd.scope.generated-repair-inScope-has-no-duplicates — ["deploy/compose/postfix/master.cf.inc"]
+  PASS  tdd.scope.generated-repair-drops-outOfScope-covering-its-inScope — ["go.mod"]
+  PASS  tdd.scope.every-generated-repair-inScope-path-is-registrable
+quality-gates TDD checks passed
+✔ amend fixes an unsatisfiable inScope and records the revision (1.3348ms)
+✔ amended contract is the one the completion gate evaluates (0.4912ms)
+✔ mid-flight amendments are allowed until a review passes judgment (0.1461ms)
+✔ requirements passing judgment also freezes the contract (0.1147ms)
+✔ terminal tasks and work tasks have nothing amendable (0.1632ms)
+✔ amendment requires a reason, an author, and at least one contract field (0.1131ms)
+✔ replacement values must be well-formed: non-empty strings, non-empty lists, workspace-relative paths (0.1364ms)
+✔ revisions accumulate; previous values always snapshot the immediately prior contract (0.1387ms)
+✔ durable-state validation accepts well-formed revisions and rejects malformed ones (0.2309ms)
+✔ repair scope includes the fix target named in requiredFix, not just the observed file (0.9237ms)
+✔ repair scope drops absolute paths that can never match workspace-relative patterns (0.5123ms)
+✔ repair scope falls back to the source inScope when findings name nothing legal (0.0912ms)
+✔ line-number suffixes are stripped from derived paths (0.1069ms)
+✔ end-to-end: generated repair round is satisfiable for the incident shape (0.6489ms)
+✔ generated repair is completable: real F_DOC incident (0.7494ms)
+✔ generated repair is completable: directory exclusion covers observed and required paths (0.2328ms)
+✔ generated repair is completable: fallback scope has duplicates and overlapping exclusions (0.1689ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 68.9544
+dsh-ctf-teams lifecycle verification
+  PASS  slash command registers as /ctf-teams
+  PASS  slash command advertises an input hint for the menu placeholder
+  PASS  configured profile registers a concise dedicated slash command
+  PASS  unsafe profile names do not generate ambiguous commands
+  PASS  the default profile does not repeat the generic command as an alias
+  PASS  a profile named board cannot shadow the dashboard command
+  PASS  every other profile keeps its concise command alias
+  PASS  an empty default profile keeps the built-in squad reachable by alias
+  PASS  bare /ctf-teams reports usage instead of activating
+  PASS  argued /ctf-teams queues one visible user turn
+  PASS  slash command preserves the exact submitted line as user-authored chat
+  PASS  preserved slash command still activates through the gesture boundary
+  PASS  activation directive names the protocol
+  PASS  profile command queues a visible profile-specific user turn
+  PASS  gesture recognizes a leading /ctf-teams token
+  PASS  profile command gesture selects its configured profile and goal
+  PASS  bare profile command gesture asks for the goal
+  PASS  unknown profile command stays ordinary prose
+  PASS  bare gesture yields an empty goal
+  PASS  mid-sentence mention stays ordinary prose
+  PASS  non-user sources cannot forge the gesture
+  PASS  latest user gesture wins in a batch
+  PASS  slash --profile without a goal still activates
+  PASS  profile-only activation asks for the goal
+  PASS  captain-planning activation requires a staged user-reviewed graph in two-phase mode
+  PASS  the default activation directive runs the submitted plan without an approval step
+  PASS  unknown slash profile reports error and does not followup
+  PASS  leading ordinary token is never treated as a profile
+  PASS  command getter sees HMR profile names
+  PASS  create(profile) returns profile members tasks and seed ids
+  PASS  create(profile) persists snapshot members and mapped dependencies
+  PASS  dependency-blocked roster does not spawn a model session
+  PASS  first-stage seed is assigned only to the configured member
+  PASS  first assignment includes team goal and protocol
+  PASS  failed upstream does not unlock the next configured stage
+  PASS  completed upstream dispatches the configured downstream assignee
+  PASS  downstream assignment includes dependency output and seed id
+  PASS  unread mailbox prevents a same-kick new assignment
+  PASS  status exposes profile snapshot and task seed ids
+  PASS  discarding a staged plan archives it without spawning or dispatching
+  PASS  discard aborts the active Captain turn and parks an authoritative no-recreate context
+  PASS  captain-planning create stages only the configured roster
+  PASS  staged roster and DAG are editable without spawning or dispatching
+  PASS  invalid staged plan batches fail atomically without a partial write
+  PASS  return-to-chat cancels the planning turn and asks one question without recreating the team
+  PASS  return-to-chat is idempotent while feedback is already pending
+  PASS  captain can revise the staged DAG and roster through one model-facing atomic tool
+  PASS  running never-started tasks can be corrected without replacing the DAG
+  PASS  invalid running plan batches preserve the entire previous graph
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t1","subject":"do not overwrite active work"}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t2","dependencies":["t2"]}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"remove_member","member_name":"implementer"}
+  PASS  captain can cancel dependency-blocked member work before its first attempt
+  PASS  approval starts only dependency-ready members
+  PASS  approved plan dispatches only after a spawned member becomes idle
+  PASS  captain halt cancels the approved graph and keeps the team
+  PASS  team halt cancels the captain turn while preserving queued user input
+  PASS  captain halt drains active members and leaves blocked members unspawned
+  PASS  halted team does not redispatch cancelled graph
+  PASS  halted create_task does not silently resume
+  PASS  explicit resume clears halt and keeps cancelled tasks cancelled
+  PASS  shutdown preserves cancelled task history in the archive
+  PASS  quality implementation without contract is rejected
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  illegal completed without acceptance evidence is rejected
+  PASS  issue159 terminal evidence is durable and duplicate submissions are idempotent
+  PASS  issue159 supplementary evidence preserves the original result and completion timestamp
+  PASS  issue159 captain supplements terminal member work without takeover
+  PASS  issue159 supplemental evidence is visible in status
+  PASS  issue159 stale capabilities cannot append terminal evidence
+  PASS  issue159 identical report retries reuse one durable message
+  PASS  issue159 teammates cannot supplement another owners terminal work
+  PASS  issue159 stale explicit reports are rejected before entering the mailbox
+  PASS  review needs_revision cannot complete
+  PASS  issue159 automatic repair creation notifies the captain
+  PASS  needs_revision opens repair and next review
+  PASS  adding members alone creates no child sessions
+  PASS  manually added members persist the global fallback for later activations
+  PASS  idle assigned member is claimed and woken automatically
+  PASS  captain cannot mint a claim capability for a member; use reassign_task
+  PASS  member observes the scheduler attempt idempotently
+  PASS  dependency gate stays pending before both branches complete
+  PASS  rate-limited idle owner does not enter an unbounded retry loop (#66)
+  PASS  disposed settled owner keeps its parked attempt across repeated scheduler kicks
+  PASS  idle assigned gamma is claimed for the recovery-failure fixture
+  PASS  issue159 failed recovery restores partial evidence with the original capability
+  PASS  failed unobserved recovery restores the original capability and later kicks do not recast it
+  PASS  restored capability remains usable after a failed recovery delivery
+  PASS  unobserved missing owner recovers once and repeated kicks do not rotate it again
+  PASS  captain message resumes a parked owner without rotating its attempt
+  PASS  captain cannot bypass the safe takeover protocol
+  PASS  reassignment quiesces recovered owner and creates a new attempt
+  PASS  old member cannot publish a late takeover result
+  PASS  resumed recovered member completes with its throttled capability
+  PASS  completing dependencies dispatches the downstream task before member execution
+  PASS  previously interrupted member is reused in a later round
+  PASS  a member cannot claim a second unfinished task
+  PASS  removing a member revokes and redispatches its unfinished task
+  PASS  removing a member preserves its catalog entry for transcript history
+  PASS  removing a member blocks direct followup before resume
+  PASS  removed member loses participant authorization
+  PASS  failed live message remains one unread durable fallback
+  PASS  status kick accepts fallback without inventing consumption
+  PASS  recipient status acknowledges the complete fallback actually displayed
+  PASS  concurrent claims serialize to exactly one owner
+  PASS  terminal output is immutable against late overwrite
+  PASS  sync reads only own mailbox, preserves excess and acknowledges returned messages once
+  PASS  member sync cannot consume captain messages and does read its own context
+  PASS  captain takeover returns checkpoint, remaining work, board delta and unread messages without stale attempts
+  PASS  captain takeover owns a fresh attempt and rejects the old member
+  PASS  parallel captain takeovers allow exactly one active captain task
+  PASS  unfinished captain takeover returns to a member when the captain becomes idle
+  PASS  idle captain recovery records one durable revocation notice with the previous capability
+  PASS  repeated idle edges do not duplicate the captain handoff notice
+  PASS  activity refines residency through the live Agent registry
+  PASS  team shutdown archives the complete durable record
+  PASS  team shutdown keeps retired members catalog-visible for historical transcripts
+  PASS  team shutdown blocks storage-only member cold resume
+  PASS  team shutdown leaves unrelated continuable subagents untouched
+  PASS  team shutdown leaves unrelated continuable followup untouched
+  PASS  invalid roster approval rejects before any member session is created
+  PASS  same-name team can be recreated and archived again
+  PASS  request failure alone leaves the attempt open for Harness recovery
+  PASS  turn failure fails the open attempt, releases the member, and owns no retry
+  PASS  turn failure notifies the captain mailbox with the error code
+  PASS  settled member discards failed-attempt guidance without another model turn
+  PASS  configured challenge lane cap admits one task and leaves the second explicitly waiting
+  PASS  dependency invalidation is visible to members; reads and duplicate verdicts do not write
+  PASS  captain handover is not writable or readable through a member identity
+  PASS  handover saves pending candidates and idempotent retries create no new state
+  PASS  terminal lane releases capacity and scheduler dispatches the waiting second angle
+  PASS  handover reload exposes current attempts and marks saved state stale without restoring work
+  PASS  stale runtime handover writes are rejected
+  PASS  archive keeps dependent claims and captain handover source material
+  PASS  invalid batch plan is rejected without any state or session side effect
+  PASS  inline member executionPrompt survives atomic create
+  PASS  published JSON Schema declares required task ids and subjects
+  PASS  one atomic call creates the full roster and resolves forward dependency references
+  PASS  ordinary pending work cannot be reported deliverable
+  PASS  hypothesis reads and cross-member duplicate proposals do not write state
+  PASS  concurrent tests fence stale revisions rather than overwrite history
+  PASS  idempotent test retry creates no board beat or state write
+  PASS  experiment writes reject old team generations
+  PASS  members see bounded append-only history and actual recorder identity
+  PASS  ledger operations never dispatch a new turn
+  PASS  members cannot self-verify findings
+  PASS  claim exposes the complete task contract without reading team files
+  PASS  failed teardown keeps reassignment fenced and does not launch a new generation
+  PASS  the same failed handoff can be retried safely
+  PASS  failed member drain never reports a successful archive
+  PASS  archive retries drain previously removed roster rows
+  PASS  CTF2 candidate is retained with durable team reference and format warning
+  PASS  mark by original content records platform-accepted flag
+  PASS  cross-team verdict guard rejects mismatched namespace
+  PASS  solo mode rejects ctf_teams_add_member
+  PASS  solo mode rejects ctf_teams_create_task
+  PASS  solo mode creates no sessions, members or tasks and preserves metadata
+  PASS  invalid replacement preserves the existing solved board
+  PASS  replaceExisting archives the prior solve and returns its path
+  PASS  archive summary includes findings, checks, exact accepted flag and environment
+  PASS  delete returns archive path and explicit environment cleanup reminder
+  PASS  single: completion digest is delivered and its board cursor advances
+  PASS  single: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  single: new evidence after completion still delivers once
+  PASS  single: the new evidence also settles without another wake
+  PASS  single: paused ledger queries and duplicates leave state unchanged
+  PASS  single: paused team never dispatches pending board updates
+  PASS  batch: completion digest is delivered and its board cursor advances
+  PASS  batch: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  batch: new evidence after completion still delivers once
+  PASS  batch: the new evidence also settles without another wake
+  PASS  batch: paused ledger queries and duplicates leave state unchanged
+  PASS  batch: paused team never dispatches pending board updates
+  PASS  create_task reports accepted dispatch using the post-scheduler snapshot
+  PASS  exclusive resource waits with an explicit holder
+  PASS  active challenge duplication is rejected unless explicitly requested
+  PASS  blocked resource work does not starve a later ready task for the same member
+  PASS  retired members cannot append hypothesis records
+  PASS  route repair revokes both old attempt writes and old member board admission before draining
+  PASS  route repair preserves checkpoint/remaining items and changes the child identity
+  PASS  unknown platform facts remain blocked rather than starting a target
+  PASS  preflight receipt identifies the missing key
+  PASS  pending preflight and finding reference can be replaced without recreating a task
+  PASS  omitted preflight edits preserve the guard
+  PASS  invalid preflight rolls back the entire ordered edit batch
+  PASS  preflight repair never edits an already started attempt
+  PASS  active members can refresh strictly read-only preflight facts
+  PASS  a retired member cannot refresh another participant team
+  PASS  empty preflight array and empty finding reference explicitly clear both fields
+  PASS  model-facing status exposes saved/live/captain route diagnostics as lossless JSON
+
+all lifecycle checks passed
+dsh-ctf-teams complex stress verification
+  PASS  first wave assigns all eight roots to eight distinct members
+  PASS  captain takeover and member removal serialize without losing either mutation
+  PASS  50 stale/removed-owner writes are rejected during continued scheduling
+  PASS  interrupted alpha is reused while the 31-node DAG keeps advancing
+  PASS  second independent takeover advances exactly one execution attempt
+  PASS  cold runtime restart redelivers every durable open task with a fresh attempt
+  PASS  all pre-restart attempt writes are rejected after cold recovery
+  PASS  second interrupted owner is reused after takeover
+  PASS  entire fan-out/fan-in graph reaches completion after restart
+  PASS  seven-way thundering herd produces exactly one owner
+  PASS  40 conflicting terminal writes cannot change the canonical result
+  PASS  message burst contains both injected fallbacks and live deliveries
+  PASS  all failed message fallbacks are redelivered and acknowledged exactly once
+  PASS  final state has no duplicate current capability ids
+  PASS  removed beta owns no unfinished or future task
+  PASS  no task is lost, duplicated, or left nonterminal
+  PASS  shutdown archives all 38 completed tasks after fault recovery
+  PASS  shutdown keeps all eight retired members catalog-visible for history
+
+all complex stress checks passed
+✔ retry cannot complete using evidence or verdict from the previous attempt (2.3676ms)
+✔ source attempt revocation invalidates queued reports, including captain reports (0.1908ms)
+✔ captain cannot create a duplicate repair for the same unresolved findings (0.4136ms)
+✔ a queued progress message is superseded by a terminal result, but the actual terminal report survives (0.1189ms)
+✔ supplements retain author, attempt and old result without reopening a failed gate (10.5408ms)
+✔ terminal immutable fields cannot be silently changed even with unchanged status/output (0.3884ms)
+✔ retry preserves attributed historical supplements but does not reuse them as gate evidence (0.2051ms)
+✔ malformed persisted supplements are rejected (0.1583ms)
+✔ durable mailbox fallback discards revoked source reports for captain and peers (28.6437ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 200.4019
+$ node scripts/build-client.mjs --check && node scripts/client-verify.mjs
+client bundle matches src/client/entry.js
+dsh-ctf-teams client bundle verification
+  PASS  bundle registers one ModuleLoader unit
+  PASS  bundle id is the published package name
+  PASS  exports the plugin apply function
+  PASS  inject asks for the slot ledger
+  PASS  waits for the conversation.view slot
+  PASS  registers the dashboard tab
+  PASS  the tab receives its session id
+  PASS  registers a component for the tab
+  PASS  renders the loading state before the first response
+  PASS  polls the host route with the session id
+  PASS  renders the live challenge, lanes, tasks, findings and flags
+  PASS  renders the next-step line from the host
+  PASS  renders the progress bar and census
+  PASS  legacy findings are visibly unverified
+  PASS  UI distinguishes registered flag, accepted flag and advisory warning
+  PASS  UI displays provenance as unverified rather than a domain trust score
+  PASS  UI shows evidence verification and platform environment
+  PASS  keeps the last snapshot when the host goes away
+  PASS  a staged team offers approval, attachments and a report export
+  PASS  a staged plan is badged as awaiting approval
+  PASS  the approve button is enabled for the captain
+  PASS  clicking approve posts one action turn for this team
+  PASS  the panel reports the host answer
+  PASS  a member cannot approve from the panel
+  PASS  a running solve offers nudge, halt, writeup, verify and exports
+  PASS  verify-flag carries the candidate id
+  PASS  nudge posts the operational action
+  PASS  export downloads through the browser
+  PASS  a live team offers cleanup
+  PASS  cleanup asks first, with the size it would free
+  PASS  archiving posts a housekeeping action for this team
+  PASS  purging posts the destructive mode explicitly
+  PASS  a staged plan can be dropped from the panel
+  PASS  a halted team offers resume
+  PASS  an archived team is read-only and exportable
+  PASS  the archived roster offers a bulk cleanup
+  PASS  bulk cleanup asks first and names what it frees
+  PASS  bulk cleanup posts the archive purge
+  PASS  an empty session offers the start button and explains the flow
+  PASS  the start form asks for the challenge facts
+  PASS  the start form says the solve runs without an approval click
+  PASS  the start form offers attachment picking
+  PASS  expanding the start form picker lists workspace files
+  PASS  picking a file in the start form shows it as a chip
+  PASS  submitting the form posts a start action with the typed goal and attachments
+  PASS  the attachment picker lists workspace files
+  PASS  picking a file arms the submit with its path
+  PASS  the picker posts the picked attachment paths
+  PASS  registration cleanups run without throwing
+
+client bundle verification passed
+$ node scripts/dashboard-route-verify.mjs
+dsh-ctf-teams dashboard surface verification
+  PASS  four routes register (state, action, export, files)
+  PASS  every route is exact and names a handler
+  PASS  state answers the planted team with the right headers
+  PASS  state names the session, its workspace and the configured profiles
+  PASS  the captain is recognised and the roster is complete
+  PASS  nextStep points at the staged approval
+  PASS  members carry live activity and sync depth
+  PASS  a session outside the team reads it as a bystander
+  PASS  approve answers 200 and names the action
+  PASS  approve queues one user-authored turn naming the tool
+  PASS  verify-flag composes a platform-check instruction
+  PASS  attachments composes a set_challenge instruction with the picked paths
+  PASS  a participating member may ask for the writeup
+  PASS  the writeup prompt reads like a CTF writeup, not a bug report
+  PASS  the writeup rules forbid inventing output and require replayability
+  PASS  a session outside the team cannot approve
+  PASS  a session outside the team cannot nudge it
+  PASS  a session that owns no team has nothing to nudge
+  PASS  start refuses when the session already owns a team
+  PASS  verify-flag refuses an unknown candidate
+  PASS  verify-flag refuses a flag that is already decided
+  PASS  an unknown action is refused
+  PASS  a session outside the team cannot delete it
+  PASS  a refused delete leaves the files alone
+  PASS  deleting an unknown team is a 404
+  PASS  archiving moves the team out of the live roster and reports the space
+  PASS  housekeeping is not a model turn
+  PASS  the archived roster reports the team as archived with its size
+  PASS  purging the archive frees the space and reports it
+  PASS  purging an empty archive is a no-op, not an error
+  PASS  a missing sessionId is refused
+  PASS  free-form prompt text is never forwarded
+  PASS  an offline session is refused with 409
+  PASS  an invalid body is refused with 400
+  PASS  the action endpoint is POST-only
+  PASS  no refused request queued a turn
+  PASS  the writeup export serves the workspace WRITEUP.md
+  PASS  the report export renders the durable team state
+  PASS  a missing writeup is reported, never invented
+  PASS  starting from the panel asks for an immediate run, not a staged plan
+  PASS  autoApprove=false restores the staged plan prompt
+  PASS  the start action carries picked attachments into the prompt
+  PASS  a start attachment must be an existing workspace file
+  PASS  an attachment path cannot smuggle instruction text
+  PASS  the attachment picker lists workspace files with sizes
+  PASS  the picker skips noisy directories
+  PASS  the Connection fence refuses untrusted callers before the handler
+  PASS  a disposing Connection fails closed with 503
+  PASS  the dashboard routes never write team state themselves
+  PASS  panel actions become user turns
+  PASS  authority is validated against durable state
+  PASS  action prompts are composed server-side from a closed action set
+
+dashboard surface verification passed
+$ node --test scripts/release-metadata.test.mjs
+✔ stable latest requires the recommended host and bounded compatibility (4.5089ms)
+✔ alpha candidates use next and never replace latest (1.1222ms)
+✔ beta candidates use next and never replace latest (1.018ms)
+✔ rc candidates use next and never replace latest (1.418ms)
+✔ reject unsupported versions and unbounded peers (0.9379ms)
+✔ checked-in candidate has consistent dependency and release metadata (0.3686ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 77.8768
+$ node scripts/readme-version.mjs && node --test scripts/readme-version.test.mjs
+README version references match 0.1.32
+✔ a README that still names an older plugin version is rejected (1.4456ms)
+✔ an older version left in prose is rejected even without an install command (0.5984ms)
+✔ older versions stay reachable through their release-notes links (0.1351ms)
+✔ a shorter version does not match inside a longer prerelease (0.1426ms)
+✔ install commands are extracted regardless of version (0.0928ms)
+✔ published versions come from the release notes themselves (0.3455ms)
+✔ the checked-in READMEs match the package version (1.3127ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71.5646
+$ node scripts/sync-skill.mjs --check
+DSH skill mirrors are up to date: 11 skills, 128 files.
+$ node scripts/harness-compat-tdd.mjs && node scripts/stability-tdd.mjs && node scripts/lifecycle-verify.mjs --modern-harness && node scripts/member-failure-tdd.mjs --modern-harness && node scripts/lifecycle-verify.mjs --delivery-harness && node scripts/member-failure-tdd.mjs --delivery-harness
+✔ native SubagentRuntime keeps its receiver through FIFO delivery and retirement guard (6.2151ms)
+✔ modern queue and public messaging are both guarded, including nested HMR disposal (0.3782ms)
+✔ unsupported queue-only or send-only contract fails explicitly (0.3398ms)
+✔ legacy session history excludes its inherited prefix; modern uses ownEvents receiver (0.1503ms)
+✔ synchronous modern setup selects the first request, deduplicates events, and disposes for HMR (1.2883ms)
+✔ child disposal releases lifecycle contributions and permits a same-id resumed Agent (0.1908ms)
+✔ setup exception blocks request instead of being swallowed by session-start dispatch (0.2389ms)
+✔ a child inheriting another member descriptor does not acquire member selection or failure hooks (0.1517ms)
+✔ cold resume restores route and effort coherently (fallbackActive=false) (10.7484ms)
+✔ cold resume restores route and effort coherently (fallbackActive=true) (9.4731ms)
+✔ spawn explicitly passes reasoning effort, preserving persona and tool filters (0.6862ms)
+✔ depth deny entries resolve against the host tool registry (#163, #164) (0.2861ms)
+✔ 0.1.5 delivery queues team jobs and guards both host modes across HMR (0.4159ms)
+✔ serial agent/created installs before first request, skips old early notification and cleans up (0.1422ms)
+✔ serial initialization failure vetoes creation instead of admitting a default-model request (0.1176ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36.2982
+✔ work, empty, staged, halted and escalated teams cannot falsely declare delivery (0.787ms)
+✔ inbox acceptance leaves 32 messages unread; one admitted step consumes them exactly once (50.6378ms)
+✔ old-generation guidance is discarded while current mail survives the same batch (6.957ms)
+✔ reported completion suppresses only redundant native success settlements (10.4269ms)
+✔ next-step steering preserves the native delivery modes across all three contracts (0.9501ms)
+✔ internal wakeups and cold admission are rejected for stopped or retired members (6.1322ms)
+✔ member-relative delegation limit covers raw runtime calls and preserves unrelated siblings (3.6354ms)
+✔ preset-era activation obeys the delegation limit without inventing removed methods (3.2263ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 88.1133
+dsh-ctf-teams lifecycle verification
+  PASS  slash command registers as /ctf-teams
+  PASS  slash command advertises an input hint for the menu placeholder
+  PASS  configured profile registers a concise dedicated slash command
+  PASS  unsafe profile names do not generate ambiguous commands
+  PASS  the default profile does not repeat the generic command as an alias
+  PASS  a profile named board cannot shadow the dashboard command
+  PASS  every other profile keeps its concise command alias
+  PASS  an empty default profile keeps the built-in squad reachable by alias
+  PASS  bare /ctf-teams reports usage instead of activating
+  PASS  argued /ctf-teams queues one visible user turn
+  PASS  slash command preserves the exact submitted line as user-authored chat
+  PASS  preserved slash command still activates through the gesture boundary
+  PASS  activation directive names the protocol
+  PASS  profile command queues a visible profile-specific user turn
+  PASS  gesture recognizes a leading /ctf-teams token
+  PASS  profile command gesture selects its configured profile and goal
+  PASS  bare profile command gesture asks for the goal
+  PASS  unknown profile command stays ordinary prose
+  PASS  bare gesture yields an empty goal
+  PASS  mid-sentence mention stays ordinary prose
+  PASS  non-user sources cannot forge the gesture
+  PASS  latest user gesture wins in a batch
+  PASS  slash --profile without a goal still activates
+  PASS  profile-only activation asks for the goal
+  PASS  captain-planning activation requires a staged user-reviewed graph in two-phase mode
+  PASS  the default activation directive runs the submitted plan without an approval step
+  PASS  unknown slash profile reports error and does not followup
+  PASS  leading ordinary token is never treated as a profile
+  PASS  command getter sees HMR profile names
+  PASS  create(profile) returns profile members tasks and seed ids
+  PASS  create(profile) persists snapshot members and mapped dependencies
+  PASS  dependency-blocked roster does not spawn a model session
+  PASS  first-stage seed is assigned only to the configured member
+  PASS  first assignment includes team goal and protocol
+  PASS  failed upstream does not unlock the next configured stage
+  PASS  completed upstream dispatches the configured downstream assignee
+  PASS  downstream assignment includes dependency output and seed id
+  PASS  unread mailbox prevents a same-kick new assignment
+  PASS  status exposes profile snapshot and task seed ids
+  PASS  discarding a staged plan archives it without spawning or dispatching
+  PASS  discard aborts the active Captain turn and parks an authoritative no-recreate context
+  PASS  captain-planning create stages only the configured roster
+  PASS  staged roster and DAG are editable without spawning or dispatching
+  PASS  invalid staged plan batches fail atomically without a partial write
+  PASS  return-to-chat cancels the planning turn and asks one question without recreating the team
+  PASS  return-to-chat is idempotent while feedback is already pending
+  PASS  captain can revise the staged DAG and roster through one model-facing atomic tool
+  PASS  running never-started tasks can be corrected without replacing the DAG
+  PASS  invalid running plan batches preserve the entire previous graph
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t1","subject":"do not overwrite active work"}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t2","dependencies":["t2"]}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"remove_member","member_name":"implementer"}
+  PASS  captain can cancel dependency-blocked member work before its first attempt
+  PASS  approval starts only dependency-ready members
+  PASS  approved plan dispatches only after a spawned member becomes idle
+  PASS  captain halt cancels the approved graph and keeps the team
+  PASS  team halt cancels the captain turn while preserving queued user input
+  PASS  captain halt drains active members and leaves blocked members unspawned
+  PASS  halted team does not redispatch cancelled graph
+  PASS  halted create_task does not silently resume
+  PASS  explicit resume clears halt and keeps cancelled tasks cancelled
+  PASS  shutdown preserves cancelled task history in the archive
+  PASS  quality implementation without contract is rejected
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  illegal completed without acceptance evidence is rejected
+  PASS  issue159 terminal evidence is durable and duplicate submissions are idempotent
+  PASS  issue159 supplementary evidence preserves the original result and completion timestamp
+  PASS  issue159 captain supplements terminal member work without takeover
+  PASS  issue159 supplemental evidence is visible in status
+  PASS  issue159 stale capabilities cannot append terminal evidence
+  PASS  issue159 identical report retries reuse one durable message
+  PASS  issue159 teammates cannot supplement another owners terminal work
+  PASS  issue159 stale explicit reports are rejected before entering the mailbox
+  PASS  review needs_revision cannot complete
+  PASS  issue159 automatic repair creation notifies the captain
+  PASS  needs_revision opens repair and next review
+  PASS  adding members alone creates no child sessions
+  PASS  manually added members persist the global fallback for later activations
+  PASS  idle assigned member is claimed and woken automatically
+  PASS  captain cannot mint a claim capability for a member; use reassign_task
+  PASS  member observes the scheduler attempt idempotently
+  PASS  dependency gate stays pending before both branches complete
+  PASS  rate-limited idle owner does not enter an unbounded retry loop (#66)
+  PASS  disposed settled owner keeps its parked attempt across repeated scheduler kicks
+  PASS  idle assigned gamma is claimed for the recovery-failure fixture
+  PASS  issue159 failed recovery restores partial evidence with the original capability
+  PASS  failed unobserved recovery restores the original capability and later kicks do not recast it
+  PASS  restored capability remains usable after a failed recovery delivery
+  PASS  unobserved missing owner recovers once and repeated kicks do not rotate it again
+  PASS  captain message resumes a parked owner without rotating its attempt
+  PASS  captain cannot bypass the safe takeover protocol
+  PASS  reassignment quiesces recovered owner and creates a new attempt
+  PASS  old member cannot publish a late takeover result
+  PASS  resumed recovered member completes with its throttled capability
+  PASS  completing dependencies dispatches the downstream task before member execution
+  PASS  previously interrupted member is reused in a later round
+  PASS  a member cannot claim a second unfinished task
+  PASS  removing a member revokes and redispatches its unfinished task
+  PASS  removing a member preserves its catalog entry for transcript history
+  PASS  removing a member blocks direct followup before resume
+  PASS  removed member loses participant authorization
+  PASS  failed live message remains one unread durable fallback
+  PASS  status kick accepts fallback without inventing consumption
+  PASS  recipient status acknowledges the complete fallback actually displayed
+  PASS  concurrent claims serialize to exactly one owner
+  PASS  terminal output is immutable against late overwrite
+  PASS  sync reads only own mailbox, preserves excess and acknowledges returned messages once
+  PASS  member sync cannot consume captain messages and does read its own context
+  PASS  captain takeover returns checkpoint, remaining work, board delta and unread messages without stale attempts
+  PASS  captain takeover owns a fresh attempt and rejects the old member
+  PASS  parallel captain takeovers allow exactly one active captain task
+  PASS  unfinished captain takeover returns to a member when the captain becomes idle
+  PASS  idle captain recovery records one durable revocation notice with the previous capability
+  PASS  repeated idle edges do not duplicate the captain handoff notice
+  PASS  activity refines residency through the live Agent registry
+  PASS  team shutdown archives the complete durable record
+  PASS  team shutdown keeps retired members catalog-visible for historical transcripts
+  PASS  team shutdown blocks storage-only member cold resume
+  PASS  team shutdown leaves unrelated continuable subagents untouched
+  PASS  team shutdown leaves unrelated continuable followup untouched
+  PASS  invalid roster approval rejects before any member session is created
+  PASS  same-name team can be recreated and archived again
+  PASS  request failure alone leaves the attempt open for Harness recovery
+  PASS  turn failure fails the open attempt, releases the member, and owns no retry
+  PASS  turn failure notifies the captain mailbox with the error code
+  PASS  settled member discards failed-attempt guidance without another model turn
+  PASS  configured challenge lane cap admits one task and leaves the second explicitly waiting
+  PASS  dependency invalidation is visible to members; reads and duplicate verdicts do not write
+  PASS  captain handover is not writable or readable through a member identity
+  PASS  handover saves pending candidates and idempotent retries create no new state
+  PASS  terminal lane releases capacity and scheduler dispatches the waiting second angle
+  PASS  handover reload exposes current attempts and marks saved state stale without restoring work
+  PASS  stale runtime handover writes are rejected
+  PASS  archive keeps dependent claims and captain handover source material
+  PASS  invalid batch plan is rejected without any state or session side effect
+  PASS  inline member executionPrompt survives atomic create
+  PASS  published JSON Schema declares required task ids and subjects
+  PASS  one atomic call creates the full roster and resolves forward dependency references
+  PASS  ordinary pending work cannot be reported deliverable
+  PASS  hypothesis reads and cross-member duplicate proposals do not write state
+  PASS  concurrent tests fence stale revisions rather than overwrite history
+  PASS  idempotent test retry creates no board beat or state write
+  PASS  experiment writes reject old team generations
+  PASS  members see bounded append-only history and actual recorder identity
+  PASS  ledger operations never dispatch a new turn
+  PASS  members cannot self-verify findings
+  PASS  claim exposes the complete task contract without reading team files
+  PASS  failed teardown keeps reassignment fenced and does not launch a new generation
+  PASS  the same failed handoff can be retried safely
+  PASS  failed member drain never reports a successful archive
+  PASS  archive retries drain previously removed roster rows
+  PASS  CTF2 candidate is retained with durable team reference and format warning
+  PASS  mark by original content records platform-accepted flag
+  PASS  cross-team verdict guard rejects mismatched namespace
+  PASS  solo mode rejects ctf_teams_add_member
+  PASS  solo mode rejects ctf_teams_create_task
+  PASS  solo mode creates no sessions, members or tasks and preserves metadata
+  PASS  invalid replacement preserves the existing solved board
+  PASS  replaceExisting archives the prior solve and returns its path
+  PASS  archive summary includes findings, checks, exact accepted flag and environment
+  PASS  delete returns archive path and explicit environment cleanup reminder
+  PASS  single: completion digest is delivered and its board cursor advances
+  PASS  single: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  single: new evidence after completion still delivers once
+  PASS  single: the new evidence also settles without another wake
+  PASS  single: paused ledger queries and duplicates leave state unchanged
+  PASS  single: paused team never dispatches pending board updates
+  PASS  batch: completion digest is delivered and its board cursor advances
+  PASS  batch: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  batch: new evidence after completion still delivers once
+  PASS  batch: the new evidence also settles without another wake
+  PASS  batch: paused ledger queries and duplicates leave state unchanged
+  PASS  batch: paused team never dispatches pending board updates
+  PASS  create_task reports accepted dispatch using the post-scheduler snapshot
+  PASS  exclusive resource waits with an explicit holder
+  PASS  active challenge duplication is rejected unless explicitly requested
+  PASS  blocked resource work does not starve a later ready task for the same member
+  PASS  retired members cannot append hypothesis records
+  PASS  route repair revokes both old attempt writes and old member board admission before draining
+  PASS  route repair preserves checkpoint/remaining items and changes the child identity
+  PASS  unknown platform facts remain blocked rather than starting a target
+  PASS  preflight receipt identifies the missing key
+  PASS  pending preflight and finding reference can be replaced without recreating a task
+  PASS  omitted preflight edits preserve the guard
+  PASS  invalid preflight rolls back the entire ordered edit batch
+  PASS  preflight repair never edits an already started attempt
+  PASS  active members can refresh strictly read-only preflight facts
+  PASS  a retired member cannot refresh another participant team
+  PASS  empty preflight array and empty finding reference explicitly clear both fields
+  PASS  model-facing status exposes saved/live/captain route diagnostics as lossless JSON
+
+all lifecycle checks passed
+✔ 503 preserves owner/checkpoint, cannot move to other work and recovers at most once (42.2541ms)
+✔ always retry keeps the owned task open and sends no false failure report (13.4489ms)
+✔ request handler delegates recovery and leaves exhausted requests open until final error (15.6118ms)
+✔ fallback recovers once and exhausted fallback still delegates without failing the task (3.864ms)
+✔ aborted request does not fail a task or consume its fallback route (3.8132ms)
+✔ final failure notifies idle captain once and flushes without an idle event (23.4221ms)
+✔ final failure notifies running captain once and flushes without an idle event (30.9998ms)
+✔ report a final error immediately but do not dispatch while the driver is still running (45.1675ms)
+✔ unavailable captain keeps failure notification readable: {"captainOffline":true} (14.7328ms)
+✔ unavailable captain keeps failure notification readable: {"rejectDelivery":true} (16.8493ms)
+✔ a queued error cannot fail a newer attempt created before it gets the team lock (3.875ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 219.1807
+dsh-ctf-teams lifecycle verification
+  PASS  slash command registers as /ctf-teams
+  PASS  slash command advertises an input hint for the menu placeholder
+  PASS  configured profile registers a concise dedicated slash command
+  PASS  unsafe profile names do not generate ambiguous commands
+  PASS  the default profile does not repeat the generic command as an alias
+  PASS  a profile named board cannot shadow the dashboard command
+  PASS  every other profile keeps its concise command alias
+  PASS  an empty default profile keeps the built-in squad reachable by alias
+  PASS  bare /ctf-teams reports usage instead of activating
+  PASS  argued /ctf-teams queues one visible user turn
+  PASS  slash command preserves the exact submitted line as user-authored chat
+  PASS  preserved slash command still activates through the gesture boundary
+  PASS  activation directive names the protocol
+  PASS  profile command queues a visible profile-specific user turn
+  PASS  gesture recognizes a leading /ctf-teams token
+  PASS  profile command gesture selects its configured profile and goal
+  PASS  bare profile command gesture asks for the goal
+  PASS  unknown profile command stays ordinary prose
+  PASS  bare gesture yields an empty goal
+  PASS  mid-sentence mention stays ordinary prose
+  PASS  non-user sources cannot forge the gesture
+  PASS  latest user gesture wins in a batch
+  PASS  slash --profile without a goal still activates
+  PASS  profile-only activation asks for the goal
+  PASS  captain-planning activation requires a staged user-reviewed graph in two-phase mode
+  PASS  the default activation directive runs the submitted plan without an approval step
+  PASS  unknown slash profile reports error and does not followup
+  PASS  leading ordinary token is never treated as a profile
+  PASS  command getter sees HMR profile names
+  PASS  create(profile) returns profile members tasks and seed ids
+  PASS  create(profile) persists snapshot members and mapped dependencies
+  PASS  dependency-blocked roster does not spawn a model session
+  PASS  first-stage seed is assigned only to the configured member
+  PASS  first assignment includes team goal and protocol
+  PASS  failed upstream does not unlock the next configured stage
+  PASS  completed upstream dispatches the configured downstream assignee
+  PASS  downstream assignment includes dependency output and seed id
+  PASS  unread mailbox prevents a same-kick new assignment
+  PASS  status exposes profile snapshot and task seed ids
+  PASS  discarding a staged plan archives it without spawning or dispatching
+  PASS  discard aborts the active Captain turn and parks an authoritative no-recreate context
+  PASS  captain-planning create stages only the configured roster
+  PASS  staged roster and DAG are editable without spawning or dispatching
+  PASS  invalid staged plan batches fail atomically without a partial write
+  PASS  return-to-chat cancels the planning turn and asks one question without recreating the team
+  PASS  return-to-chat is idempotent while feedback is already pending
+  PASS  captain can revise the staged DAG and roster through one model-facing atomic tool
+  PASS  running never-started tasks can be corrected without replacing the DAG
+  PASS  invalid running plan batches preserve the entire previous graph
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t1","subject":"do not overwrite active work"}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"update_task","task_id":"t2","dependencies":["t2"]}
+  PASS  running edits reject active attempts, cycles and roster changes: {"action":"remove_member","member_name":"implementer"}
+  PASS  captain can cancel dependency-blocked member work before its first attempt
+  PASS  approval starts only dependency-ready members
+  PASS  approved plan dispatches only after a spawned member becomes idle
+  PASS  captain halt cancels the approved graph and keeps the team
+  PASS  team halt cancels the captain turn while preserving queued user input
+  PASS  captain halt drains active members and leaves blocked members unspawned
+  PASS  halted team does not redispatch cancelled graph
+  PASS  halted create_task does not silently resume
+  PASS  explicit resume clears halt and keeps cancelled tasks cancelled
+  PASS  shutdown preserves cancelled task history in the archive
+  PASS  quality implementation without contract is rejected
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  missing attempt_id is a correctable parameter error, not a revoked attempt
+  PASS  illegal completed without acceptance evidence is rejected
+  PASS  issue159 terminal evidence is durable and duplicate submissions are idempotent
+  PASS  issue159 supplementary evidence preserves the original result and completion timestamp
+  PASS  issue159 captain supplements terminal member work without takeover
+  PASS  issue159 supplemental evidence is visible in status
+  PASS  issue159 stale capabilities cannot append terminal evidence
+  PASS  issue159 identical report retries reuse one durable message
+  PASS  issue159 teammates cannot supplement another owners terminal work
+  PASS  issue159 stale explicit reports are rejected before entering the mailbox
+  PASS  review needs_revision cannot complete
+  PASS  issue159 automatic repair creation notifies the captain
+  PASS  needs_revision opens repair and next review
+  PASS  adding members alone creates no child sessions
+  PASS  manually added members persist the global fallback for later activations
+  PASS  idle assigned member is claimed and woken automatically
+  PASS  captain cannot mint a claim capability for a member; use reassign_task
+  PASS  member observes the scheduler attempt idempotently
+  PASS  dependency gate stays pending before both branches complete
+  PASS  rate-limited idle owner does not enter an unbounded retry loop (#66)
+  PASS  disposed settled owner keeps its parked attempt across repeated scheduler kicks
+  PASS  idle assigned gamma is claimed for the recovery-failure fixture
+  PASS  issue159 failed recovery restores partial evidence with the original capability
+  PASS  failed unobserved recovery restores the original capability and later kicks do not recast it
+  PASS  restored capability remains usable after a failed recovery delivery
+  PASS  unobserved missing owner recovers once and repeated kicks do not rotate it again
+  PASS  captain message resumes a parked owner without rotating its attempt
+  PASS  captain cannot bypass the safe takeover protocol
+  PASS  reassignment quiesces recovered owner and creates a new attempt
+  PASS  old member cannot publish a late takeover result
+  PASS  resumed recovered member completes with its throttled capability
+  PASS  completing dependencies dispatches the downstream task before member execution
+  PASS  previously interrupted member is reused in a later round
+  PASS  a member cannot claim a second unfinished task
+  PASS  removing a member revokes and redispatches its unfinished task
+  PASS  removing a member preserves its catalog entry for transcript history
+  PASS  removing a member blocks direct followup before resume
+  PASS  removed member loses participant authorization
+  PASS  failed live message remains one unread durable fallback
+  PASS  status kick accepts fallback without inventing consumption
+  PASS  recipient status acknowledges the complete fallback actually displayed
+  PASS  concurrent claims serialize to exactly one owner
+  PASS  terminal output is immutable against late overwrite
+  PASS  sync reads only own mailbox, preserves excess and acknowledges returned messages once
+  PASS  member sync cannot consume captain messages and does read its own context
+  PASS  captain takeover returns checkpoint, remaining work, board delta and unread messages without stale attempts
+  PASS  captain takeover owns a fresh attempt and rejects the old member
+  PASS  parallel captain takeovers allow exactly one active captain task
+  PASS  unfinished captain takeover returns to a member when the captain becomes idle
+  PASS  idle captain recovery records one durable revocation notice with the previous capability
+  PASS  repeated idle edges do not duplicate the captain handoff notice
+  PASS  activity refines residency through the live Agent registry
+  PASS  team shutdown archives the complete durable record
+  PASS  team shutdown keeps retired members catalog-visible for historical transcripts
+  PASS  team shutdown blocks storage-only member cold resume
+  PASS  team shutdown leaves unrelated continuable subagents untouched
+  PASS  team shutdown leaves unrelated continuable followup untouched
+  PASS  invalid roster approval rejects before any member session is created
+  PASS  same-name team can be recreated and archived again
+  PASS  request failure alone leaves the attempt open for Harness recovery
+  PASS  turn failure fails the open attempt, releases the member, and owns no retry
+  PASS  turn failure notifies the captain mailbox with the error code
+  PASS  settled member discards failed-attempt guidance without another model turn
+  PASS  configured challenge lane cap admits one task and leaves the second explicitly waiting
+  PASS  dependency invalidation is visible to members; reads and duplicate verdicts do not write
+  PASS  captain handover is not writable or readable through a member identity
+  PASS  handover saves pending candidates and idempotent retries create no new state
+  PASS  terminal lane releases capacity and scheduler dispatches the waiting second angle
+  PASS  handover reload exposes current attempts and marks saved state stale without restoring work
+  PASS  stale runtime handover writes are rejected
+  PASS  archive keeps dependent claims and captain handover source material
+  PASS  invalid batch plan is rejected without any state or session side effect
+  PASS  inline member executionPrompt survives atomic create
+  PASS  published JSON Schema declares required task ids and subjects
+  PASS  one atomic call creates the full roster and resolves forward dependency references
+  PASS  ordinary pending work cannot be reported deliverable
+  PASS  hypothesis reads and cross-member duplicate proposals do not write state
+  PASS  concurrent tests fence stale revisions rather than overwrite history
+  PASS  idempotent test retry creates no board beat or state write
+  PASS  experiment writes reject old team generations
+  PASS  members see bounded append-only history and actual recorder identity
+  PASS  ledger operations never dispatch a new turn
+  PASS  members cannot self-verify findings
+  PASS  claim exposes the complete task contract without reading team files
+  PASS  failed teardown keeps reassignment fenced and does not launch a new generation
+  PASS  the same failed handoff can be retried safely
+  PASS  failed member drain never reports a successful archive
+  PASS  archive retries drain previously removed roster rows
+  PASS  CTF2 candidate is retained with durable team reference and format warning
+  PASS  mark by original content records platform-accepted flag
+  PASS  cross-team verdict guard rejects mismatched namespace
+  PASS  solo mode rejects ctf_teams_add_member
+  PASS  solo mode rejects ctf_teams_create_task
+  PASS  solo mode creates no sessions, members or tasks and preserves metadata
+  PASS  invalid replacement preserves the existing solved board
+  PASS  replaceExisting archives the prior solve and returns its path
+  PASS  archive summary includes findings, checks, exact accepted flag and environment
+  PASS  delete returns archive path and explicit environment cleanup reminder
+  PASS  single: completion digest is delivered and its board cursor advances
+  PASS  single: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  single: new evidence after completion still delivers once
+  PASS  single: the new evidence also settles without another wake
+  PASS  single: paused ledger queries and duplicates leave state unchanged
+  PASS  single: paused team never dispatches pending board updates
+  PASS  batch: completion digest is delivered and its board cursor advances
+  PASS  batch: 50 repeated idle edges and status reads never re-deliver a consumed solved board
+  PASS  batch: new evidence after completion still delivers once
+  PASS  batch: the new evidence also settles without another wake
+  PASS  batch: paused ledger queries and duplicates leave state unchanged
+  PASS  batch: paused team never dispatches pending board updates
+  PASS  create_task reports accepted dispatch using the post-scheduler snapshot
+  PASS  exclusive resource waits with an explicit holder
+  PASS  active challenge duplication is rejected unless explicitly requested
+  PASS  blocked resource work does not starve a later ready task for the same member
+  PASS  retired members cannot append hypothesis records
+  PASS  route repair revokes both old attempt writes and old member board admission before draining
+  PASS  route repair preserves checkpoint/remaining items and changes the child identity
+  PASS  unknown platform facts remain blocked rather than starting a target
+  PASS  preflight receipt identifies the missing key
+  PASS  pending preflight and finding reference can be replaced without recreating a task
+  PASS  omitted preflight edits preserve the guard
+  PASS  invalid preflight rolls back the entire ordered edit batch
+  PASS  preflight repair never edits an already started attempt
+  PASS  active members can refresh strictly read-only preflight facts
+  PASS  a retired member cannot refresh another participant team
+  PASS  empty preflight array and empty finding reference explicitly clear both fields
+  PASS  model-facing status exposes saved/live/captain route diagnostics as lossless JSON
+
+all lifecycle checks passed
+✔ 503 preserves owner/checkpoint, cannot move to other work and recovers at most once (62.0557ms)
+✔ always retry keeps the owned task open and sends no false failure report (12.4564ms)
+✔ request handler delegates recovery and leaves exhausted requests open until final error (15.0433ms)
+✔ fallback recovers once and exhausted fallback still delegates without failing the task (4.4613ms)
+✔ aborted request does not fail a task or consume its fallback route (4.0087ms)
+✔ final failure notifies idle captain once and flushes without an idle event (24.4574ms)
+✔ final failure notifies running captain once and flushes without an idle event (30.9559ms)
+✔ report a final error immediately but do not dispatch while the driver is still running (44.0441ms)
+✔ unavailable captain keeps failure notification readable: {"captainOffline":true} (15.2462ms)
+✔ unavailable captain keeps failure notification readable: {"rejectDelivery":true} (14.7344ms)
+✔ a queued error cannot fail a newer attempt created before it gets the team lock (4.9808ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 237.8646
+$ node scripts/compatibility.mjs && node --test scripts/compatibility.test.mjs scripts/host-preset-upgrade.test.mjs && node scripts/doctor.mjs
+Compatibility targets: 0.2.1-rc.2, 0.2.1-rc.1, 0.2.0-rc.2, 0.1.7-rc.2, 0.1.5-rc.3, 0.1.5-rc.2, 0.1.5-rc.1, 0.1.2-rc.1, 0.1.2-alpha.5, 0.1.2-alpha.2
+✔ source candidates pass the peer gate without entering the published download matrix (49.8183ms)
+✔ bounded loading accepts later RCs and patches without claiming exact validation (8.232ms)
+✔ doctor distinguishes source-preview acceptance from released host validation (1.7644ms)
+﹣ doctor runs through an installed bin symlink and reports success or failure (1.4873ms) # symlink creation is not permitted on this host
+✔ policy rejects floating targets, duplicates, and alpha recommendation (0.6627ms)
+✔ doctor detects transitive cohort mixing even with an exact CLI version (5.6678ms)
+✔ doctor follows profile peers and rejects duplicate runtime identities (9.0928ms)
+✔ policy rejects missing or mixed development overrides (1.3837ms)
+✔ policy rejects removed host peers and range-qualified or conditional DSH overrides (2.1669ms)
+✔ doctor reports missing nonoptional Cordis peers and required plugin imports even with optional metadata (8.7981ms)
+✔ doctor detects peer-only drift and a mismatched installed plugin (12.5979ms)
+✔ released target enters the download matrix and replaces the old source prediction (0.1175ms)
+✔ real host gate accepts bounded RC/patch updates with both manifest gate paths (6.8187ms)
+✔ preset persona uses required modern directory context and retains legacy cwd interpolation (4.1212ms)
+✔ member activation uses caller reporting on the new API and retains legacy continuable routing (0.4404ms)
+✔ targeted member drain retains exact owner, ids, errors and receiver on both APIs (0.2075ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 216.831
+Harness: 0.2.0-rc.2 (E:\dsh-ctf-teams-main\node_modules\.pnpm\@deepseek-ai+dsh@0.2.0-rc.2_67a17bedee454b7f218dad50043a674d\node_modules\@deepseek-ai\dsh)
+Host validation: published-matrix
+DSH package identities checked: 278
+Dependency inspection passed.
+Checks files resolved from the supplied roots; does not identify the running process or prove plugin behavior.
+$ node --test scripts/capabilities.test.mjs
+▶ stable tool presentation uses real scoped registry and prompt assembly
+  ✔ first request keeps all tools and the complete fixed captain protocol (3.7308ms)
+  ✔ cancelled and invalid business calls preserve the header (4.5705ms)
+  ✔ user restrictions remain authoritative while fixed profile metadata stays visible (3.4061ms)
+  ✔ the original tool allowlist can directly create and archive (10.1569ms)
+  ✔ status reports halted work without replacing or resuming it (9.6627ms)
+  ✔ duplicate creation directs the captain to reuse the existing team without changing it (3.6231ms)
+  ✔ fresh child is restricted to member tools before its id has been persisted (1.6871ms)
+  ✔ an ordinary subagent label cannot impersonate durable or pending membership (1.3354ms)
+(node:22096) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✔ a retired member remains restricted to member operations on cold resume (2.9656ms)
+  ✔ PTC and both modes keep the operation SDK stable after status (352.3612ms)
+  ✔ real run_code may discard status output without losing operating rules (141.8075ms)
+  ✔ HMR removes old masks and restores persisted participants in existing scopes (4.6939ms)
+  ✔ a cold captain loads its durable role before its first request (3.8506ms)
+  ✔ archive and idle preserve the original captain prefix (2.3504ms)
+  ✔ create, status and archive preserve the prefix in native and nested dispatch (26.1769ms)
+  ✔ even aggressive host result pruning cannot remove the system protocol (1.7997ms)
+  ✔ read failure leaves the fixed header intact (2.5521ms)
+✔ stable tool presentation uses real scoped registry and prompt assembly (705.2845ms)
+ℹ {"role":"captain-idle","profiles":["demo"],"promptBytes":11858,"schemaBytes":39723}
+ℹ {"role":"member","promptBytes":586,"schemaBytes":17768}
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 901.4804
+$ node --test scripts/member-spawn-recovery.test.mjs
+▶ a member start drops the names the host rejects and succeeds
+  ✔ the rejected names are removed and the start succeeds (1.1167ms)
+  ✔ only the names the host named are dropped, not the ones it listed as known (0.1586ms)
+  ✔ each rejection removes one more name until the host accepts the filter (0.199ms)
+  ✔ a first attempt that already works is not retried (0.1214ms)
+✔ a member start drops the names the host rejects and succeeds (2.4858ms)
+▶ a member start that failed for another reason still surfaces
+  ✔ an unrelated start failure propagates (0.3707ms)
+  ✔ a restriction error that is not an unknown-name report propagates (0.1655ms)
+  ✔ a non-error rejection does not loop forever (0.1593ms)
+  ✔ a rejection that names no name already in the filter does not loop forever (0.2518ms)
+✔ a member start that failed for another reason still surfaces (1.525ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 151.6753
+$ node --test scripts/git-artifacts.test.mjs
+✔ complete build matches its stamp and README changes do not invalidate it (10.2367ms)
+✔ source changes require rebuilding (6.9053ms)
+✔ dependency settings require rebuilding (7.8642ms)
+✔ modified and extra output cannot pass the stamp (6.546ms)
+✔ missing entry cannot be stamped as a valid build (4.5268ms)
+✔ a source tree with no build stamp cannot pass (4.7798ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.9821
+$ node --test scripts/harness-source-verify.test.mjs
+✔ source invocation cannot masquerade as an npm host-version verification (1.4712ms)
+✔ candidate acceptance requires the policy SHA and a clean source checkout (0.2217ms)
+✔ workspace discovery ignores generated residue and rejects duplicate identities (7.8206ms)
+✔ declared closure reports resolved versions and rejects a registry DSH duplicate (5.8174ms)
+✔ missing required dependencies fail while unavailable optional platforms remain explicit (3.4903ms)
+✔ closure reads the package identity when export maps hide or redirect package.json (5.6951ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.8076
+$ node scripts/git-artifacts.mjs
+Git artifacts match source and build settings.

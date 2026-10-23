@@ -8,7 +8,9 @@ import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
 
 const model = { provider: 'runtime-lab', id: 'fixture-model', name: 'CTF2 acceptance fixture', context: { contextWindow: 262144 }, defaultMaxTokens: 8192 }
 let step = 0
-const code = `
+const coldRestore = process.env.LAB_CTF_COLD === '1'
+const marker = coldRestore ? 'CTF2_HANDOVER_RESTORED' : 'CTF2_REGRESSION_PASSED'
+const warmCode = `
 let diagnostic = '';
 try { await tools.ctf_teams_create({name:'bad-plan',plan:{members:[{name:'x',extra:'invalid'}],tasks:[{description:'中文'.repeat(1000)}]}}); }
 catch (error) { diagnostic = error.message; }
@@ -53,6 +55,21 @@ if (ledger.total !== 2 || ledger.next_offset !== 1 || ledger.file_checks[0].stat
 const ledgerNext = await tools.ctf_teams_hypothesis({action:'list',hypothesis_id:hypothesis.hypothesis_id,offset:1});
 if (ledgerNext.tests[0].observation !== 'actual input n=50' || ledgerNext.next_offset !== null) throw Error('experiment pagination lost a correction');
 if ((await tools.ctf_teams_status({})).ctf.hypothesis_summary.tests !== 2) throw Error('ledger status summary missing');
+const observation = await tools.ctf_teams_report_finding({content:'fixture request returns 500',claim_type:'observation',challenge_id:'fixture-crypto'});
+await tools.ctf_teams_verify_finding({finding_id:observation.finding_ref,method:'independent fixture request',result:'confirmed'});
+const interpretation = await tools.ctf_teams_report_finding({content:'fixture parser may be broken',claim_type:'interpretation',challenge_id:'fixture-crypto',depends_on:[observation.finding_ref]});
+await tools.ctf_teams_verify_finding({finding_id:interpretation.finding_ref,method:'independent fixture input check',result:'confirmed'});
+const refuted = await tools.ctf_teams_verify_finding({finding_id:observation.finding_ref,method:'single-row fixture input',result:'refuted'});
+const duplicateReview = await tools.ctf_teams_verify_finding({finding_id:observation.finding_ref,method:'single-row fixture input',result:'refuted'});
+const evidence = await tools.ctf_teams_evidence({needs_recheck:true,limit:1});
+if (!duplicateReview.duplicate || refuted.affected_total !== 1 || evidence.findings[0].finding_ref !== interpretation.finding_ref || !evidence.findings[0].recheckRequired) throw Error('finding provenance lost through Code Mode');
+await tools.ctf_teams_set_challenge({max_parallel_lanes:2});
+const checkpointLoad = await tools.ctf_teams_checkpoint({action:'load'});
+const checkpointInput = {action:'save',ledger_ref:checkpointLoad.ledger_ref,state_ref:checkpointLoad.current_state.state_ref,expected_revision:0,assessment:'Need an independent countercheck',disputes:['500 is an observation, broken parser is an explanation'],next_steps:['vary the fixture input'],evidence_files:['hypothesis-evidence.txt']};
+await tools.ctf_teams_checkpoint(checkpointInput);
+if (!(await tools.ctf_teams_checkpoint(checkpointInput)).duplicate) throw Error('checkpoint retry duplicated a handover');
+const checkpointChecked = await tools.ctf_teams_checkpoint({action:'load',check_files:true});
+if (checkpointChecked.stale || checkpointChecked.saved.facts.max_parallel_lanes !== 2 || checkpointChecked.file_checks[0].status !== 'matched') throw Error('checkpoint state/files failed');
 const flag = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',evidence:'attachment bytes',source_kind:'local_output'});
 if (!flag.format_warning || !flag.flag_ref) throw Error('original wrapper was not retained with a warning');
 const duplicate = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}'});
@@ -75,12 +92,26 @@ const second = await tools.ctf_teams_submit_flag({flag:'CTF2{EaSyRe}',challenge_
 const secondVerdict = await tools.ctf_teams_mark_flag({flag_id:second.flag_ref,verdict:'verified',note:'fixture platform accepted second'});
 if (secondVerdict.solved) throw Error('batch closed without explicit completion');
 await tools.ctf_teams_mark_challenge_solved({note:'fixture platform accepted both distinct challenge ids'});
+if (!(await tools.ctf_teams_checkpoint({action:'load'})).stale) throw Error('changed runtime failed to invalidate the saved handover');
 const archived = await tools.ctf_teams_delete({});
 if (!archived.archive_path || !archived.environment_notice.includes('env-ctf2')) throw Error('archive receipt failed');
 const summary = await tools.ctf_teams_archive_summary({team_id:solo.team_id,archived:true});
 if (!summary.summary.includes('REPORTED refutes') || !summary.summary.includes('sha256=') || !summary.summary.includes('文件原始字节') || !summary.summary.includes('platform accepted: CTF2{EaSyRe}')) throw Error('archive summary incomplete');
+await tools.ctf_teams_create({name:'ctf2-handover',mode:'solo'});
+await tools.ctf_teams_submit_flag({flag:'flag{pending-cold-fixture}',evidence:'synthetic unsubmitted candidate'});
+const coldHandover = await tools.ctf_teams_checkpoint({action:'load'});
+await tools.ctf_teams_checkpoint({action:'save',ledger_ref:coldHandover.ledger_ref,state_ref:coldHandover.current_state.state_ref,expected_revision:0,assessment:'Keep pending candidate until a real platform verdict',next_steps:['verify the actual platform response after restoring'],evidence_files:['hypothesis-evidence.txt']});
 return 'CTF2_REGRESSION_PASSED';
 `
+
+const coldCode = `
+const handover = await tools.ctf_teams_checkpoint({action:'load',check_files:true});
+if (handover.latest_revision !== 1 || handover.stale || handover.current_state.facts.pending_candidate_count !== 1 || handover.saved.notes.nextSteps[0] !== 'verify the actual platform response after restoring' || handover.file_checks[0].status !== 'matched') throw Error('cold checkpoint not restored');
+const evidence = await tools.ctf_teams_evidence({});
+if (evidence.total !== 0) throw Error('cold read manufactured a finding');
+return 'CTF2_HANDOVER_RESTORED';
+`
+const code = coldRestore ? coldCode : warmCode
 
 class Ctf2Adapter extends LlmAdapter {
   async listModels() { return [model] }
@@ -90,9 +121,9 @@ class Ctf2Adapter extends LlmAdapter {
     if (options.purpose || step++ > 0) {
       if (!options.purpose) {
         const text = JSON.stringify(options.messages)
-        assert.match(text, /CTF2_REGRESSION_PASSED/)
+        assert.ok(text.includes(marker))
       }
-      const text = options.purpose ? 'CTF2 test' : 'CTF2_REGRESSION_PASSED'
+      const text = options.purpose ? 'CTF2 test' : marker
       yield { type: 'block-start', index: 0, blockType: 'text' }
       yield { type: 'text-delta', index: 0, text }
       yield { type: 'block-end', index: 0, block: { type: 'text', text } }
@@ -116,8 +147,10 @@ export function apply(ctx) {
     await ctx.get('loader').await()
     const cwd = process.cwd()
     mkdirSync(cwd, { recursive: true })
-    writeFileSync(join(cwd, 'hypothesis-evidence.txt'), 'fixture raw bytes: n=49\n')
-    const handle = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } })
+    if (!coldRestore) writeFileSync(join(cwd, 'hypothesis-evidence.txt'), 'fixture raw bytes: n=49\n')
+    const handoverPath = join(cwd,'.ctf-teams/ctf2-handover/team.json')
+    const beforeCold = coldRestore ? readFileSync(handoverPath) : undefined
+    const handle = coldRestore ? await ctx.agents.resume({ resumeSessionId: process.env.LAB_PARENT_SESSION, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } }) : await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } })
     ctx.effect(() => () => handle.dispose())
     const agent = handle.agent
     await agent.whenIdle()
@@ -125,6 +158,17 @@ export function apply(ctx) {
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Use CTFTeams to run the deterministic CTF2 acceptance flow.' }], source: { kind: 'user' } }))
     await new Promise(resolve => setImmediate(resolve))
     await agent.whenIdle()
+    if (coldRestore) {
+      assert.ok(beforeCold.equals(readFileSync(handoverPath)), 'Cold reads must not mutate the team')
+      const restored=JSON.parse(readFileSync(handoverPath,'utf8'))
+      assert.equal(restored.captainSessionId,agent.id)
+      assert.equal(restored.flags[0].status,'candidate')
+      appendFileSync(process.env.LAB_TRACE,JSON.stringify({event:'ctf2-handover-restored',sameCaptain:true,pendingCandidatePreserved:true,noTeamWrites:true})+'\n')
+      await ctx.sessions.flush(agent.session)
+      await handle.dispose()
+      console.log(marker)
+      process.exit(0)
+    }
     const archived = JSON.parse(readFileSync(join(cwd, '.ctf-teams/archive/ctf2-solo/team.json'), 'utf8'))
     assert.equal(archived.mode, 'solo')
     assert.equal(archived.challenge.flagFormat, null)
@@ -135,6 +179,10 @@ export function apply(ctx) {
     assert.equal(archived.flags[0].verifiedFlag, 'CTF2{EaSyRe}')
     assert.equal(archived.flags[0].sources[0].kind, 'local_output')
     assert.equal(archived.findings[0].verifications[0].result, 'confirmed')
+    assert.equal(archived.captainCheckpoints.length, 1)
+    assert.equal(archived.captainCheckpoints[0].notes.nextSteps[0], 'vary the fixture input')
+    assert.ok(archived.findings.some(finding=>finding.claimType==='interpretation'&&finding.recheckRequired))
+    assert.equal(archived.challenge.maxParallelLanes, 2)
     assert.equal(archived.hypotheses[0].tests.length, 2)
     assert.equal(archived.hypotheses[0].tests[0].observation, '49 == 7**2')
     assert.equal(archived.hypotheses[0].tests[1].observation, 'actual input n=50')

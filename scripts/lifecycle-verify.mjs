@@ -1555,6 +1555,51 @@ try {
       && (await bridgeTask())?.status === 'failed')
   await call('ctf_teams_delete', {})
 
+  await call('ctf_teams_create',{name:'lane-budget',approval:'automatic'})
+  await call('ctf_teams_add_member',{name:'one'})
+  await call('ctf_teams_add_member',{name:'two'})
+  await call('ctf_teams_set_challenge',{multi_challenge:true,max_parallel_lanes:1})
+  const laneA=await call('ctf_teams_create_task',{subject:'main experiment',assignee:'one',challenge_id:'limit-a'})
+  const laneB=await call('ctf_teams_create_task',{subject:'second angle',assignee:'two',challenge_id:'limit-a',allow_duplicate_challenge:true})
+  const limited=await readTeam(stateRoot,'lane-budget')
+  const firstWorker=liveAgents.get(limited.members.find(member=>member.name==='one').id)
+  check('configured challenge lane cap admits one task and leaves the second explicitly waiting',limited.tasks.find(task=>task.id===laneA.task_id).status==='claimed'&&limited.tasks.find(task=>task.id===laneB.task_id).status==='pending')
+  const observation=await call('ctf_teams_report_finding',{content:'request returns 500',challenge_id:'limit-a',claim_type:'observation'},firstWorker)
+  await call('ctf_teams_verify_finding',{finding_id:observation.finding_ref,method:'independent request',result:'confirmed'})
+  const interpretation=await call('ctf_teams_report_finding',{content:'parser may be broken',challenge_id:'limit-a',claim_type:'interpretation',depends_on:[observation.finding_ref]},firstWorker)
+  await call('ctf_teams_verify_finding',{finding_id:interpretation.finding_ref,method:'independent input check',result:'confirmed'})
+  const refuted=await call('ctf_teams_verify_finding',{finding_id:observation.finding_ref,method:'vary row count',result:'refuted',note:'single row succeeds'})
+  const beforeReads=JSON.stringify(await readTeam(stateRoot,'lane-budget'))
+  const evidence=await call('ctf_teams_evidence',{needs_recheck:true},firstWorker)
+  const duplicateReview=await call('ctf_teams_verify_finding',{finding_id:observation.finding_ref,method:'vary row count',result:'refuted',note:'single row succeeds'})
+  check('dependency invalidation is visible to members; reads and duplicate verdicts do not write',refuted.affected_refs.includes(interpretation.finding_ref)&&evidence.findings.some(item=>item.finding_ref===interpretation.finding_ref)&&duplicateReview.duplicate&&JSON.stringify(await readTeam(stateRoot,'lane-budget'))===beforeReads)
+  let memberCheckpointDenied=false
+  try{await call('ctf_teams_checkpoint',{action:'load'},firstWorker)}catch{memberCheckpointDenied=true}
+  check('captain handover is not writable or readable through a member identity',memberCheckpointDenied)
+  await call('ctf_teams_submit_flag',{flag:'flag{pending-lane-fixture}',challenge_id:'limit-a'})
+  const handover=await call('ctf_teams_checkpoint',{action:'load'})
+  const handoverInput={action:'save',ledger_ref:handover.ledger_ref,state_ref:handover.current_state.state_ref,expected_revision:0,assessment:'Resolve the invalid parser assumption',next_steps:['run one cheap independent input check']}
+  await call('ctf_teams_checkpoint',handoverInput)
+  const beforeHandoverRetry=JSON.stringify(await readTeam(stateRoot,'lane-budget'))
+  const duplicateHandover=await call('ctf_teams_checkpoint',handoverInput)
+  check('handover saves pending candidates and idempotent retries create no new state',duplicateHandover.duplicate&&JSON.stringify(await readTeam(stateRoot,'lane-budget'))===beforeHandoverRetry&&handover.current_state.facts.pending_candidate_count===1)
+  const activeLane=(await readTeam(stateRoot,'lane-budget')).tasks.find(task=>task.id===laneA.task_id)
+  await call('ctf_teams_update_task',{task_id:laneA.task_id,status:'in_progress',attempt_id:activeLane.attemptId},firstWorker)
+  await call('ctf_teams_update_task',{task_id:laneA.task_id,status:'completed',output:'main check complete',attempt_id:activeLane.attemptId},firstWorker)
+  let afterRelease=await readTeam(stateRoot,'lane-budget')
+  publishStatus(liveAgents.get(afterRelease.members.find(member=>member.name==='two').id),'idle')
+  await call('ctf_teams_status',{})
+  afterRelease=await readTeam(stateRoot,'lane-budget')
+  check('terminal lane releases capacity and scheduler dispatches the waiting second angle',afterRelease.tasks.find(task=>task.id===laneB.task_id).status==='claimed')
+  const currentHandover=await call('ctf_teams_checkpoint',{action:'load'})
+  check('handover reload exposes current attempts and marks saved state stale without restoring work',currentHandover.stale&&currentHandover.saved.facts.open_tasks.some(task=>task.id===laneA.task_id)&&!currentHandover.current_state.facts.open_tasks.some(task=>task.id===laneA.task_id))
+  let staleHandoverDenied=false
+  try{await call('ctf_teams_checkpoint',{...handoverInput,expected_revision:1,assessment:'stale changed plan'})}catch(error){staleHandoverDenied=error.message.includes('state changed')}
+  check('stale runtime handover writes are rejected',staleHandoverDenied)
+  await call('ctf_teams_delete',{})
+  const archivedHandover=await call('ctf_teams_archive_summary',{team_id:'lane-budget',archived:true})
+  check('archive keeps dependent claims and captain handover source material',archivedHandover.summary.includes('DEPENDENCIES NEED RECHECK')&&archivedHandover.summary.includes('Resolve the invalid parser assumption'))
+
   const batchPlan = { members: [{ name: 'worker', executionPrompt: 'Inspect real bytes; preserve case' }, { name: 'verifier' }], tasks: [
     { id: 'verify', subject: 'Validate output', assignee: 'verifier', dependencies: ['work'] },
     { id: 'work', subject: 'Actual task', description: 'FULL_CONTRACT_BODY', assignee: 'worker' },
@@ -1687,7 +1732,11 @@ try {
     await call('ctf_teams_report_finding', { content: 'Durable evidence while paused' })
     const pausedProposal = { action: 'propose', challenge_id: 'paused-challenge', statement: 'durable paused hypothesis', prediction: 'must not wake a worker' }
     await call('ctf_teams_hypothesis', pausedProposal)
+    const pausedLoad = await call('ctf_teams_checkpoint',{action:'load'})
+    await call('ctf_teams_checkpoint',{action:'save',ledger_ref:pausedLoad.ledger_ref,state_ref:pausedLoad.current_state.state_ref,expected_revision:0,assessment:'Remain paused',next_steps:['wait for explicit continuation']})
     const pausedState = JSON.stringify(await readTeam(stateRoot, quietId))
+    await call('ctf_teams_checkpoint',{action:'load'})
+    await call('ctf_teams_evidence',{})
     await call('ctf_teams_hypothesis', { action: 'list', challenge_id: 'paused-challenge' })
     await call('ctf_teams_hypothesis', pausedProposal)
     check(challengeMode + ': paused ledger queries and duplicates leave state unchanged', JSON.stringify(await readTeam(stateRoot, quietId)) === pausedState)

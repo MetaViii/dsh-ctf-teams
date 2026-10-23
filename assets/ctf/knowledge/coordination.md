@@ -2,6 +2,18 @@
 
 先核对任务所有权、证据和资源约束，再选择并行方式。
 
+## 结论依赖、交接与增援
+
+`report_finding` 使用 `claim_type=observation|interpretation|decision` 区分原始观察、解释和决策，附实际 `challenge_id`。派生结论用 `depends_on` 引用返回的完整 `finding_ref`，最多 16 个；旧记录的引用可通过只读 `ctf_teams_evidence` 分页查找。不要把被多次转述的解释提升为已知事实。
+
+队长 `verify_finding` 的 refuted 或 inconclusive 会将依赖结论传递标记为 `needs_recheck`；原始输出和旧判定保留。独立更正可用 `superseded_by` 指向新 finding，旧记录不再用作确认依据。前提恢复后，派生结论也需要按依赖顺序重新验证；不能一键恢复整条推断。重复相同裁决不会产生新同步进度。新变化只形成一次看板审计，当前执行者在同步时处理，不自动中断已经发出的命令。
+
+队长在重要决策或显式交接时使用 `ctf_teams_checkpoint({action:"load"})`，再携带 `ledger_ref`、`current_state.state_ref` 和 `latest_revision` 保存 assessment、disputes、next_steps，可附文件快照。运行状态由插件生成，队长笔记始终是报告。状态或版本冲突时有限重读、协调后再保存，不能持续空转重试。加载旧快照会同时给出当前状态和 stale 标记，不恢复任务、不转移会话所有权；压缩后的原会话可据此续做。
+
+`set_challenge({max_parallel_lanes:2})` 可限制每个 challenge_id 的同时执行任务数，取值 1..16，0 清除；不抢占已经在跑的任务。不带 ID 的任务共享一个未分组桶。创建同题交叉验证仍需显式 `allow_duplicate_challenge:true`。这限制的是任务 lane，不能当作子进程、所有子代理、token 或墙钟的硬预算。
+
+增援前先读 `status.ctf.planning_signals` 和待复核证据，选一项最便宜的证伪检查，再提出不同角度；将停止条件写入任务描述。普通 finding 数不作为实验进展指标，实验本身仍是未经独立复核的报告。调度没有新增定时器，也不自动加人、切换供应商或花费更高模型额度。
+
 ## 先查台账，再做下一项实验
 
 同一题多成员或跨会话续做时，先用 `ctf_teams_hypothesis({action:"list",challenge_id:"平台真实题目 ID"})` 查已尝试的假设。离线题目使用稳定的附件标识；不要把不同题目混用同一个 ID。摘要有截断标记，使用 `hypothesis_id` 分页读取完整实验历史，不能仅凭最新结果推定整条路线已排除。

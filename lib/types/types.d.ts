@@ -8,6 +8,7 @@
  * @module dsh-ctf-teams/types
  */
 import type { ChallengeHypothesis } from './hypotheses.ts';
+import type { CaptainCheckpoint } from './captain-checkpoint.ts';
 /** Task lifecycle statuses in progression order. */
 export type TaskStatus = 'pending' | 'claimed' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 /** Statuses after which a task can no longer be claimed or worked on. */
@@ -245,6 +246,8 @@ export interface ChallengeInfo {
     expectedChallenges?: number;
     explicitlySolved?: boolean;
     requiresRunningTargetForSubmit?: boolean;
+    /** Optional admission cap on simultaneous task lanes for each challenge. */
+    maxParallelLanes?: number;
     practiceGroundId?: string;
     /** Set once a flag candidate is marked verified. */
     solved?: boolean;
@@ -307,6 +310,15 @@ export interface TeamFinding {
     confidence?: 'low' | 'medium' | 'high';
     /** Optional path/command/raw output needed to reproduce the claim. */
     evidence?: string;
+    reference?: string;
+    challengeId?: string;
+    claimType?: 'observation' | 'interpretation' | 'decision';
+    dependsOn?: string[];
+    supersededBy?: string;
+    recheckRequired?: {
+        causes: string[];
+        since: number;
+    };
     /** Captain-owned verification history; reports start unverified. */
     verifications?: {
         by: string;
@@ -405,6 +417,8 @@ export interface TeamState {
     /** Challenge-scoped hypotheses with append-only, unverified experiment reports. */
     hypotheses?: ChallengeHypothesis[];
     hypothesisSeq?: number;
+    /** Versioned captain handovers; runtime facts and reported notes remain separate. */
+    captainCheckpoints?: CaptainCheckpoint[];
     /** Team round counter; advances with each board beat (finding/flag). */
     round?: number;
     /** Per-participant sync cursors keyed by `captain` or member name. */

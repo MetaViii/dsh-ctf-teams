@@ -11,6 +11,8 @@
  * @module dsh-ctf-teams/findings
  */
 
+import { findingReference, findingDependencies, resolveFindingReference, invalidateDependents, validateFindingReview } from './evidence-graph.ts'
+
 import type {
   ChallengeInfo,
   FlagCandidate,
@@ -127,11 +129,11 @@ export function markChallengeSolved(team: TeamState, note: string): void {
 /** A claim is unverified even if its author supplied raw output or high confidence. */
 export function findingLabel(finding: TeamFinding): string {
   const verification = finding.verifications?.at(-1)
-  return `${verification?.result ?? 'unverified'}; ${finding.evidenceKind ?? 'unspecified'}${finding.confidence ? `; confidence=${finding.confidence}` : ''}`
+  return `${finding.recheckRequired ? 'needs_recheck; ' : ''}${finding.supersededBy ? 'superseded; ' : ''}${verification?.result ?? 'unverified'}; ${finding.evidenceKind ?? 'unspecified'}${finding.confidence ? `; confidence=${finding.confidence}` : ''}`
 }
 
 export function formatFinding(finding: TeamFinding): string {
-  return `[${finding.id}] (${finding.from}${finding.category === undefined ? '' : `/${finding.category}`}) [${findingLabel(finding)}] ${finding.content}${finding.evidence ? ` — evidence: ${finding.evidence}` : ''}`
+  return `[${finding.id}] (${finding.from}${finding.category === undefined ? '' : `/${finding.category}`}) [${findingLabel(finding)}] ${finding.content}${finding.evidence ? ` — evidence: ${finding.evidence}` : ''}${finding.reference ? `; ref=${finding.reference}` : ''}${finding.dependsOn?.length ? `; depends_on=${finding.dependsOn.join(',')}` : ''}${finding.supersededBy ? `; superseded_by=${finding.supersededBy}` : ''}`
 }
 
 export function formatFlag(flag: FlagCandidate): string {
@@ -181,15 +183,23 @@ export function advanceCursor(
 /** Append one finding; advances the team round. Caller must persist. */
 export function appendFinding(
   team: TeamState,
-  input: { from: string; category?: string; content: string; evidenceKind?: TeamFinding['evidenceKind']; confidence?: TeamFinding['confidence']; evidence?: string },
+  input: { from: string; category?: string; content: string; evidenceKind?: TeamFinding['evidenceKind']; confidence?: TeamFinding['confidence']; evidence?: string; challengeId?: string; claimType?: TeamFinding['claimType']; dependsOn?: string[] },
 ): TeamFinding {
   const content = input.content.trim()
   if (content === '') throw new Error('finding content must not be empty')
+  if (input.claimType !== undefined && !['observation', 'interpretation', 'decision'].includes(input.claimType)) throw new Error('invalid claim_type')
+  if (input.challengeId !== undefined && (!input.challengeId.trim() || input.challengeId.length > 200)) throw new Error('invalid finding challenge_id')
+  const dependsOn = findingDependencies(team, input.dependsOn, input.challengeId?.trim())
+  const invalid = dependsOn.filter(reference => { const parent = resolveFindingReference(team, reference); return parent.recheckRequired || parent.supersededBy || parent.verifications?.at(-1)?.result === 'refuted' })
   const seq = (team.findingSeq ?? 0) + 1
   const round = (team.round ?? 0) + 1
   const finding: TeamFinding = {
     id: `fd${seq}`,
     from: input.from,
+    ...input.challengeId ? { challengeId: input.challengeId.trim() } : {},
+    ...input.claimType ? { claimType: input.claimType } : {},
+    ...dependsOn.length ? { dependsOn } : {},
+    ...invalid.length ? { recheckRequired: { causes: invalid, since: Date.now() } } : {},
     content: content.length > FINDING_CONTENT_MAX_CHARS
       ? `${content.slice(0, FINDING_CONTENT_MAX_CHARS)} [truncated]`
       : content,
@@ -202,6 +212,7 @@ export function appendFinding(
       ? { category: input.category.trim() }
       : {}),
   }
+  finding.reference = findingReference(team, finding)
   team.findingSeq = seq
   team.round = round
   team.findings = [...team.findings ?? [], finding]
@@ -311,19 +322,27 @@ export function reviewFlagCandidate(
 }
 
 /** Record a captain's reproducibility check and publish a new audit beat. */
-export function verifyFinding(team: TeamState, findingId: string, input: { by: string; method: string; result: 'confirmed' | 'refuted' | 'inconclusive'; note?: string }): TeamFinding {
-  const finding = team.findings?.find(entry => entry.id === findingId)
-  if (!finding) throw new Error(`no finding "${findingId}"; current ids: ${(team.findings ?? []).map(entry => entry.id).join(', ') || '(none)'}`)
-  const method = input.method.trim()
+export function verifyFinding(team: TeamState, findingId: string, input: { by: string; method: string; result: 'confirmed' | 'refuted' | 'inconclusive'; note?: string; supersededBy?: string }): TeamFinding {
+  const finding = findingId.includes('/') ? resolveFindingReference(team, findingId) : team.findings?.find(entry => entry.id === findingId)
+  if (!finding) throw new Error('unknown finding; read ctf_teams_evidence first')
+  const method = input.method.trim(), note = input.note?.trim()
   if (!method) throw new Error('verification method must not be empty')
+  validateFindingReview(team, finding, input.result, input.supersededBy)
+  const last = finding.verifications?.at(-1)
+  if (last?.by === input.by && last.method === method && last.result === input.result && (last.note ?? '') === (note ?? '') && (!input.supersededBy || finding.supersededBy === input.supersededBy) && (input.result !== 'confirmed' || !finding.recheckRequired)) return finding
   finding.verifications ??= []
-  finding.verifications.push({ ...input, method, ts: Date.now() })
-  appendFinding(team, { from: input.by, category: 'verification', evidenceKind: 'raw_output', content: `${finding.id}: ${input.result}; method: ${method}${input.note ? `; result: ${input.note}` : ''}` })
+  finding.verifications.push({ by: input.by, method, result: input.result, ...note ? { note } : {}, ts: Date.now() })
+  if (input.supersededBy) finding.supersededBy = input.supersededBy
+  if (input.result === 'confirmed') delete finding.recheckRequired
+  const affected = input.result !== 'confirmed' || finding.supersededBy ? invalidateDependents(team, finding) : []
+  appendFinding(team, { from: input.by, category: 'verification', evidenceKind: 'raw_output', content: finding.id + ': ' + input.result + '; method: ' + method + (note ? '; result: ' + note : '')
+    + (affected.length ? '; DEPENDENCIES NEED RECHECK (' + affected.length + '): ' + affected.slice(0,16).join(', ') : '') })
   return finding
 }
 
 /** Captain-owned challenge metadata update; merges into existing info. */
 export function updateChallenge(team: TeamState, patch: ChallengeInfo): ChallengeInfo {
+  if (patch.maxParallelLanes !== undefined && (!Number.isSafeInteger(patch.maxParallelLanes) || patch.maxParallelLanes < 0 || patch.maxParallelLanes > 16)) throw new Error('max_parallel_lanes must be an integer 1..16, or 0 to clear')
   if (patch.expectedChallenges !== undefined && (!Number.isSafeInteger(patch.expectedChallenges) || patch.expectedChallenges < 1)) throw new Error('expected_challenges must be a positive integer')
   if (patch.flagFormat !== undefined && patch.flagFormat !== null) {
     const formats = Array.isArray(patch.flagFormat) ? patch.flagFormat : [patch.flagFormat]
@@ -343,9 +362,11 @@ export function updateChallenge(team: TeamState, patch: ChallengeInfo): Challeng
     ...patch.multiChallenge !== undefined ? { multiChallenge: patch.multiChallenge } : {},
     ...patch.expectedChallenges !== undefined ? { expectedChallenges: patch.expectedChallenges } : {},
     ...patch.requiresRunningTargetForSubmit !== undefined ? { requiresRunningTargetForSubmit: patch.requiresRunningTargetForSubmit } : {},
+    ...patch.maxParallelLanes !== undefined ? { maxParallelLanes: patch.maxParallelLanes } : {},
     ...patch.practiceGroundId !== undefined ? { practiceGroundId: patch.practiceGroundId.trim() } : {},
     ...patch.flagFormat !== undefined ? { flagFormat: patch.flagFormat } : {},
   }
+  if (next.maxParallelLanes === 0) delete next.maxParallelLanes
   for (const [key, value] of Object.entries(next)) {
     if (value === undefined || (typeof value === 'string' && value.trim() === '')) {
       delete next[key as keyof ChallengeInfo]

@@ -70,6 +70,9 @@ export declare function appendFinding(team: TeamState, input: {
     evidenceKind?: TeamFinding['evidenceKind'];
     confidence?: TeamFinding['confidence'];
     evidence?: string;
+    challengeId?: string;
+    claimType?: TeamFinding['claimType'];
+    dependsOn?: string[];
 }): TeamFinding;
 /** Find an existing candidate that already carries this exact flag string. */
 export declare function findFlagCandidate(team: TeamState, flag: string): FlagCandidate | undefined;
@@ -104,6 +107,7 @@ export declare function verifyFinding(team: TeamState, findingId: string, input:
     method: string;
     result: 'confirmed' | 'refuted' | 'inconclusive';
     note?: string;
+    supersededBy?: string;
 }): TeamFinding;
 /** Captain-owned challenge metadata update; merges into existing info. */
 export declare function updateChallenge(team: TeamState, patch: ChallengeInfo): ChallengeInfo;

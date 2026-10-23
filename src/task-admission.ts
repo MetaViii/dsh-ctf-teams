@@ -1,4 +1,5 @@
 import type { TeamState, TeamTask } from './types.ts'
+import { findingUsable, findingReference } from './evidence-graph.ts'
 
 const checks: Record<string, string> = {
   environment_free: 'environment_free', 'whoami.active_environments==0': 'environment_free',
@@ -13,6 +14,11 @@ export function validatePreflight(values: readonly string[]): void {
 
 /** Pure admission over fresh read-only platform facts; unknown never means passed. */
 export function taskBlockReason(team: TeamState, task: TeamTask, now = Date.now()): string | undefined {
+  const cap = team.challenge?.maxParallelLanes
+  if (cap !== undefined) {
+    const active = team.tasks.filter(other => other.id !== task.id && other.challengeId === task.challengeId && ['claimed', 'in_progress'].includes(other.status))
+    if (active.length >= cap) return `challenge ${task.challengeId ?? '(unscoped)'} has ${active.length}/${cap} active lanes; wait for a lane to settle or explicitly revise max_parallel_lanes`
+  }
   if (task.resourceKey) {
     const holder = team.tasks.find(other => other.id !== task.id && other.resourceKey === task.resourceKey && ['claimed', 'in_progress'].includes(other.status))
     if (holder) return `resource ${task.resourceKey} held by ${holder.assignee ?? 'unassigned'} (${holder.id}); wait for explicit handoff`
@@ -21,8 +27,8 @@ export function taskBlockReason(team: TeamState, task: TeamTask, now = Date.now(
     const check = checks[raw]
     if (!check) return `${raw}: unknown preflight; ask the captain to repair the pending task with edit_plan`
     if (check === 'offline_verified') {
-      const finding = team.findings?.find(f => f.id === task.preflightFindingId)
-      if (finding?.verifications?.at(-1)?.result !== 'confirmed') return `${raw}: offline preflight needs a captain-confirmed finding with reproducible self-test output`
+      const finding = team.findings?.find(f => f.id === task.preflightFindingId || findingReference(team, f) === task.preflightFindingId)
+      if (!finding || !findingUsable(finding)) return `${raw}: offline preflight needs a captain-confirmed finding with reproducible self-test output; invalidated or superseded evidence must be rechecked`
       continue
     }
     const snapshot = team.platformSnapshot
