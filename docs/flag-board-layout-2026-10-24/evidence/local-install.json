@@ -1,0 +1,32 @@
+{
+  "version": "0.1.34",
+  "hostVersion": "0.2.1-rc.2",
+  "artifactSha256": "42464d6ffc40770dc5506ea71374a106b57d1a5a03a6b0d4c9f1cc44d324e11b",
+  "allPackagedFilesMatched": true,
+  "comparedFiles": 152,
+  "otherPluginVersionsUnchanged": true,
+  "configBytesUnchanged": true,
+  "dataContentsUnchanged": true,
+  "dataHashesAndMetadataUnchanged": true,
+  "metadataOnlyChanges": [],
+  "dataCounts": {
+    "sessions": 465,
+    "storages": 455,
+    "agent-presets": 3,
+    "ctf-teams": 299,
+    "agent-teams": 0
+  },
+  "backupContentVerified": true,
+  "desktopRestarted": true,
+  "composedCtfPresetPresent": true,
+  "guiConfirmed": false,
+  "teamResumed": false,
+  "npmPublished": false,
+  "ctfHostRowPresent": true,
+  "otherSkippedBundleCount": 0,
+  "desktopRunning": true,
+  "desktopMainWindowReady": true,
+  "desktopProcessResponding": true,
+  "postStartupExistingTeamFilesUnchanged": true,
+  "guiValidation": "Main window startup observed; interactive Flag board and real-model behavior remain unverified. No request to resume any team."
+}

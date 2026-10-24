@@ -4,7 +4,7 @@
   "artifact": {
     "name": "dsh-ctf-teams-layout-0.1.34.tgz",
     "sha256": "42464d6ffc40770dc5506ea71374a106b57d1a5a03a6b0d4c9f1cc44d324e11b",
-    "installedInUserProfile": false,
+    "installedInUserProfile": true,
     "publishedToNpm": false
   },
   "surface": "Client Flag board layout and keyboard scrolling; no team-state, model or dispatch changes",
@@ -49,9 +49,16 @@
     "reason": "Client-only fix; target client, route, browser, package and real Web entry checks cover the changed surface. Previous 0.1.33 full regression remains historical evidence."
   },
   "installation": {
-    "status": "awaiting-full-DSH-exit",
-    "installedVersion": "0.1.32",
-    "guiConfirmed": false
+    "passed": true,
+    "status": "installed-and-reopened",
+    "installedVersion": "0.1.34",
+    "comparedFiles": 152,
+    "configAndOtherPluginsPreserved": true,
+    "dataContentsAndMetadataPreserved": true,
+    "mainWindowReady": true,
+    "postStartupExistingTeamFilesUnchanged": true,
+    "guiConfirmed": false,
+    "evidence": "evidence/local-install.json"
   },
   "unverified": [
     "Interactive DSH GUI",

@@ -69,10 +69,11 @@
     "newControls": "Compiled client and real route implementation exercised with test contexts; native Web approval covers the existing authenticated route. Interactive new controls remain unverified."
   },
   "installation": {
-    "passed": false,
-    "status": "superseded-by-0.1.34-awaiting-install",
+    "status": "superseded-by-installed-0.1.34",
+    "installedVersion": "0.1.34",
+    "exactArtifactInstalled": false,
     "guiConfirmed": false,
-    "plannedVersion": "0.1.34"
+    "evidence": "../flag-board-layout-2026-10-24/evidence/local-install.json"
   },
   "method": "Native Node real CLI/Loader and Code Mode; scripted LLM and isolated synthetic workspaces. Cold restore resumes the original captain and asserts unchanged team bytes and pending candidate.",
   "unverified": [
