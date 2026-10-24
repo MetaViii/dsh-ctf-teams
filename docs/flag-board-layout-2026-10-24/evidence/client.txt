@@ -1,0 +1,61 @@
+dsh-ctf-teams client bundle verification
+  PASS  bundle registers one ModuleLoader unit
+  PASS  bundle id is the published package name
+  PASS  exports the plugin apply function
+  PASS  inject asks for the slot ledger
+  PASS  waits for the conversation.view slot
+  PASS  registers the dashboard tab
+  PASS  the tab receives its session id
+  PASS  registers a component for the tab
+  PASS  renders the loading state before the first response
+  PASS  polls the host route with the session id
+  PASS  renders the live challenge, lanes, tasks, findings and flags
+  PASS  renders the next-step line from the host
+  PASS  renders the progress bar and census
+  PASS  legacy findings are visibly unverified
+  PASS  UI distinguishes registered flag, accepted flag and advisory warning
+  PASS  UI displays provenance as unverified rather than a domain trust score
+  PASS  UI shows evidence verification and platform environment
+  PASS  flag values preserve exact text and can be keyboard-scrolled without forced wrapping
+  PASS  long metadata and original/accepted values remain visible
+  PASS  invalidated confirmed evidence is visibly marked pending recheck
+  PASS  evidence pagination reaches older records
+  PASS  search and filters reset pagination with no action requests
+  PASS  evidence details preserve dependencies and old verification history
+  PASS  an explicit review click sends exactly one typed action
+  PASS  handover card separates stale reports and sends one save request
+  PASS  members see supersession but cannot request a captain review or handover
+  PASS  keeps the last snapshot when the host goes away
+  PASS  a staged team offers approval, attachments and a report export
+  PASS  a staged plan is badged as awaiting approval
+  PASS  the approve button is enabled for the captain
+  PASS  clicking approve posts one action turn for this team
+  PASS  the panel reports the host answer
+  PASS  a member cannot approve from the panel
+  PASS  a running solve offers nudge, halt, writeup, verify and exports
+  PASS  verify-flag carries the candidate id
+  PASS  nudge posts the operational action
+  PASS  export downloads through the browser
+  PASS  a live team offers cleanup
+  PASS  cleanup asks first, with the size it would free
+  PASS  archiving posts a housekeeping action for this team
+  PASS  purging posts the destructive mode explicitly
+  PASS  a staged plan can be dropped from the panel
+  PASS  a halted team offers resume
+  PASS  an archived team is read-only and exportable
+  PASS  the archived roster offers a bulk cleanup
+  PASS  bulk cleanup asks first and names what it frees
+  PASS  bulk cleanup posts the archive purge
+  PASS  an empty session offers the start button and explains the flow
+  PASS  the start form asks for the challenge facts
+  PASS  the start form says the solve runs without an approval click
+  PASS  the start form offers attachment picking
+  PASS  expanding the start form picker lists workspace files
+  PASS  picking a file in the start form shows it as a chip
+  PASS  submitting the form posts a start action with the typed goal and attachments
+  PASS  the attachment picker lists workspace files
+  PASS  picking a file arms the submit with its path
+  PASS  the picker posts the picked attachment paths
+  PASS  registration cleanups run without throwing
+
+client bundle verification passed

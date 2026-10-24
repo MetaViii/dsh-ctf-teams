@@ -1,0 +1,286 @@
+{
+  "passed": true,
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "cases": [
+    {
+      "width": 160,
+      "zoom": 1,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 160,
+      "zoom": 1.5,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 240,
+      "zoom": 1,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 240,
+      "zoom": 1.5,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 320,
+      "zoom": 1,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 320,
+      "zoom": 1.5,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 640,
+      "zoom": 1,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "width": 640,
+      "zoom": 1.5,
+      "valueCount": 3,
+      "values": [
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": true,
+          "scrollable": true,
+          "keyboardFocusable": true
+        },
+        {
+          "exact": true,
+          "horizontal": true,
+          "contained": true,
+          "fullWidth": true,
+          "overflowing": false,
+          "scrollable": true,
+          "keyboardFocusable": true
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

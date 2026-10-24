@@ -28,7 +28,8 @@ import { fileURLToPath } from 'node:url'
 import React from 'react'
 
 const require = createRequire(import.meta.url)
-const bundlePath = fileURLToPath(new URL('../lib/client.js', import.meta.url))
+const bundleArg = process.argv.indexOf('--bundle')
+const bundlePath = bundleArg >= 0 ? process.argv[bundleArg + 1] : fileURLToPath(new URL('../lib/client.js', import.meta.url))
 const source = await readFile(bundlePath, 'utf8')
 
 let failures = 0
@@ -328,6 +329,26 @@ const evidenceView = textOf(render()).join(' ')
 check('UI distinguishes registered flag, accepted flag and advisory warning', evidenceView.includes('登记原文') && evidenceView.includes('平台接受') && evidenceView.includes('CTF2{EaSyRe}') && evidenceView.includes('格式警告'))
 check('UI displays provenance as unverified rather than a domain trust score', evidenceView.includes('未复核来源') && evidenceView.includes('https://example.org/event/ch1'))
 check('UI shows evidence verification and platform environment', evidenceView.includes('confirmed') && evidenceView.includes('raw_output') && evidenceView.includes('xxd 附件.bin') && evidenceView.includes('以平台为准') && evidenceView.includes('env-ctf2'))
+const layoutFlags = [
+  { ...baseTeam.flags[0], flag:'flag{AbC_123_<>&_试验_🧩}', note:'LONG_NOTE_'.repeat(14), submittedBy:'worker-very-long-provider-name-'.repeat(3) },
+  { ...baseTeam.flags[0], id:'f2', flag:'flag{'+'x'.repeat(512)+'}', verifiedFlag:'CTF2{ACCEPTED_CaSe_0123456789}', status:'verified' },
+]
+withTeam({flags:layoutFlags,counts:{...baseTeam.counts,flags:layoutFlags.length,verified:1}});await settle()
+const layoutTree=render()
+const valueCode=findElement(layoutTree,'code',props=>textOf(props.children).join('')===layoutFlags[0].flag)
+check('flag values preserve exact text and can be keyboard-scrolled without forced wrapping',valueCode?.props.style?.whiteSpace==='pre'&&valueCode?.props.style?.overflowX==='auto'&&valueCode?.props.tabIndex===0)
+check('long metadata and original/accepted values remain visible',textOf(layoutTree).join(' ').includes(layoutFlags[0].note)&&textOf(layoutTree).join(' ').includes(layoutFlags[1].verifiedFlag))
+const fixtureArg=process.argv.indexOf('--layout-fixture')
+if(fixtureArg>=0){
+  const {writeDashboardLayoutFixture}=await import('./fixtures/dashboard-layout-html.mjs')
+  const panel=findElement(layoutTree,'section',props=>props['aria-label']==='Flag 看板')||findElement(layoutTree,'div',props=>Array.isArray(props.children)&&textOf(props.children[0]).join('').startsWith('Flag 看板'))
+  if(!panel)throw Error('Compiled flag panel not found')
+  await writeDashboardLayoutFixture(process.argv[fixtureArg+1],panel,layoutFlags.flatMap(flag=>flag.verifiedFlag?[flag.flag,flag.verifiedFlag]:[flag.flag]))
+  if(process.argv.includes('--layout-only')){
+    for(const cleanup of cleanups)if(typeof cleanup==='function')cleanup()
+    process.exit(failures>0?1:0)
+  }
+}
 withTeam({})
 await settle()
 

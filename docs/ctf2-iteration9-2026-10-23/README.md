@@ -26,4 +26,4 @@ const hits = await tools.ctf_teams_search({action:'search', query:'连接超时'
 
 产物 SHA-256：`37db755eb58f9e02b33cca7183d5e693227629e3dea613c79f4668e357b3f083`。详见 [validation.json](./validation.json) 及 `evidence/`。
 
-本机安装：等待保存并完全退出 DSH；未替换运行中的文件。
+本机交付改由包含这些功能的 0.1.34 统一安装，见[Flag 布局修复记录](../flag-board-layout-2026-10-24/README.md)。0.1.33 的独立 tarball 未安装到用户 profile。

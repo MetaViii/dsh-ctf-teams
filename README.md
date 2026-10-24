@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.33-2563eb?style=flat-square" alt="源码版本 0.1.33"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.34-2563eb?style=flat-square" alt="源码版本 0.1.34"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>

@@ -1,0 +1,61 @@
+dsh-ctf-teams dashboard surface verification
+  PASS  four routes register (state, action, export, files)
+  PASS  every route is exact and names a handler
+  PASS  state answers the planted team with the right headers
+  PASS  state names the session, its workspace and the configured profiles
+  PASS  the captain is recognised and the roster is complete
+  PASS  nextStep points at the staged approval
+  PASS  members carry live activity and sync depth
+  PASS  a session outside the team reads it as a bystander
+  PASS  approve answers 200 and names the action
+  PASS  approve queues one user-authored turn naming the tool
+  PASS  verify-flag composes a platform-check instruction
+  PASS  attachments composes a set_challenge instruction with the picked paths
+  PASS  a participating member may ask for the writeup
+  PASS  the writeup prompt reads like a CTF writeup, not a bug report
+  PASS  the writeup rules forbid inventing output and require replayability
+  PASS  finding review sends one bounded captain turn without embedding untrusted finding text
+  PASS  checkpoint action asks for fresh CAS state without direct team changes
+  PASS  member cannot request review-finding
+  PASS  member cannot request save-checkpoint
+  PASS  stale finding refs do not dispatch
+  PASS  dashboard omits captain handover from member snapshots
+  PASS  a session outside the team cannot approve
+  PASS  a session outside the team cannot nudge it
+  PASS  a session that owns no team has nothing to nudge
+  PASS  start refuses when the session already owns a team
+  PASS  verify-flag refuses an unknown candidate
+  PASS  verify-flag refuses a flag that is already decided
+  PASS  an unknown action is refused
+  PASS  a session outside the team cannot delete it
+  PASS  a refused delete leaves the files alone
+  PASS  deleting an unknown team is a 404
+  PASS  archiving moves the team out of the live roster and reports the space
+  PASS  housekeeping is not a model turn
+  PASS  the archived roster reports the team as archived with its size
+  PASS  purging the archive frees the space and reports it
+  PASS  purging an empty archive is a no-op, not an error
+  PASS  a missing sessionId is refused
+  PASS  free-form prompt text is never forwarded
+  PASS  an offline session is refused with 409
+  PASS  an invalid body is refused with 400
+  PASS  the action endpoint is POST-only
+  PASS  no refused request queued a turn
+  PASS  the writeup export serves the workspace WRITEUP.md
+  PASS  the report export renders the durable team state
+  PASS  a missing writeup is reported, never invented
+  PASS  starting from the panel asks for an immediate run, not a staged plan
+  PASS  autoApprove=false restores the staged plan prompt
+  PASS  the start action carries picked attachments into the prompt
+  PASS  a start attachment must be an existing workspace file
+  PASS  an attachment path cannot smuggle instruction text
+  PASS  the attachment picker lists workspace files with sizes
+  PASS  the picker skips noisy directories
+  PASS  the Connection fence refuses untrusted callers before the handler
+  PASS  a disposing Connection fails closed with 503
+  PASS  the dashboard routes never write team state themselves
+  PASS  panel actions become user turns
+  PASS  authority is validated against durable state
+  PASS  action prompts are composed server-side from a closed action set
+
+dashboard surface verification passed

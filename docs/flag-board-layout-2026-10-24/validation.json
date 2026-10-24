@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-24",
+  "version": "0.1.34",
+  "artifact": {
+    "name": "dsh-ctf-teams-layout-0.1.34.tgz",
+    "sha256": "42464d6ffc40770dc5506ea71374a106b57d1a5a03a6b0d4c9f1cc44d324e11b",
+    "installedInUserProfile": false,
+    "publishedToNpm": false
+  },
+  "surface": "Client Flag board layout and keyboard scrolling; no team-state, model or dispatch changes",
+  "tests": {
+    "clientInteractions": {
+      "passed": true,
+      "evidence": "evidence/client.txt"
+    },
+    "dashboardRoutes": {
+      "passed": true,
+      "evidence": "evidence/dashboard.txt"
+    },
+    "clientBundleMatch": true,
+    "readme": true,
+    "releaseMetadata": true,
+    "sourceArtifactStamp": true,
+    "browser": {
+      "passed": true,
+      "baselineFailed": true,
+      "baselineCases": 8,
+      "baselineVerticalValues": 22,
+      "cases": 8,
+      "values": 24,
+      "packagedBundle": true,
+      "evidence": [
+        "evidence/layout-before.json",
+        "evidence/layout-after.json",
+        "evidence/narrow-240.png"
+      ]
+    },
+    "nativeHost": {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "scenarios": [
+        "web-approval"
+      ],
+      "evidence": "evidence/native-web.json"
+    }
+  },
+  "fullRegression": {
+    "rerun": false,
+    "reason": "Client-only fix; target client, route, browser, package and real Web entry checks cover the changed surface. Previous 0.1.33 full regression remains historical evidence."
+  },
+  "installation": {
+    "status": "awaiting-full-DSH-exit",
+    "installedVersion": "0.1.32",
+    "guiConfirmed": false
+  },
+  "unverified": [
+    "Interactive DSH GUI",
+    "Other operating systems",
+    "Real model solving outcomes"
+  ]
+}
