@@ -138,6 +138,8 @@ export interface TeamTask {
   preflightFindingId?: string
   blockedReason?: string
   remainingItems?: string[]
+  /** Captain reconciliation preserves the failed attempt and exact accepted-result reference. */
+  resolution?: {by:string;at:number;flagRef:string;evidence:string;failedOutput:string;attempt:number}
   /** Kept across infrastructure retries; never treated as completion evidence. */
   checkpoint?: string
   infrastructureRetries?: number
@@ -222,6 +224,8 @@ export interface TeamMember {
   fallbackActive?: boolean
   joinedAt: number
   status: MemberStatus
+  /** Explicit repair hold: only update_member(wake:true) reopens admission. */
+  dispatchPaused?: boolean
   /** Execution admission is closed while a failed/pending handoff is drained. */
   stopping?: boolean
   /**

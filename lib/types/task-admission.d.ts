@@ -5,4 +5,6 @@ export declare function taskBlockReason(team: TeamState, task: TeamTask, now?: n
 export declare function dispatchState(team: TeamState, task: TeamTask): {
     dispatch_state: string;
     dispatch_reason?: string;
+    next_action?: string;
+    retry_at?: number | null;
 };

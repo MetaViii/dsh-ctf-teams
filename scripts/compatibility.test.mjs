@@ -33,7 +33,7 @@ test('source candidates pass the peer gate without entering the published downlo
 test('bounded loading accepts later RCs and patches without claiming exact validation', t => {
   const root = mkdtempSync(join(tmpdir(), 'ctf-teams-doctor-forward-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  for (const version of ['0.2.1-rc.3', '0.2.1', '0.2.2-alpha.1', '0.2.19-rc.7', '0.2.99']) {
+  for (const version of ['0.2.1-rc.4', '0.2.1', '0.2.2-alpha.1', '0.2.19-rc.7', '0.2.99']) {
     assert.equal(acceptsHostVersion(version), true, version)
     writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version }))
     const result = inspectInstallation(root)

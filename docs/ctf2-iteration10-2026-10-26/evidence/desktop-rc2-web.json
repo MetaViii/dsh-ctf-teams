@@ -1,0 +1,44 @@
+{
+  "version": "0.2.1-rc.2",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "artifactSha256": "d5603832cfdac13bdf4819adeb344f73928284c28b8c7bc59951a8e4b193e9a3",
+  "passed": true,
+  "runs": [
+    {
+      "scenario": "web-approval",
+      "passed": true,
+      "assertions": {
+        "hardRuntimePauseAndGoal": true,
+        "exit0": true,
+        "productMarker": true,
+        "driverCompleted": true,
+        "stagedBeforeApproval": true,
+        "independentApprovalWake": true,
+        "reportWakeAfterYield": true,
+        "singleCaptainApprovalAndNoPolling": true,
+        "oneUserMessageAndHttpApproval": true,
+        "invalidTeamRejected": true,
+        "repeatApprovalRejected": true,
+        "stableCaptainHeaders": true,
+        "memberToolContract": true,
+        "taskCompleted": true
+      },
+      "evidence": {
+        "event": "web-approval-passed",
+        "sessionId": "session-1bca535d-8dfd-4e9c-afdd-926eb87b12bd",
+        "teamId": "runtime-lab",
+        "memberId": "16c625f9-dad8-4f75-aa0b-7fc8d0bfb9dd",
+        "taskStatus": "completed",
+        "captainRequests": 7,
+        "order": 31,
+        "time": 1792988780543
+      },
+      "exit": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false
+      }
+    }
+  ]
+}

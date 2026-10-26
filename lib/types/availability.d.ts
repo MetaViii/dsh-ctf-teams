@@ -19,3 +19,9 @@ export declare function foldFailureInbox(messages: TeamMessage[]): Array<{
 /** Configuration failures require a route update; rate limits with unknown reset stay paused. */
 export declare function memberAvailable(member: TeamMember, now?: number): boolean;
 export declare function availabilityLabel(member: TeamMember): string;
+/** Advice is a diagnosis of a report, not a provider quota or inferred reset time. */
+export declare function recoveryAdvice(member: TeamMember): {
+    reason: string;
+    next_action: string;
+    retry_at: number | null;
+};

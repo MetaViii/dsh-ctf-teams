@@ -24,7 +24,7 @@ A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-t
 - **Shipped knowledge base** — kali toolbox, pwntools, SageMath, Volatility 3, per-domain playbooks (web / pwn / reverse / crypto / forensics / misc), and a fresh-PoC/CVE hunting workflow, readable in-session via `ctf_teams_knowledge`.
 - **Toolchain service** — `ctf_teams_env` probes the machine for every managed tool (pwntools, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions, then installs the missing ones from a curated apt/pip/brew/gem map — argv-by-argv, no shell. Heavy tools (sage, ghidra, pwndbg) report their manual command instead.
 - **Reference library, pre-provisioned** — the small PoC/skill repos (ctf-skills, Awesome-POC) clone automatically when a team is created; `ctf_teams_references` syncs the rest (exphub, 0xMarcio pocindex/cve, trickest/cve, PoC-in-GitHub, cvelistV5) on demand into `<workspace>/.ctf-teams/references/` and hands each agent the absolute paths + `rg` hints, so N-day hunting works offline before any web search.
-- **Live dashboard tab, and it is operable** — a `解题面板` view next to 对话 / 轨迹: challenge header, task progress bar, member lanes with live activity and unseen-board badges, the finding feed, the flag board and the host-computed `Next` line, refreshed every 1.5 s from a trust-gated route. Its controls drive the solve — 开始解题 (challenge form), 批准并运行, 推进一轮, 暂停 / 继续, 核对 flag, 附件 (workspace file picker), 写 WRITEUP, 导出 WP / 导出复盘 — and each click becomes exactly one user turn, so the captain agent stays the only writer of team state.
+- **Live dashboard tab, and it is operable** — a `解题面板` view next to 对话 / 轨迹: challenge header, task progress bar, member lanes with live activity and unseen-board badges, the finding feed, the flag board and the host-computed `Next` line, refreshed every 1.5 s from a trust-gated route. Its controls drive the solve — 开始解题 (challenge form), 批准并运行, 推进一轮, 暂停 / 继续, 核对 flag, 附件 (workspace file picker), 写 WRITEUP, 导出 WP / 导出复盘 — normal solve actions become one user turn. Pause directly persists a runtime halt, preserves unfinished work and pauses the current goal when the host supports it.
 - **Terminal dashboard** — the same picture in the harness transcript, for surfaces without the tab: `ctf_teams_status` (model + human) and `/ctf-teams-board` (human only, zero model turns).
 
 ## Quick start
@@ -79,7 +79,7 @@ Polling keeps the last snapshot when the host restarts ("重连中") and pauses 
 
 ### Operating from the tab
 
-Every control queues **one user turn** and nothing else — the tab never writes team state, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked:
+Normal solve controls queue **one user turn**; pause commits the shared runtime stop directly, without asking the model. Staged approval, flag verdicts and attachment rules still apply:
 
 | Button | When | What it sends |
 |---|---|---|
@@ -94,7 +94,7 @@ Every control queues **one user turn** and nothing else — the tab never writes
 | 删除战队 | captain | confirm dialog showing the team's file count and size → 移到归档 (still reviewable under 「已归档」) or 彻底删除 (frees the space) |
 | 清空归档 (N) | archived roster (captain) | permanently removes every archived team |
 
-Every control above queues **one user turn**, so the captain's protocol (staged approval, flag verdicts, attachment writes) keeps applying and the transcript shows exactly what was clicked. The two cleanup buttons are the exception: deleting files needs no model turn, so the host performs them directly under the team lock — still gated (captain session for a team, a live session for the archive), still two clicks, and the response reports the bytes that were actually freed.
+The pause control and cleanup operations run directly through authenticated host boundaries. Other controls queue one user turn and preserve the captain protocol. The two cleanup buttons are the exception: deleting files needs no model turn, so the host performs them directly under the team lock — still gated (captain session for a team, a live session for the archive), still two clicks, and the response reports the bytes that were actually freed.
 
 Captain-only buttons are disabled (not silently switched off) in a member's session, and an archived team is read-only except for exports and cleanup. The endpoints behind these controls are method-whitelisted, body-limited and authority-checked against durable state, and they sit behind the same browser-trust fence as the read path.
 

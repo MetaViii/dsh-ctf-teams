@@ -14,6 +14,8 @@ import { basename, join } from 'node:path'
 import { readdir, readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { haltTeamWork } from './tools.ts'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import {
   authenticatedWebRoutes,
@@ -42,7 +44,7 @@ import type { TeamState } from './types.ts'
 
 /** The exact path the dashboard tab polls. */
 export const DASHBOARD_STATE_PATH = '/plugins/dsh-ctf-teams/state'
-/** The panel's action endpoint: one click becomes one user turn. */
+/** Action endpoint: normal requests queue a turn; pause commits a runtime stop. */
 export const DASHBOARD_ACTION_PATH = '/plugins/dsh-ctf-teams/action'
 /** Writeup / review-report download. */
 export const DASHBOARD_EXPORT_PATH = '/plugins/dsh-ctf-teams/export'
@@ -68,6 +70,7 @@ interface WorkspaceRegistry {
 interface AgentRegistry {
   get(id: unknown): {
     session?: { header?: { cwd?: string } }
+    cancel?(...args:unknown[]):unknown
     followup?(message: unknown): unknown
   } | undefined
 }
@@ -340,6 +343,12 @@ export function installDashboardRoute(ctx: Context, options: DashboardRouteOptio
               sendJson(response, 403, { error: 'this session does not participate in the team' })
               return
             }
+          }
+          if(action.action==='halt'){
+            if(!team||typeof agent.cancel!=='function'){sendJson(response,503,{error:'live runtime cancellation is unavailable; no prompt-only pause was sent'});return}
+            const stopped=await haltTeamWork({ctx,stateRoot,teamId:team.id,captain:agent as unknown as Agent,preserveTasks:true})
+            sendJson(response,200,{ok:true,action:'halt',label:'暂停',halted:true,goal_pause:stopped.goalPause.status,message:'战队已暂停，任务检查点已保留。'+(stopped.goalPause.status==='paused'?'当前会话目标已暂停。':stopped.goalPause.status==='failed'||stopped.goalPause.status==='unavailable'?'目标服务未确认暂停，请核对目标状态。':'')})
+            return
           }
           agent.followup(createUserMessage({
             content: [{ type: 'text', text: action.prompt }],

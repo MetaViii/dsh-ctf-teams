@@ -2,7 +2,7 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const memberKeys = ['name', 'role', 'provider', 'model', 'reasoning_effort', 'executionPrompt']
-const taskKeys = ['id', 'subject', 'description', 'assignee', 'dependencies']
+const taskKeys = ['id', 'subject', 'description', 'assignee', 'dependencies','challenge_id','resource_key','preflight','preflight_finding_id','allow_duplicate_challenge']
 
 /** Inspect actual presence, independently of the host validator's nested failures. */
 export function diagnosePlan(plan: unknown): string | undefined {
@@ -21,7 +21,8 @@ export function diagnosePlan(plan: unknown): string | undefined {
       for (const field of required) if (!Object.hasOwn(row, field)) missing.push(`${path}.${field}`)
       for (const field of Object.keys(row)) {
         if (!(allowed as readonly string[]).includes(field)) illegal.push(`${path}.${field}`)
-        else if (field === 'dependencies') {
+        else if (field === 'allow_duplicate_challenge') { if(typeof row[field]!=='boolean')invalid.push(`${path}.${field} must be a boolean`) }
+        else if (field === 'dependencies' || field === 'preflight') {
           if (!Array.isArray(row[field]) || row[field].some(value => typeof value !== 'string')) invalid.push(`${path}.${field} must be a string array`)
         } else if (typeof row[field] !== 'string') invalid.push(`${path}.${field} must be a string`)
       }

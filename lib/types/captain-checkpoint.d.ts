@@ -18,7 +18,7 @@ export declare function runtimeBrief(team: TeamState): {
     facts: {
         team_id: string;
         board_ref: string;
-        phase: "staged" | "running";
+        phase: string;
         halted: boolean;
         solved: boolean;
         round: number;

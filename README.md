@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.34-2563eb?style=flat-square" alt="源码版本 0.1.34"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.35-2563eb?style=flat-square" alt="源码版本 0.1.35"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
@@ -224,7 +224,7 @@ await tools.ctf_teams_mark_flag({
 
 本地第五轮增强允许有效队员刷新只读平台事实，队长可原地修正未启动任务的 preflight。代理与 CLI 会识别平台业务错误，防止把限流返回当作题目数据；status 和面板增加保存、在线及队长模型路由的差异诊断。详见[第五轮改进与取舍](./docs/ctf2-iteration5-2026-10-15/README.md)和[上游差异审查](./docs/ctf2-iteration5-2026-10-15/upstream-review.md)（尚未推送）。
 
-配置错误会暂停成员并提示修复，限流展示上游提供的恢复时间；临时基础设施故障保留任务进度，冷却后自动恢复一次，再次失败等待修复或重派。模型无法读取图片时，可使用 `ctf_teams_image_to_text` 提取 ASCII、OCR 或 QR/条码候选，或进行像素比较；所需依赖按环境准备。
+队长可用 `update_member(wake:false)` 修复后保持停发，待服务恢复再用 `wake:true` 放行。失败任务已有同 ID 重派；任务成果已完成并有同题 verified 引用时，可显式 `resolve_task` 审计收尾，详见[本轮边界](./docs/ctf2-iteration10-2026-10-26/README.md)。配置错误会暂停成员并提示修复，限流展示上游提供的恢复时间；临时基础设施故障保留任务进度，冷却后自动恢复一次，再次失败等待修复或重派。模型无法读取图片时，可使用 `ctf_teams_image_to_text` 提取 ASCII、OCR 或 QR/条码候选，或进行像素比较；所需依赖按环境准备。
 
 `ctf_teams_text_candidates` 可按需枚举 OCR 易混字符，最多 128 项，保留原文并提示截断；可查看 Base64 原始字节的 hex / 转义 ASCII。密码库检测执行基础 AES 运算，区分缺失与损坏的后端。附带的 CTF2 CLI 已修复多参数传递，并将空结果和工具错误作为非零退出处理。
 
@@ -343,7 +343,7 @@ Windows 的原生 `bash` 工具不能直接与 PowerShell 共用一个执行器�
 
 旧调度器会把持续存在的“已解出”状态当作新消息，反复唤醒空闲队员；队员结束后触发的原生通知又会在队长会话留下空白轮次。本地修复已改为仅投递尚未消费的看板更新。队长的空白轮次可能在模型请求前被拦截，但队员的重复同步仍会消耗 token。
 
-遇到此问题，先在 CTF 团队面板点击“暂停”，确认团队显示“已暂停”。修改源码不会更新已经安装的插件副本，需要重新构建、安装修复包并完整重启 DSH。暂停目标与暂停整队是不同操作。诊断、验证范围与安装步骤见 [空转循环修复记录](./docs/ctf2-idle-loop-2026-10-15/README.md)。
+遇到此问题，先在 CTF 团队面板点击“暂停”，确认团队显示“已暂停”。修改源码不会更新已经安装的插件副本，需要重新构建、安装修复包并完整重启 DSH。新版面板暂停会落盘停止队伍，并在宿主目标服务可用时暂停当前会话目标；继续队伍不会自动恢复目标。诊断、验证范围与安装步骤见 [空转循环修复记录](./docs/ctf2-idle-loop-2026-10-15/README.md)。
 
 **候选格式不符合正则，会被拒收吗？**
 

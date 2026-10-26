@@ -27,8 +27,8 @@ function records(team: TeamState): RecordRow[] {
   }
   for (const task of team.tasks) {
     // Execution capabilities and private session messages are deliberately excluded.
-    const { id, subject, description, assignee, status, output, checkpoint, remainingItems, dependencies, commandsRun, acceptanceResults, supplementalEvidence } = task
-    add('task', encodeURIComponent(id), subject, status, task.updatedAt, {id,subject,description,assignee,status,output,checkpoint,remainingItems,dependencies,commandsRun,acceptanceResults,supplementalEvidence}, task.challengeId)
+    const { id, subject, description, assignee, status, output, checkpoint, remainingItems, dependencies, commandsRun, acceptanceResults, supplementalEvidence, resolution } = task
+    add('task', encodeURIComponent(id), subject, status, task.updatedAt, {id,subject,description,assignee,status,output,checkpoint,remainingItems,dependencies,commandsRun,acceptanceResults,supplementalEvidence,resolution}, task.challengeId)
   }
   for (const hypothesis of team.hypotheses ?? []) {
     const { tests, ...proposal } = hypothesis

@@ -39,6 +39,7 @@ async function waitFor(predicate, description) {
         await new Promise(resolve => setTimeout(resolve, 25));
     }
 }
+let holdForPause=false;
 class WebApprovalAdapter extends LlmAdapter {
     async listModels() { return [model]; }
     async resolveModel(provider, id) { return { ...model, provider, id }; }
@@ -54,6 +55,12 @@ class WebApprovalAdapter extends LlmAdapter {
         assert.equal(failed, undefined, 'Real workflow tool failed: ' + JSON.stringify(failed));
         const isMember = system?.includes('WEB_APPROVAL_MEMBER') === true;
         record({ event: 'web-request', sessionId: options.sessionId, isMember, model: options.model, reasoningEffort: options.reasoningEffort, system: system, tools: options.tools, messages: options.messages });
+        if(holdForPause&&!isMember){
+            record({event:'web-goal-probe-started'});
+            assert.ok(options.signal,'real goal request must carry cancellation');
+            await new Promise(resolve=>{if(options.signal.aborted)resolve();else options.signal.addEventListener('abort',resolve,{once:true})});
+            return;
+        }
         const pluginMessages = options.messages.filter(message => message.role === 'user' && message.source?.kind === 'ctf-teams');
         const messageText = message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
         const approvals = options.messages.filter(message => message.role === 'user' && message.source?.kind === 'user' && messageText(message).includes('用户在解题面板点击了「批准并运行」'));
@@ -217,6 +224,23 @@ export function apply(ctx) {
         for (const request of memberRequests) assert.deepEqual(request.tools.filter(tool => tool.name.startsWith('ctf_teams_')).map(tool => tool.name).sort(), memberTools, 'Every real member request must expose exactly the declared CTF member tools');
         record({ event: 'web-headers-stable', sessionId: captain.id, systemSha256, toolsSha256, captainRequests: captainRequests.length, memberRequests: memberRequests.length, memberTeamToolCount: memberTools.length, memberTeamToolNames: memberTools });
         record({ event: 'web-approval-passed', sessionId: captain.id, teamId: completed.id, memberId: completed.members[0].id, taskStatus: completed.tasks[0].status, captainRequests: captainRequests.length });
+        holdForPause=true;
+        const goals=ctx.get('goals');
+        assert.ok(goals&&typeof goals.pause==='function','real goal service missing');
+        const activeGoal=goals.create(captain,{objective:'Synthetic pause probe; no target actions',maxGoalRounds:5});
+        await waitFor(()=>events.some(event=>event.event==='web-goal-probe-started'),'real goal round starts');
+        const halt=await fetch(baseUrl+'/plugins/dsh-ctf-teams/action',{method:'POST',headers:{'content-type':'application/json',origin:baseUrl,cookie},body:JSON.stringify({sessionId:captain.id,teamId:completed.id,action:'halt'}),signal:AbortSignal.timeout(10000)});
+        const haltBody=await halt.json();assert.equal(halt.status,200,JSON.stringify(haltBody));assert.equal(haltBody.goal_pause,'paused');
+        await captain.whenIdle();assert.equal(readTeam().halted,true);assert.equal(goals.get(captain).id,activeGoal.id);assert.equal(goals.get(captain).phase,'paused');assert.equal(goals.get(captain).activation,'disarmed');
+        const pausedRevision=goals.get(captain).revision;
+        const repeatedHalt=await fetch(baseUrl+'/plugins/dsh-ctf-teams/action',{method:'POST',headers:{'content-type':'application/json',origin:baseUrl,cookie},body:JSON.stringify({sessionId:captain.id,teamId:completed.id,action:'halt'}),signal:AbortSignal.timeout(10000)});
+        assert.equal(repeatedHalt.status,200);assert.equal(goals.get(captain).revision,pausedRevision);
+        await ctx.sessions.flush(captain.session);
+        const callsAfterHalt=events.filter(event=>event.event==='web-request').length;
+        await new Promise(resolve=>setTimeout(resolve,150));
+        assert.equal(events.filter(event=>event.event==='web-request').length,callsAfterHalt,'no automatic model request after pause response');
+        assert.equal(readTeam().tasks[0].status,'completed','pause preserves terminal work');
+        record({event:'web-hard-pause-passed',halted:true,goalPaused:true,noModelWakeAfterPause:true,noPauseUserPrompt:true});
         process.stdout.write('WEB_APPROVAL_OK\n');
         ctx.get('appExit')(0);
     })().catch(error => {

@@ -19,7 +19,7 @@ export function runtimeBrief(team: TeamState) {
   const candidates = (team.flags ?? []).filter(flag => flag.status === 'candidate')
   const rechecks = (team.findings ?? []).filter(finding => finding.recheckRequired)
   const facts = {
-    team_id: team.id, board_ref: boardReference(team), phase: team.phase ?? 'running', halted: team.halted === true,
+    team_id: team.id, board_ref: boardReference(team), phase: team.halted ? 'halted' : team.phase ?? 'running', halted: team.halted === true,
     solved: team.challenge?.solved === true, round: team.round ?? 0,
     pending_candidate_count: candidates.length,
     pending_candidates: candidates.slice(0, 20).map(flag => ({ id: flag.id, challenge_id: flag.challengeId ?? null })),

@@ -727,6 +727,7 @@ function isTeamMember(value: unknown): value is TeamMember {
     && value['name'].trim() !== ''
     && isOptionalString(value['role'])
     && isOptionalString(value['repairId'])
+    && (value['dispatchPaused'] === undefined || typeof value['dispatchPaused'] === 'boolean')
     && (value['stopping'] === undefined || typeof value['stopping'] === 'boolean')
     && isOptionalString(value['provider'])
     && isOptionalString(value['model'])
@@ -827,6 +828,7 @@ export function isTeamTask(value: unknown): value is TeamTask {
     && isOptionalString(value['output'])
     && isOptionalString(value['challengeId'])
     && isOptionalString(value['resourceKey'])
+    && (value['resolution'] === undefined || isRecord(value['resolution']) && value['resolution']['by'] === 'captain' && isFiniteNumber(value['resolution']['at']) && typeof value['resolution']['flagRef'] === 'string' && typeof value['resolution']['evidence'] === 'string' && typeof value['resolution']['failedOutput'] === 'string' && isFiniteNumber(value['resolution']['attempt']))
     && isOptionalString(value['checkpoint'])
     && isOptionalString(value['blockedReason'])
     && isOptionalString(value['preflightFindingId'])

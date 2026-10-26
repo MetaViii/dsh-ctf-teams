@@ -13,7 +13,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { TeamState } from './types.ts';
 /** The exact path the dashboard tab polls. */
 export declare const DASHBOARD_STATE_PATH = "/plugins/dsh-ctf-teams/state";
-/** The panel's action endpoint: one click becomes one user turn. */
+/** Action endpoint: normal requests queue a turn; pause commits a runtime stop. */
 export declare const DASHBOARD_ACTION_PATH = "/plugins/dsh-ctf-teams/action";
 /** Writeup / review-report download. */
 export declare const DASHBOARD_EXPORT_PATH = "/plugins/dsh-ctf-teams/export";

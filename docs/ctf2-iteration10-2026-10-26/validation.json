@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-26",
+  "version": "0.1.35",
+  "artifact": {
+    "name": "dsh-ctf-teams-iteration10-0.1.35.tgz",
+    "sha256": "d5603832cfdac13bdf4819adeb344f73928284c28b8c7bc59951a8e4b193e9a3",
+    "installedInUserProfile": true,
+    "publishedToNpm": false
+  },
+  "fullRegression": {
+    "command": "pnpm verify",
+    "exit": 0,
+    "passed": true,
+    "evidence": "evidence/verify.txt"
+  },
+  "runtime": [
+    {
+      "version": "0.2.1-rc.3",
+      "passed": true,
+      "scenarios": [
+        "lifecycle",
+        "lifecycle-cold-restore",
+        "fallback",
+        "fallback-cold-restore",
+        "failure",
+        "captain-idle-wakeup",
+        "progressive-entry",
+        "web-approval",
+        "protocol-compatibility",
+        "stability",
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "cohortCount": 296,
+      "evidence": "evidence/desktop-rc3.json"
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "passed": true,
+      "scenarios": [
+        "web-approval",
+        "ctf2-regression",
+        "ctf2-handover-cold-restore"
+      ],
+      "evidence": [
+        "evidence/desktop-rc2-web.json",
+        "evidence/desktop-rc2-ctf.json"
+      ]
+    },
+    {
+      "version": "0.2.0-rc.2",
+      "passed": true,
+      "cohortCount": 278,
+      "evidence": "evidence/recommended-host.json"
+    }
+  ],
+  "goalPause": {
+    "realGoalService": true,
+    "realGoalRoundCancelled": true,
+    "phase": "paused",
+    "activation": "disarmed",
+    "httpPauseDidNotQueueUserTurn": true,
+    "repeatedPauseDidNotAddGoalRevision": true,
+    "observationAfterResponseMs": 150,
+    "noModelRequestsInObservation": true,
+    "sessionFlushed": true
+  },
+  "featureCoverage": [
+    "persistent dispatch hold and message/dispatch admission",
+    "paused tasks keep checkpoints, remaining items and historical commands",
+    "revoked attempts cannot reclaim or bypass halt",
+    "explicit same-id retry and continuation",
+    "atomic inline CTF metadata",
+    "normalized serialized format lists and legacy presentation",
+    "captain-only verified-result reconciliation with history and idempotence",
+    "wrong challenge/generation and quality-gate rejection"
+  ],
+  "installation": {
+    "passed": true,
+    "hostVersion": "0.2.1-rc.3",
+    "version": "0.1.35",
+    "comparedFiles": 157,
+    "configAndOtherPluginsPreserved": true,
+    "dataContentsAndMetadataPreserved": true,
+    "mainWindowReady": true,
+    "postStartupExistingTeamFilesUnchanged": true,
+    "guiConfirmed": false,
+    "evidence": "evidence/local-install.json"
+  },
+  "unverified": [
+    "Interactive user DSH GUI and private desktop wrapper",
+    "Real model compliance/CTF solving benefit",
+    "Online platform receipts and submissions",
+    "Other operating systems",
+    "Proxy watchdog",
+    "Global provider quota governance",
+    "Automatic assertions or score reconciliation"
+  ]
+}

@@ -136,6 +136,7 @@ try {
   /* ── fake context ─────────────────────────────────────────────────────── */
 
   const sent = []
+  const cancellations=[],drains=[]
   const sessions = new Map([
     ['session-captain', { header: { cwd: workspace } }],
     ['session-member', { header: { cwd: workspace } }],
@@ -146,10 +147,13 @@ try {
     return {
       routes,
       ctx: {
+        subagents:{drainContinuableChildren:async(...args)=>drains.push(args)},
         agents: {
           get: (id) => {
             const session = sessionMap.get(id)
             return session === undefined ? undefined : {
+              id,
+              cancel:(...args)=>cancellations.push({id,args}),
               session,
               followup: (message) => { sent.push({ sessionId: id, message }) },
             }
@@ -426,6 +430,26 @@ try {
     wrongMethod.status === 405 && wrongMethod.headers?.allow === 'POST', JSON.stringify(wrongMethod.headers))
   check('no refused request queued a turn', sent.length === queued + 1, `sent=${sent.length}, expected=${queued + 1}`)
 
+  const pausedTeam={...team,id:'panel-pause',name:'panel-pause',tasks:[{...team.tasks[0],id:'pause-t1',status:'in_progress',attempt:1,attemptId:'old-pause-capability',output:'partial solver',remainingItems:['finish'],commandsRun:[{command:'python solve.py',status:'passed',evidence:'partial result'}]}]}
+  await createTeamDir(stateRoot,pausedTeam)
+  const beforePauseSent=sent.length,pauseResponse=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',teamId:'panel-pause',action:'halt'}),pauseResponse)
+  const durablePause=await readTeam(stateRoot,'panel-pause')
+  check('panel pause persists immediately without a model message',pauseResponse.status===200&&durablePause.halted===true&&sent.length===beforePauseSent,pauseResponse.body)
+  check('panel pause revokes attempts and keeps checkpoints, remaining items and historical commands',durablePause.tasks[0].status==='pending'&&!durablePause.tasks[0].attemptId&&durablePause.tasks[0].checkpoint.includes('partial solver')&&durablePause.tasks[0].checkpoint.includes('python solve.py')&&durablePause.tasks[0].remainingItems[0]==='finish')
+  check('panel pause cancels captain and drains children before acknowledging',cancellations.length===2&&drains.length===1)
+  const pausedNudge=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',teamId:'panel-pause',action:'nudge'}),pausedNudge)
+  check('nudge cannot bypass a halted team or queue a model turn',pausedNudge.status===409&&sent.length===beforePauseSent)
+  const pauseAgain=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-captain',teamId:'panel-pause',action:'halt'}),pauseAgain)
+  check('repeated pause is safe and never queues a turn',pauseAgain.status===200&&sent.length===beforePauseSent)
+  const memberPause=recorder()
+  await routes.get(DASHBOARD_ACTION_PATH).handler(request(DASHBOARD_ACTION_PATH,'POST',{sessionId:'session-member',teamId:'panel-pause',action:'halt'}),memberPause)
+  check('member cannot invoke runtime pause',memberPause.status===403&&sent.length===beforePauseSent)
+  // Remove only this disposable test team's directory before existing roster assertions.
+  await rm(join(stateRoot,'panel-pause'),{recursive:true,force:true})
+
   /* ── export ───────────────────────────────────────────────────────────── */
 
   const writeupExport = recorder()
@@ -556,8 +580,8 @@ try {
 /* ── source-level guarantees ────────────────────────────────────────────── */
 
 const routeSource = await readFile(new URL('../src/dashboard-route.ts', import.meta.url), 'utf8')
-check('the dashboard routes never write team state themselves',
-  !routeSource.includes('writeTeam') && !routeSource.includes('appendMailbox'),
+check('the dashboard uses the shared runtime halt; normal actions still use captain turns',
+  !routeSource.includes('writeTeam') && !routeSource.includes('appendMailbox') && routeSource.includes('await haltTeamWork('),
   'panel changes must go through the captain agent')
 check('panel actions become user turns',
   routeSource.includes('createUserMessage') && routeSource.includes("source: { kind: 'user' }"),

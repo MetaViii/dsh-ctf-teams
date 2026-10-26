@@ -22,11 +22,13 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
 import { withPlanDiagnostics } from './plan-diagnostics.ts'
-import { memberAvailable, availabilityLabel, foldFailureInbox } from './availability.ts'
+import { memberAvailable, availabilityLabel, foldFailureInbox, recoveryAdvice } from './availability.ts'
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
 import { collectParticipantInbox, formatInbox, syncInboxLimit } from './coordination.ts'
 import { textCandidates } from './text-candidates.ts'
 import { boardReference, findingReference, resolveFindingReference, affectedFindings, evidenceSummary } from './evidence-graph.ts'
+import { pauseCaptainGoal } from './goal-pause.ts'
+import { resolveFailedTask } from './task-resolution.ts'
 import { searchTeamRecords } from './team-search.ts'
 import { runtimeBrief, saveCaptainCheckpoint, checkpointSummary, planningSignals } from './captain-checkpoint.ts'
 import { captureEvidenceFiles, inspectEvidenceFiles } from './evidence-files.ts'
@@ -418,7 +420,8 @@ export async function haltTeamWork(input: {
   teamId: string
   captain: Agent
   signal?: AbortSignal
-}): Promise<{ teamName: string; cancelledTasks: number; alreadyHalted: boolean }> {
+  preserveTasks?: boolean
+}): Promise<{ teamName: string; cancelledTasks: number; alreadyHalted: boolean; goalPause: ReturnType<typeof pauseCaptainGoal> }> {
   const halted = await withTeamLock(teamLockKey(input.stateRoot, input.teamId), async () => {
     const fresh = await requireFreshCaptainTeam(input.stateRoot, input.teamId, input.captain.id)
     if (fresh.halted === true) {
@@ -433,8 +436,13 @@ export async function haltTeamWork(input: {
     let cancelledTasks = 0
     for (const task of fresh.tasks) {
       if (TERMINAL_TASK_STATUSES.includes(task.status)) continue
-      cancelUnfinishedTask(task, 'Stopped from the captain chat.')
-      cancelledTasks += 1
+      task.checkpoint = task.output ?? task.checkpoint
+      if (input.preserveTasks) {
+        const detail={attempt:task.attempt??0,verdict:task.verdict,findings:task.findings,changedPaths:task.changedPaths,acceptanceResults:task.acceptanceResults,commandsRun:task.commandsRun}
+        if(task.verdict||task.findings||task.changedPaths||task.acceptanceResults||task.commandsRun)task.checkpoint=(task.checkpoint??'')+'\nHistorical paused attempt (not current verification): '+JSON.stringify(detail)
+        invalidateTaskAttempt(task, task.assignee)
+      }
+      else { cancelUnfinishedTask(task, 'Stopped from the captain chat.'); cancelledTasks += 1 }
     }
     for (const member of fresh.members) {
       if (member.status === 'removed') continue
@@ -457,6 +465,7 @@ export async function haltTeamWork(input: {
   // Persist the stop boundary first, then abort the Captain before draining
   // children. Otherwise its current model turn can observe `halted`, call
   // resume, and race the still-running HTTP stop request.
+  const goalPause = pauseCaptainGoal(input.ctx, input.captain)
   input.captain.cancel({ kind: 'user' }, { keepInbox: true })
   await stopTeamMemberActivations(input.ctx, input.captain, halted.members, input.signal)
   // Interrupting a child emits a trailing subagent-settled notification. That
@@ -469,6 +478,7 @@ export async function haltTeamWork(input: {
     teamName: halted.teamName,
     cancelledTasks: halted.cancelledTasks,
     alreadyHalted: halted.alreadyHalted,
+    goalPause,
   }
 }
 
@@ -815,6 +825,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
             id: { type: 'string', required: true, description: 'Required local reference used by dependencies; mapped to a durable task id in the result.' },
             subject: { type: 'string', required: true, description: 'Required task title.' }, description: { type: 'string' }, assignee: { type: 'string' },
             dependencies: { type: 'array', items: { type: 'string' } },
+            challenge_id:{type:'string'},resource_key:{type:'string'},preflight:{type:'array',items:{type:'string'}},preflight_finding_id:{type:'string'},allow_duplicate_challenge:{type:'boolean'},
           } } },
         },
       },
@@ -1172,10 +1183,10 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   ctx.tools.register(defineTool({
     name: 'ctf_teams_update_member',
     description: 'Captain-only: repair a provider/model in place. Validates the new route, drains/retires the old child session, preserves member name and task checkpoints, clears the fault and starts a fresh child only when ready work exists.',
-    parameters: { member_name: { type: 'string', required: true }, provider: { type: 'string', required: true }, model: { type: 'string', required: true }, reasoning_effort: { type: 'string' }, reason: { type: 'string', required: true } },
+    parameters: { member_name: { type: 'string', required: true }, provider: { type: 'string', required: true }, model: { type: 'string', required: true }, reasoning_effort: { type: 'string' }, reason: { type: 'string', required: true }, wake: {type:'boolean',description:'Default true. false durably closes dispatch admission after route repair; no status/board/message kick may wake this member until an explicit repair with wake:true.'} },
     output: {
-      schema: { type: 'object', additionalProperties: false, properties: { member_name: { type: 'string', required: true }, provider: { type: 'string', required: true }, model: { type: 'string', required: true }, status: { type: 'string', required: true } } },
-      render: (_args, value) => [{ type: 'text', text: `Member ${value.member_name} repaired: ${value.provider}/${value.model} (${value.status}). Member/task identities and checkpoints are retained.` }],
+      schema: { type: 'object', additionalProperties: false, properties: { wake_enabled:{type:'boolean',required:true}, member_name: { type: 'string', required: true }, provider: { type: 'string', required: true }, model: { type: 'string', required: true }, status: { type: 'string', required: true } } },
+      render: (_args, value) => [{ type: 'text', text: `Member ${value.member_name} repaired: ${value.provider}/${value.model} (${value.status}). Member/task identities and checkpoints are retained. ${value.wake_enabled ? 'Dispatch enabled.' : 'Dispatch held; use wake:true only when capacity is ready.'}` }],
     },
     async execute(args, exec) {
       if (!args.reason.trim()) throw new Error('route repair reason must not be empty')
@@ -1207,12 +1218,13 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         }
         Object.assign(member, { id: '', provider: selection.provider, model: selection.model, reasoningEffort: selection.reasoningEffort, status: 'idle' })
         delete member.fault; delete member.failureCounts; delete member.stopping; delete member.spawnError; delete member.activeProvider; delete member.activeModel; delete member.fallbackActive
+        member.dispatchPaused = args.wake === false
         delete member.repairId
         await writeTeam(stateRoot, fresh)
       })
-      await scheduler.kickTeam(workspace, team.id, captain)
+      if (args.wake !== false) await scheduler.kickTeam(workspace, team.id, captain)
       const current = (await readTeam(stateRoot, team.id))?.members.find(m => m.name === args.member_name)
-      return { member_name: args.member_name, provider: selection.provider, model: selection.model, status: current?.status ?? 'idle' }
+      return { member_name: args.member_name, provider: selection.provider, model: selection.model, status: current?.status ?? 'idle', wake_enabled: current?.dispatchPaused !== true }
     },
   }))
 
@@ -1421,6 +1433,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           status: { type: 'string', required: true },
           kind: { type: 'string', required: true },
           assignee: { type: 'string' },
+          next_action:{type:'string'},retry_at:{oneOf:[{type:'number'},{type:'null'}]},
           dispatch_state: { type: 'string' },
           dispatch_reason: { type: 'string' },
           attempt_id: { type: 'string' },
@@ -1428,7 +1441,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       },
       render: (args, value) => [{
         type: 'text',
-        text: `Task "${value.subject}" created as ${value.task_id} (status ${value.status}, kind ${value.kind}, ${value.assignee ? `assigned to ${value.assignee}` : 'unassigned shared pool'}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}`,
+        text: `Task "${value.subject}" created as ${value.task_id} (status ${value.status}, kind ${value.kind}, ${value.assignee ? `assigned to ${value.assignee}` : 'unassigned shared pool'}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}${value.next_action ? ` Next: ${value.next_action}` : ''}`,
       }],
     },
     async execute(args, exec) {
@@ -1570,6 +1583,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           task_id: { type: 'string', required: true },
           previous_assignee: { type: 'string', required: true },
           takeover_context: { type: 'string' },
+          next_action:{type:'string'},retry_at:{oneOf:[{type:'number'},{type:'null'}]},
           dispatch_state: { type: 'string' },
           dispatch_reason: { type: 'string' },
           assignee: { type: 'string', required: true },
@@ -1580,7 +1594,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Task ${value.task_id} reassigned ${value.previous_assignee || 'unassigned'} → ${value.assignee || 'shared pool'} (attempt ${value.attempt}, status ${value.status}${value.attempt_id ? `, attempt_id ${value.attempt_id}` : ''}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}${value.takeover_context ? `\n\n${value.takeover_context}` : ''}`,
+        text: `Task ${value.task_id} reassigned ${value.previous_assignee || 'unassigned'} → ${value.assignee || 'shared pool'} (attempt ${value.attempt}, status ${value.status}${value.attempt_id ? `, attempt_id ${value.attempt_id}` : ''}). ${value.dispatch_state ?? ''}${value.dispatch_reason ? ` — ${value.dispatch_reason}` : ''}${value.next_action ? ` Next: ${value.next_action}` : ''}${value.takeover_context ? `\n\n${value.takeover_context}` : ''}`,
       }],
     },
     async execute(args, exec) {
@@ -1594,6 +1608,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
       const revoked = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const fresh = await requireFreshCaptainTeam(stateRoot, team.id, captain.id)
+        if(fresh.halted)throw new Error('team is halted; explicit resume is required before reassigning work')
         const task = requireTask(fresh, args.task_id)
         if (target === 'auto') target = fresh.members.find(m => memberAvailable(m) && memberOpenTask(fresh, m.name, task.id) === undefined && (ctx.agents.get(m.id as SessionId)?.status ?? 'idle') === 'idle')?.name ?? ''
         if (target !== '' && target !== CAPTAIN_KEY && args.queue_if_busy && (memberOpenTask(fresh, target, task.id) || !memberAvailable(requireMember(fresh, target)))) target = ''
@@ -1709,6 +1724,25 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_teams_resolve_task',
+    description:'Captain-only audited completion of failed ordinary work whose contract has actually been fulfilled. Requires the current expected_attempt, a generation-bound platform-verified flag_ref for the same challenge, and concrete evidence that the whole task is done. Never applies automatically or to review/repair/requirements gates. For unfinished work use reassign_task: it already retries failed tasks under the same task id. Does not resume a halted team.',
+    parameters:{task_id:{type:'string',required:true},expected_attempt:{type:'number',required:true},flag_ref:{type:'string',required:true},evidence:{type:'string',required:true}},
+    output:{schema:{type:'object',additionalProperties:true,properties:{}},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+    async execute(args,exec){
+      const captain=requireCaptain(exec),workspace=workspaceOf(captain),stateRoot=stateRootOf(workspace,config)
+      const located=await requireCaptainTeam(workspace,config,captain)
+      const result=await withTeamLock(teamLockKey(stateRoot,located.id),async()=>{
+        const team=await requireFreshCaptainTeam(stateRoot,located.id,captain.id)
+        const resolved=resolveFailedTask(team,{taskId:args.task_id,expectedAttempt:args.expected_attempt,flagRef:args.flag_ref,evidence:args.evidence})
+        if(!resolved.duplicate){await writeTeam(stateRoot,team);appendTeamEvent(ctx,captain.session,'ctf-teams/task-updated',{teamId:team.id,taskId:resolved.task.id,status:'completed',output:args.evidence})}
+        return {task_id:resolved.task.id,status:'completed',duplicate:resolved.duplicate}
+      })
+      if(!result.duplicate)await scheduler.kickTeam(workspace,located.id,captain)
+      return result
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_teams_claim_task',
     description: 'Members claim their own ready task or read their existing attempt_id. Captains must use reassign_task to assign and wake a member; claim_task does not dispatch work. A member cannot own a second unfinished task. The returned attempt_id is required for updates and becomes stale after retry/reassignment.',
     parameters: {
@@ -1740,6 +1774,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       const team = await requireParticipantTeam(workspace, config, caller)
       return withTeamLock(teamLockKey(stateRoot, team.id), async () => {
         const { team: fresh, identity } = await requireFreshParticipant(stateRoot, team.id, caller.id)
+        if(fresh.halted)throw new Error('team is halted; do not claim new work')
         const task = requireTask(fresh, args.task_id)
         if (task.reassigning === true) {
           throw new Error(`task ${task.id} is being reassigned; wait for the handoff to finish`)
@@ -2186,6 +2221,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           throw new Error(`team "${fresh.name}" is halted; call ctf_teams_resume before waking a member`)
         }
         const recipient = requireMember(fresh, to)
+        if(recipient.dispatchPaused)throw new Error('member dispatch is paused; update_member(wake:true) after the provider is ready')
         const message = { ...createMessage(from, recipient.name, args.content), ...sourceFields, deliveryClaimedAt: Date.now(),
           ...owned?.attemptId === undefined ? {} : { taskId: owned.id, attemptId: owned.attemptId },
         }
@@ -2278,6 +2314,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           route_diagnostics: memberRouteDiagnostics(ctx, team, member),
           status: member.status,
           availability: availabilityLabel(member),
+          recovery: recoveryAdvice(member),
           available: memberAvailable(member),
           ...member.fault ? { fault: { ...member.fault } } : {},
           activity: member.id !== '' ? (activity.get(member.id) ?? 'unknown') : 'unspawned',
@@ -2369,7 +2406,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         team_id: team.id,
         team_name: team.name,
         description: team.description ?? '',
-        phase: team.phase ?? 'running',
+        phase: team.halted ? 'halted' : team.phase ?? 'running',
         halted: loop.halted,
         escalated: loop.escalated,
         loop_state: loop.state,
@@ -3313,6 +3350,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           runtime: args.runtime, distribution: args.distribution, tools: args.tools,
           timeoutMs: envConfig.probeTimeoutMs, python: envConfig.pythonBin,
         })
+        result.inspection_scope = 'Managed catalog + selected runtime PATH/Python probes, not a complete machine inventory. Unknown/missing does not prove absence from offline tool directories.'
         result.runtime = inspected.runtime
         result.host_platform = inspected.host_platform
         result.probe_platform = inspected.probe_platform
@@ -3580,12 +3618,22 @@ async function initializeProfileTeam(input: {
   teamName: string
   teamId: string
   profileName: string
-  inlinePlan?: import('./profiles.ts').TeamProfileConfig
+  inlinePlan?: import('./profiles.ts').InlineTeamPlanConfig
   description?: string
   staged: boolean
   prepareOnly?: boolean
 }): Promise<{ committed: true; state: TeamState }> {
-  const profile = resolveTeamProfile(input.inlinePlan === undefined ? input.config.profiles : { [input.profileName]: input.inlinePlan }, input.profileName, input.config.maxMembers)
+  const metadata = new Map<string,{challengeId?:string;resourceKey?:string;preflight?:string[];preflightFindingId?:string}>()
+  const challengeIds = new Set<string>()
+  for(const row of input.inlinePlan?.tasks??[]){
+    validatePreflight(row.preflight??[])
+    const challengeId=trimmedOptional(row.challenge_id)
+    if(challengeId&&challengeIds.has(challengeId)&&row.allow_duplicate_challenge!==true)throw new Error('duplicate inline challenge_id; use allow_duplicate_challenge=true for an explicit second angle')
+    if(challengeId)challengeIds.add(challengeId)
+    metadata.set(row.id.trim(),{challengeId,resourceKey:trimmedOptional(row.resource_key),preflight:row.preflight,preflightFindingId:trimmedOptional(row.preflight_finding_id)})
+  }
+  const inline = input.inlinePlan===undefined?undefined:{...input.inlinePlan,tasks:input.inlinePlan.tasks?.map(row=>({id:row.id,subject:row.subject,description:row.description,assignee:row.assignee,dependencies:row.dependencies}))}
+  const profile = resolveTeamProfile(inline===undefined?input.config.profiles:{[input.profileName]:inline},input.profileName,input.config.maxMembers)
   const selections: Awaited<ReturnType<typeof resolveMemberLlmSelection>>[] = []
   for (const template of profile.members) {
     selections.push(await resolveMemberLlmSelection(input.ctx, input.captain, {
@@ -3634,6 +3682,7 @@ async function initializeProfileTeam(input: {
     tasks: profile.tasks.map((template, index) => ({
       id: `t${index + 1}`,
       profileSeedId: template.id,
+      ...metadata.get(template.id),
       subject: template.subject,
       description: template.description,
       status: 'pending' as const,

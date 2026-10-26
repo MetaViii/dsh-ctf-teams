@@ -1,12 +1,10 @@
 /**
  * The dashboard's interactive half: validated panel actions.
  *
- * Every button in the 解题面板 becomes **one user turn in the session** — the
- * panel never mutates team state itself. That keeps a single authority (the
- * captain agent + the `ctf_teams_*` tools, which already enforce the protocol:
- * staged approval, flag verdicts, attachment writes) and keeps the transcript
- * honest: the panel action appears as the user's own message, so a later
- * reader can see exactly what was clicked.
+ * Normal solve actions become one user turn and retain the captain protocol
+ * for staged approval, flag verdicts and attachments. Human pause commits the
+ * shared runtime stop directly and queues no model message. Cleanup has its
+ * own durable-file operations; all actions validate authority server-side.
  *
  * The endpoint is therefore deliberately not a generic "run this prompt"
  * gadget: the client sends an action name plus typed parameters, the host

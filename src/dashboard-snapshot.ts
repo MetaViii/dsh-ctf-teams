@@ -30,7 +30,7 @@ import { memberActivity } from './members.ts'
 import { challengeOf } from './findings.ts'
 import { readCursor } from './findings.ts'
 import { dashboardInputFromTeam, nextStepHint } from './dashboard.ts'
-import { availabilityLabel, memberAvailable } from './availability.ts'
+import { availabilityLabel, memberAvailable, recoveryAdvice } from './availability.ts'
 import { batchProgress } from './findings.ts'
 import { dispatchState } from './task-admission.ts'
 import { memberRouteDiagnostics } from './model-routes.ts'
@@ -47,6 +47,7 @@ export interface DashboardMemberRow {
   reasoningEffort: string
   routeDiagnostics?: ReturnType<typeof memberRouteDiagnostics>
   status: string
+  recovery?: ReturnType<typeof recoveryAdvice>
   availability?: string
   /** `working` | `idle` | `ready` | `unspawned` | `removed`. */
   activity: string
@@ -229,6 +230,7 @@ export async function assembleDashboardTeam(
       routeDiagnostics: memberRouteDiagnostics(ctx, team, member, options.archived === true),
       status: member.status,
       availability: availabilityLabel(member),
+      recovery: recoveryAdvice(member),
       activity: live,
       behind,
       unread,

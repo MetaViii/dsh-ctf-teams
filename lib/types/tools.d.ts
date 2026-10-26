@@ -10,6 +10,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+import { pauseCaptainGoal } from './goal-pause.ts';
 import { type PlatformConfig } from './platform.ts';
 import { type TeamState, type TeamTask } from './types.ts';
 export { steerCaptainReport } from './members.ts';
@@ -105,10 +106,12 @@ export declare function haltTeamWork(input: {
     teamId: string;
     captain: Agent;
     signal?: AbortSignal;
+    preserveTasks?: boolean;
 }): Promise<{
     teamName: string;
     cancelledTasks: number;
     alreadyHalted: boolean;
+    goalPause: ReturnType<typeof pauseCaptainGoal>;
 }>;
 /** Web approval has no tool result in the captain's conversation. */
 export declare function stagedPlanApprovedContext(teamName: string): string;

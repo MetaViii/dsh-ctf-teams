@@ -13,6 +13,7 @@
  */
 import { checkpointSummary } from './captain-checkpoint.ts';
 import type { Context } from '@deepseek-ai/cordis';
+import { recoveryAdvice } from './availability.ts';
 import { memberRouteDiagnostics } from './model-routes.ts';
 import type { ChallengeInfo, FlagCandidate, TeamFinding, TeamState } from './types.ts';
 /** One lane as the dashboard renders it. */
@@ -25,6 +26,7 @@ export interface DashboardMemberRow {
     reasoningEffort: string;
     routeDiagnostics?: ReturnType<typeof memberRouteDiagnostics>;
     status: string;
+    recovery?: ReturnType<typeof recoveryAdvice>;
     availability?: string;
     /** `working` | `idle` | `ready` | `unspawned` | `removed`. */
     activity: string;

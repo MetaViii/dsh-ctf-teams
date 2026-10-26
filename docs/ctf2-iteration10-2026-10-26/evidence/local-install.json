@@ -1,0 +1,32 @@
+{
+  "version": "0.1.35",
+  "hostVersion": "0.2.1-rc.3",
+  "artifactSha256": "d5603832cfdac13bdf4819adeb344f73928284c28b8c7bc59951a8e4b193e9a3",
+  "allPackagedFilesMatched": true,
+  "comparedFiles": 157,
+  "otherPluginVersionsUnchanged": true,
+  "configBytesUnchanged": true,
+  "dataContentsUnchanged": true,
+  "dataHashesAndMetadataUnchanged": true,
+  "metadataOnlyChanges": [],
+  "dataCounts": {
+    "sessions": 490,
+    "storages": 480,
+    "agent-presets": 3,
+    "ctf-teams": 303,
+    "agent-teams": 0
+  },
+  "backupContentVerified": true,
+  "desktopRestarted": true,
+  "composedCtfPresetPresent": true,
+  "guiConfirmed": false,
+  "teamResumed": false,
+  "npmPublished": false,
+  "ctfHostRowPresent": true,
+  "otherSkippedBundleCount": 0,
+  "desktopRunning": true,
+  "desktopMainWindowReady": true,
+  "desktopProcessResponding": true,
+  "postStartupExistingTeamFilesUnchanged": true,
+  "guiValidation": "Startup main window observed. Interactive user Flag board and pause controls remain unverified; native Web/Goal tests used a scripted model."
+}

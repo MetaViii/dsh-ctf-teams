@@ -15,8 +15,10 @@ let diagnostic = '';
 try { await tools.ctf_teams_create({name:'bad-plan',plan:{members:[{name:'x',extra:'invalid'}],tasks:[{description:'中文'.repeat(1000)}]}}); }
 catch (error) { diagnostic = error.message; }
 if (!diagnostic.includes('Missing fields: plan.tasks[0].id, plan.tasks[0].subject') || !diagnostic.includes('Undeclared fields') || diagnostic.includes('missing required property "plan.tasks"')) throw Error('misleading plan diagnostics: '+diagnostic);
-const staged = await tools.ctf_teams_create({name:'ctf2-batch',challenge_mode:'batch',approval:'required',plan:{members:[{name:'worker',executionPrompt:'Check raw bytes and preserve case'}],tasks:[{id:'recon',subject:'中文附件侦察',assignee:'worker'}]}});
+const staged = await tools.ctf_teams_create({name:'ctf2-batch',challenge_mode:'batch',approval:'required',plan:{members:[{name:'worker',executionPrompt:'Check raw bytes and preserve case'}],tasks:[{id:'recon',subject:'中文附件侦察',assignee:'worker',challenge_id:'inline-a',resource_key:'slot-a',preflight:['access_ready']}]}});
 if (staged.challenge_mode !== 'batch' || !(await tools.ctf_teams_status({})).ctf.challenge.multiChallenge) throw Error('batch creation not persisted before dispatch');
+const inlineState=await tools.ctf_teams_status({});
+if(inlineState.tasks[0].challenge_id!=='inline-a'||inlineState.tasks[0].resource_key!=='slot-a'||inlineState.tasks[0].preflight[0]!=='access_ready')throw Error('inline CTF context was lost');
 const guarded = await tools.ctf_teams_create_task({subject:'repair preflight through Code Mode',challenge_id:'gate-fixture',preflight:['access_ready']});
 await tools.ctf_teams_edit_plan({operations:[{action:'update_task',task_id:guarded.task_id,preflight:[],preflight_finding_id:''}]});
 const repairedPlan = await tools.ctf_teams_status({});
@@ -26,8 +28,19 @@ try { await tools.ctf_teams_submit_flag({flag:'flag{unscoped}'}); } catch { miss
 if (!missingChallenge) throw Error('batch candidate without challenge_id accepted');
 await tools.ctf_teams_create({name:'ctf2-empty',approval:'required',replaceExisting:true});
 if ((await tools.ctf_teams_status({})).loop_state !== 'planning') throw Error('captain-planned empty graph incorrectly blocked');
+const recover=await tools.ctf_teams_create({name:'ctf2-result-recovery',approval:'automatic',replaceExisting:true});
+const recoverTask=await tools.ctf_teams_create_task({subject:'complete synthetic solve',challenge_id:'recovery-a'});
+const ownedRecovery=await tools.ctf_teams_reassign_task({task_id:recoverTask.task_id,assignee:'captain'});
+await tools.ctf_teams_update_task({task_id:recoverTask.task_id,status:'failed',output:'synthetic old transport failure',attempt_id:ownedRecovery.attempt_id});
+const recoverFlag=await tools.ctf_teams_submit_flag({flag:'flag{recovered-synthetic}',challenge_id:'recovery-a'});
+await tools.ctf_teams_mark_flag({flag_id:recoverFlag.flag_ref,verdict:'verified',note:'synthetic platform accepted'});
+const reconcile={task_id:recoverTask.task_id,expected_attempt:ownedRecovery.attempt,flag_ref:recoverFlag.flag_ref,evidence:'synthetic solver and platform receipt fulfill the ordinary task'};
+await tools.ctf_teams_resolve_task(reconcile);
+if(!(await tools.ctf_teams_resolve_task(reconcile)).duplicate)throw Error('duplicate resolution rewrote task history');
 const solo = await tools.ctf_teams_create({name:'ctf2-solo',mode:'solo',replaceExisting:true});
 if (!solo.archived_path || solo.mode !== 'solo') throw Error('solo replacement failed');
+await tools.ctf_teams_set_challenge({flag_format:JSON.stringify(['flag.*','n1book.*'])});
+if(!Array.isArray((await tools.ctf_teams_status({})).ctf.challenge.flagFormat))throw Error('serialized format list was not normalized');
 const soloStatus = await tools.ctf_teams_status({});
 if (soloStatus.loop_state !== 'running') throw Error('solo graph incorrectly blocked');
 const inspected = await tools.ctf_teams_env({action:'check',runtime:'local',tools:['python3','not-a-tool']});
@@ -177,6 +190,10 @@ export function apply(ctx) {
       console.log(marker)
       process.exit(0)
     }
+    const recovered=JSON.parse(readFileSync(join(cwd,'.ctf-teams/archive/ctf2-result-recovery/team.json'),'utf8'))
+    assert.equal(recovered.tasks[0].status,'completed')
+    assert.equal(recovered.tasks[0].resolution.failedOutput,'synthetic old transport failure')
+    assert.equal(recovered.tasks[0].resolution.flagRef,recovered.id+'@'+recovered.boardId+'/'+recovered.flags[0].id)
     const archived = JSON.parse(readFileSync(join(cwd, '.ctf-teams/archive/ctf2-solo/team.json'), 'utf8'))
     assert.equal(archived.mode, 'solo')
     assert.equal(archived.challenge.flagFormat, null)

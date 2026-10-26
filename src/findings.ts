@@ -53,9 +53,14 @@ export function normalizeFlag(raw: string): string {
   return flag
 }
 
+function normalizedFormat(format: ChallengeInfo['flagFormat']): ChallengeInfo['flagFormat'] {
+  if(typeof format==='string'&&format.trim().startsWith('[')){try{const list:unknown=JSON.parse(format);if(Array.isArray(list)&&list.length&&list.every(row=>typeof row==='string'))return list as string[]}catch{/* literal regex remains valid input */}}
+  return format
+}
+
 /** Compile the challenge flag format; falls back to the default shape. */
 export function flagFormatRegex(challenge: ChallengeInfo | undefined): RegExp {
-  const format = challenge?.flagFormat
+  const format = normalizedFormat(challenge?.flagFormat)
   const source = Array.isArray(format) ? format.map(entry => `(?:${entry})`).join('|')
     : format?.trim() || DEFAULT_FLAG_FORMAT
   try {
@@ -77,7 +82,7 @@ export function flagMatchesFormat(flag: string, challenge: ChallengeInfo | undef
 
 /** Human-readable format hint shared by the tools and dashboards. */
 export function flagFormatLabel(challenge: ChallengeInfo | undefined): string {
-  const format = challenge?.flagFormat === undefined ? DEFAULT_FLAG_FORMAT : challenge.flagFormat
+  const format = normalizedFormat(challenge?.flagFormat === undefined ? DEFAULT_FLAG_FORMAT : challenge.flagFormat)
   return format === null ? 'platform decides' : Array.isArray(format) ? format.join(' | ') : format ?? DEFAULT_FLAG_FORMAT
 }
 
@@ -344,6 +349,9 @@ export function verifyFinding(team: TeamState, findingId: string, input: { by: s
 export function updateChallenge(team: TeamState, patch: ChallengeInfo): ChallengeInfo {
   if (patch.maxParallelLanes !== undefined && (!Number.isSafeInteger(patch.maxParallelLanes) || patch.maxParallelLanes < 0 || patch.maxParallelLanes > 16)) throw new Error('max_parallel_lanes must be an integer 1..16, or 0 to clear')
   if (patch.expectedChallenges !== undefined && (!Number.isSafeInteger(patch.expectedChallenges) || patch.expectedChallenges < 1)) throw new Error('expected_challenges must be a positive integer')
+  if(typeof patch.flagFormat==='string'&&patch.flagFormat.trim().startsWith('[')){
+    try{const value:unknown=JSON.parse(patch.flagFormat);if(Array.isArray(value)&&value.every(item=>typeof item==='string'))patch={...patch,flagFormat:value as string[]}}catch{/* ordinary regex validation remains below */}
+  }
   if (patch.flagFormat !== undefined && patch.flagFormat !== null) {
     const formats = Array.isArray(patch.flagFormat) ? patch.flagFormat : [patch.flagFormat]
     if (formats.length === 0 || formats.some(entry => entry.trim() === '')) throw new Error('flag_format must contain nonempty regex sources, or null')

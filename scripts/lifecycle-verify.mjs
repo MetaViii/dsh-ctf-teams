@@ -1602,13 +1602,32 @@ try {
   let staleHandoverDenied=false
   try{await call('ctf_teams_checkpoint',{...handoverInput,expected_revision:1,assessment:'stale changed plan'})}catch(error){staleHandoverDenied=error.message.includes('state changed')}
   check('stale runtime handover writes are rejected',staleHandoverDenied)
+  const beforeRepairTurns=deliveries.length
+  await call('ctf_teams_update_member',{member_name:'one',provider:'fake',model:'fixture-model',reason:'repair after quota',wake:false})
+  const heldTask=await call('ctf_teams_create_task',{subject:'held until reset',assignee:'one',challenge_id:'held-b'})
+  await call('ctf_teams_status',{})
+  let heldMessageDenied=false
+  try{await call('ctf_teams_send_message',{to:'one',content:'must not bypass hold'})}catch{heldMessageDenied=true}
+  const heldStatus=await call('ctf_teams_status',{})
+  check('wake:false persists a dispatch hold across status, scheduling and direct messages',deliveries.length===beforeRepairTurns&&heldTask.status==='pending'&&heldTask.next_action.includes('wake:true')&&heldMessageDenied&&heldStatus.members.find(row=>row.name==='one').recovery.reason==='dispatch_paused')
+  await call('ctf_teams_update_member',{member_name:'one',provider:'fake',model:'fixture-model',reason:'provider capacity available',wake:true})
+  const beforePause=await readTeam(stateRoot,'lane-budget'),pauseTask=beforePause.tasks.find(row=>row.id===heldTask.task_id)
+  pauseTask.output='partial before human pause';await writeTeam(stateRoot,beforePause)
+  const pauseResult=await haltTeamWork({ctx,stateRoot,teamId:'lane-budget',captain,preserveTasks:true})
+  const paused=await readTeam(stateRoot,'lane-budget'),pausedFacts=await call('ctf_teams_checkpoint',{action:'load'})
+  check('runtime pause immediately exposes halted facts and resumable checkpoints',paused.halted&&paused.tasks.find(row=>row.id===heldTask.task_id).status==='pending'&&paused.tasks.find(row=>row.id===heldTask.task_id).checkpoint==='partial before human pause'&&pausedFacts.current_state.facts.phase==='halted')
+  let pausedReassignDenied=false
+  try{await call('ctf_teams_reassign_task',{task_id:heldTask.task_id,assignee:'captain'})}catch{pausedReassignDenied=true}
+  check('halt cannot be bypassed by captain takeover',pausedReassignDenied)
+  await call('ctf_teams_resume',{reason:'explicit user continuation'})
+  check('explicit continuation resumes the same task id with a fresh attempt',(await readTeam(stateRoot,'lane-budget')).tasks.find(row=>row.id===heldTask.task_id).status==='claimed')
   await call('ctf_teams_delete',{})
   const archivedHandover=await call('ctf_teams_archive_summary',{team_id:'lane-budget',archived:true})
   check('archive keeps dependent claims and captain handover source material',archivedHandover.summary.includes('DEPENDENCIES NEED RECHECK')&&archivedHandover.summary.includes('Resolve the invalid parser assumption'))
 
   const batchPlan = { members: [{ name: 'worker', executionPrompt: 'Inspect real bytes; preserve case' }, { name: 'verifier' }], tasks: [
     { id: 'verify', subject: 'Validate output', assignee: 'verifier', dependencies: ['work'] },
-    { id: 'work', subject: 'Actual task', description: 'FULL_CONTRACT_BODY', assignee: 'worker' },
+    { id: 'work', subject: 'Actual task', description: 'FULL_CONTRACT_BODY', assignee: 'worker',challenge_id:'inline-task-a',resource_key:'inline-slot',preflight:[] },
   ] }
   const beforeBadPlan = children.length
   let badPlanRejected = false
@@ -1616,6 +1635,7 @@ try {
   check('invalid batch plan is rejected without any state or session side effect', badPlanRejected && children.length === beforeBadPlan && await readTeam(stateRoot, 'atomic-invalid') === undefined)
   const batch = await call('ctf_teams_create', { name: 'Batch Plan', description: 'One call builds roster and DAG', plan: batchPlan, approval: 'required' })
   const stagedBatch = await readTeam(stateRoot, 'batch-plan')
+  check('inline challenge and resource survive topological task mapping',stagedBatch.tasks.find(row=>row.profileSeedId==='work').challengeId==='inline-task-a'&&stagedBatch.tasks.find(row=>row.profileSeedId==='work').resourceKey==='inline-slot')
   check('inline member executionPrompt survives atomic create', stagedBatch.members[0].executionPrompt === 'Inspect real bytes; preserve case')
   const taskSchema = definitions.get('ctf_teams_create').parameters.properties.plan.properties.tasks.items
   check('published JSON Schema declares required task ids and subjects', taskSchema.required.includes('id') && taskSchema.required.includes('subject'))

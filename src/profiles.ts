@@ -49,6 +49,16 @@ export interface TeamProfileTaskConfig {
   dependencies?: string[]
 }
 
+/** CTF metadata applies to API inline plans, not configured profile templates. */
+export interface InlineTaskConfig extends TeamProfileTaskConfig {
+  challenge_id?: string
+  resource_key?: string
+  preflight?: string[]
+  preflight_finding_id?: string
+  allow_duplicate_challenge?: boolean
+}
+export type InlineTeamPlanConfig = Omit<TeamProfileConfig,'tasks'> & {tasks?:InlineTaskConfig[]}
+
 /** One named team-profile template from plugin config. */
 export interface TeamProfileConfig {
   description?: string

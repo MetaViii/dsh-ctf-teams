@@ -1,4 +1,5 @@
 import type { TeamState, TeamTask } from './types.ts'
+import { recoveryAdvice } from './availability.ts'
 import { findingUsable, findingReference } from './evidence-graph.ts'
 
 const checks: Record<string, string> = {
@@ -42,11 +43,12 @@ export function taskBlockReason(team: TeamState, task: TeamTask, now = Date.now(
   return undefined
 }
 
-export function dispatchState(team: TeamState, task: TeamTask): { dispatch_state: string; dispatch_reason?: string } {
+export function dispatchState(team: TeamState, task: TeamTask): { dispatch_state: string; dispatch_reason?: string; next_action?: string; retry_at?: number | null } {
   if (['claimed', 'in_progress', 'completed'].includes(task.status)) return { dispatch_state: 'dispatched' }
   const owner = team.members.find(m => m.name === task.assignee)
   const reason = team.phase === 'staged' ? 'plan awaiting approval' : team.halted ? 'team halted'
     : task.blockedReason ?? taskBlockReason(team, task) ?? (owner?.fault ? `${owner.fault.code} ×${owner.fault.count}; repair route or wait for reset` : undefined)
     ?? (task.dependencies.some(id => team.tasks.find(t => t.id === id)?.status !== 'completed') ? 'unfinished dependencies' : 'owner busy, pending mailbox, or delivery not yet accepted; allocation is not proof of wakeup')
-  return { dispatch_state: 'waiting', dispatch_reason: reason }
+  const advice=owner?.fault||owner?.dispatchPaused?recoveryAdvice(owner):{next_action:team.halted?'explicit user resume required':'inspect dispatch_reason; task allocation is not a wakeup receipt',retry_at:null}
+  return {dispatch_state:'waiting',dispatch_reason:reason,next_action:advice.next_action,retry_at:advice.retry_at}
 }
