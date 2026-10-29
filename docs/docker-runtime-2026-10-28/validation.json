@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-29",
+  "pluginVersion": "0.1.36",
+  "artifact": {
+    "file": "dsh-ctf-teams-docker-0.1.36.tgz",
+    "sha256": "294f22dd98d0c882e2d3b8960e2c2bfa10a0d1acb51487fa30f028a5615091d6"
+  },
+  "sourceRegression": {
+    "command": "pnpm build && pnpm typecheck && pnpm verify",
+    "passed": true,
+    "unitRuntimeTests": 6
+  },
+  "image": {
+    "tag": "dsh-ctf-tools:0.1.36",
+    "id": "sha256:cf8f947cf3fbd4de3f223e328bdb2626736e0df84df8a33c2f9c9ab80ccf9f11",
+    "architecture": "amd64",
+    "os": "linux",
+    "sizeBytes": 8387593577,
+    "labels": {
+      "io.ctf-teams.runtime": "1",
+      "io.ctf-teams.toolkit": "0.1.36",
+      "org.opencontainers.image.source": "https://github.com/MetaViii/dsh-ctf-teams"
+    },
+    "inputSha256": {
+      ".dockerignore": "590c67e5c79380203012da995ccefb02db1889c68e4395c9a11a126504c333c0",
+      "runtime/Dockerfile": "a9ed69be4f156e15f96335da975f578235ad8ef529071399926ec520f00c88d2",
+      "runtime/job.py": "f3d00d749a92de22e4a3f07c321ae4962938b7910748bc2258e4c2de425409d3",
+      "runtime/requirements.lock": "12bcc3fd88b453469571576db93b3570a3a327b073251c1ef2dbcee1770b16d6",
+      "image_to_text.py": "1677f45a4dbdccbb58018e4fc15ba92f5003efc2005ac8430a6af0ba0e359e4e"
+    },
+    "pipDependencyCheck": "No broken requirements found.",
+    "limits": [
+      "apt repositories and Ruby resolution are not bit-reproducible",
+      "No public image registry push",
+      "linux/amd64 only verified"
+    ]
+  },
+  "toolchain": {
+    "passed": true,
+    "checks": 63
+  },
+  "runtime": {
+    "passed": true,
+    "image": "dsh-ctf-tools:0.1.36",
+    "imageId": "sha256:cf8f947cf3fbd4de3f223e328bdb2626736e0df84df8a33c2f9c9ab80ccf9f11",
+    "checks": {
+      "containerIdentityRecorded": true,
+      "binaryRoundTrip": true,
+      "nonzeroPreserved": true,
+      "fullLogsPersisted": true,
+      "deadlineKillsJob": true,
+      "invalidWorkingDirectoryTerminates": true,
+      "ownerFence": true,
+      "pauseStopsBackgroundAndAdmission": true,
+      "pausedLogsSaved": true,
+      "resumePreservesFilesWithoutReplayingOldJobs": true,
+      "attemptRetirementCancelsOwnedJobs": true,
+      "externalStopDoesNotResurrectStaleJobs": true,
+      "longCommandUsesStdin": true,
+      "durableJobLedger": true,
+      "originalAttachmentUnchanged": true
+    },
+    "unverified": [
+      "Real challenge/model solving quality",
+      "Other operating systems",
+      "Malicious kernel escape isolation"
+    ]
+  },
+  "host": {
+    "version": "0.2.1-rc.3",
+    "passed": true,
+    "scenarios": 15,
+    "finalImageDockerScenarios": 2,
+    "recommended": {
+      "version": "0.2.0-rc.2",
+      "passed": true
+    }
+  },
+  "installation": {
+    "version": "0.1.36",
+    "hostVersion": "0.2.1-rc.3",
+    "artifactSha256": "294f22dd98d0c882e2d3b8960e2c2bfa10a0d1acb51487fa30f028a5615091d6",
+    "allPackagedFilesMatched": true,
+    "comparedFiles": 169,
+    "otherPluginVersionsUnchanged": true,
+    "configBytesUnchanged": true,
+    "dataContentsUnchanged": true,
+    "dataHashesAndMetadataUnchanged": true,
+    "metadataOnlyChanges": [],
+    "dataCounts": {
+      "sessions": 491,
+      "storages": 481,
+      "agent-presets": 3,
+      "ctf-teams": 304,
+      "agent-teams": 0,
+      "runtime": 0,
+      "work": 0
+    },
+    "backupContentVerified": true,
+    "desktopRestarted": true,
+    "composedCtfPresetPresent": true,
+    "guiConfirmed": false,
+    "teamResumed": false,
+    "npmPublished": false,
+    "ctfHostRowPresent": true,
+    "otherSkippedBundleCount": 0,
+    "desktopRunning": true,
+    "desktopMainWindowReady": true,
+    "desktopProcessResponding": true,
+    "postStartupExistingTeamFilesUnchanged": true,
+    "guiValidation": "Main window responds. Interactive new-session solving and board operations remain unverified. Product probes used a deterministic model boundary."
+  },
+  "limits": [
+    "Deterministic model boundary; no live model solving score claim",
+    "No live platform writes",
+    "No interactive GUI feature confirmation",
+    "No npm or public Docker image publication",
+    "No DSH Desktop upgrade or existing team resume"
+  ]
+}

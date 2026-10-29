@@ -21,11 +21,14 @@
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
 import { type TeamProfileConfig } from './profiles.ts';
+import type { ExecutionConfig } from './docker-runtime.ts';
 import { type PlatformConfig } from './platform.ts';
 export declare const name = "ctf-teams";
 export declare const inject: string[];
 /** Plugin configuration. */
 export interface Config {
+    /** Docker is the default solving backend; native is an explicit advanced option. */
+    execution?: ExecutionConfig;
     /** Optional CTF2 loopback proxy integration. Managed mode is opt-in and host-owned. */
     ctf2?: PlatformConfig;
     /**

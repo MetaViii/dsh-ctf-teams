@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "version": "0.2.0-rc.2",
+  "cohortCount": 278,
+  "artifactSha256": "294f22dd98d0c882e2d3b8960e2c2bfa10a0d1acb51487fa30f028a5615091d6",
+  "exit": 0,
+  "unverified": [
+    "real model reasoning",
+    "live CTF2 platform verdicts",
+    "other host versions",
+    "interactive browser"
+  ]
+}

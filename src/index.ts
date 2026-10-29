@@ -36,6 +36,8 @@ import { installTeamCapabilities } from './capabilities.ts'
 import { installWindowsShellCompatibility } from './windows-shell.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
 import { CTF_PROFILE_NAME, withBuiltinCtfProfile } from './ctf-profile.ts'
+import { DOCKER_EXECUTION_PROMPT } from './execution-tools.ts'
+import type { ExecutionConfig } from './docker-runtime.ts'
 import { WRITEUP_COMPLETION } from './writeup.ts'
 import { installProxySupervisor, type PlatformConfig } from './platform.ts'
 
@@ -44,6 +46,8 @@ export const inject = ['tools', 'llm', 'subagents', 'systemPrompt', 'agents']
 
 /** Plugin configuration. */
 export interface Config {
+  /** Docker is the default solving backend; native is an explicit advanced option. */
+  execution?: ExecutionConfig
   /** Optional CTF2 loopback proxy integration. Managed mode is opt-in and host-owned. */
   ctf2?: PlatformConfig
   /**
@@ -130,6 +134,7 @@ const fallbackRouteConfig = z.union([
 ])
 
 export const Config: z<Config> = z.object({
+  execution: z.object({ backend: z.union([z.const('docker'), z.const('native')]).default('docker'), image: z.string().default('dsh-ctf-tools:0.1.36'), autoBuild: z.boolean().default(true), memoryMb: z.natural().min(512).default(2048), cpus: z.number().min(0.5).default(2) }),
   ctf2: z.object({
     proxyUrl: z.string(), timeoutMs: z.natural().min(1).default(10_000),
     manageProxy: z.boolean().default(false), credentialDir: z.string(),
@@ -208,7 +213,7 @@ export function usageSectionText(toolNames: string, profilesText = '', options: 
     ? 'Create with approval="automatic": the user has asked to be left out of the approval step, so the plan you submit in that call is the plan that runs — never stage it, never wait for a confirmation turn, and start dispatching immediately.'
     : 'Create with approval="required" for a two-phase plan: the user reviews the staged roster and DAG in the Web plan card and approves it before anything spawns or dispatches. Staged plans never spawn or schedule work.'} The default profile "${CTF_PROFILE_NAME}" supplies a squad of interchangeable full-stack CTF experts (agent-1..agent-4, every domain) racing the same challenge from parallel angles; the task graph is yours (captain planning).
 2. Record the challenge before dispatching work: ctf_teams_set_challenge with title, category, points, attachments, remote endpoint, and the competition's flag format. Members see it on the dashboard and in every digest; format mismatches are advisory warnings and retain the original flag. Use flag_format=null when only the platform determines format; record environment_id for cleanup reminders.
-3. Prepare the toolbox once, before the lanes need it: ctf_teams_env (action=check) detects the local toolchain (pwntools, volatility3, sage, kali tooling, …) with versions; missing pieces install with ctf_teams_env (action=install) — use dry_run=true to review the plan first, and let heavy tools (sage, ghidra, pwndbg) follow their reported manual path. The reference library (PoC/CVE/skill repos) auto-syncs its small entries at team creation; sync more with ctf_teams_references (action=sync, repo=ctf-skills,awesome-poc or repo=all — huge repos are GB-scale, so sync them only when a lane actually needs them) — every agent must rg the local references under <stateDir>/references/ before hunting online.
+3. Prepare the selected solving runtime once, before the lanes need it. Default Docker: ctf_teams_runtime(action=prepare), then ctf_teams_env(action=check) probes the same container; use ctf_teams_exec for commands and keep extra dependencies in a per-team virtual environment under /work. Only an explicitly configured native backend uses the curated ctf_teams_env(action=install) plan, reviewed first with dry_run=true. The reference library auto-syncs its small entries at team creation; sync larger PoC/CVE/skill repos only when needed. Search the host reference paths using normal file search tools; do not pass host absolute paths to container commands.
 4. Build the complete smallest useful DAG. One recon/triage task first; then parallel tasks per attack angle (agents are interchangeable full-stack experts, so assign by angle, not by specialist); then convergence (flag verification + WRITEUP.md). Pass roster and dependency graph together in create({plan:{members,tasks}}) to avoid repeated setup rounds. Every inline task requires both id and subject; members may include executionPrompt. For large or evolving plans, create first then add_member/create_task so each error stays localized. Simple one-step challenges use create(mode="solo") and the same set_challenge/submit_flag/mark_flag audit flow without roster, tasks or reference sync. ${autoApprove
     ? 'Create it in the same call as the roster, then tell the user what is running in one short message and get on with the solve.'
     : 'Present the plan and end your turn for review; never approve in that planning turn.'}
@@ -235,6 +240,7 @@ export function apply(ctx: Context, config: Config): void {
   const autoApprove = config.autoApprove ?? true
   const resolved: ToolsConfig = {
     ctf2: config.ctf2,
+    execution: { backend: config.execution?.backend ?? 'docker', image: config.execution?.image, autoBuild: config.execution?.autoBuild ?? true, memoryMb: config.execution?.memoryMb ?? 2048, cpus: config.execution?.cpus ?? 2 },
     stateDir: config.stateDir ?? '.ctf-teams',
     memberProvider: config.memberProvider ?? 'spawn',
     memberModel: config.memberModel,
@@ -267,11 +273,12 @@ export function apply(ctx: Context, config: Config): void {
   const ctfTeamsRuntime = registerCTFTeamsTools(ctx, resolved)
   installTeamCapabilities(ctx, {
     stateDir: resolved.stateDir,
+    executionBackend: resolved.execution?.backend,
     isPendingMember: ctfTeamsRuntime.isPendingMember,
     order: config.promptSectionOrder,
     // Keep the bounded profile directory available without extra tool calls.
     // installTeamCapabilities snapshots this once; no business state rewrites it.
-    captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(profiles), { autoApprove }),
+    captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(profiles), { autoApprove }) + (resolved.execution?.backend === 'docker' ? '\n\n' + DOCKER_EXECUTION_PROMPT : '\nAdvanced native execution is configured; explicitly choose local or WSL tools.'),
   })
 
   // The Web dashboard tab: its read-only state route plus the trust-fenced

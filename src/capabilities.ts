@@ -1,4 +1,5 @@
 /** Stable, agent-scoped presentation. Business authority stays in the tools. */
+import { DOCKER_EXECUTION_PROMPT } from './execution-tools.ts'
 import { onAgentReady } from './harness-compat.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -18,6 +19,7 @@ interface Exposure {
 
 interface CapabilityConfig {
   stateDir: string
+  executionBackend?: 'docker' | 'native'
   isPendingMember: (agent: Agent) => boolean
   captainPrompt: () => string
   order?: number
@@ -91,6 +93,14 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
       if (member) revoke = agent.ctx.tools.restrict({
         deny: TEAM_TOOL_NAMES.filter(name => !MEMBER_TOOL_NAMES.includes(name)),
       })
+      if (config.executionBackend === 'docker') {
+        const hostShells = ['bash', 'pwsh', 'ops_bash', 'ops_pwsh'].filter(name => agent.ctx.tools.get(name) !== undefined)
+        if (member || agent.session.header.agentPreset === 'ctf-teams') {
+          const prior = revoke
+          const shellRevoke = agent.ctx.tools.restrict({ deny: hostShells })
+          revoke = () => { prior?.(); shellRevoke() }
+        }
+      }
       releaseLifetime = agent.ctx.effect(() => state.dispose, 'ctf-teams: capability lifetime')
       return state
     } catch (error) { state.dispose(); throw error }
@@ -99,8 +109,12 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
   ctx.systemPrompt.section({
     name: 'ctf-teams:usage', order: config.order ?? 117,
     text: ({ agent }) => {
-      return agent !== undefined && states.get(agent)?.member ? TEAM_MEMBER_PROMPT : captainPrompt
+      return agent !== undefined && states.get(agent)?.member ? TEAM_MEMBER_PROMPT + (config.executionBackend === 'docker' ? '\n\n' + DOCKER_EXECUTION_PROMPT : '') : captainPrompt
     },
+  })
+  if (config.executionBackend === 'docker') ctx.tools.guard(exec => {
+    if (!exec.agent || !['bash', 'pwsh', 'ops_bash', 'ops_pwsh'].includes(exec.name)) return
+    if (exec.agent.session.header.agentPreset === 'ctf-teams' || currentTeam(exec.agent, config)) return 'CTF solving uses Docker. Use ctf_teams_exec; native shell execution is an advanced deployment option.'
   })
   onAgentReady(ctx, agent => { attach(agent) })
   ctx.effect(() => () => {

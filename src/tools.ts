@@ -21,6 +21,9 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
+import { registerExecutionTools, checkDockerEnvironment, dockerImageAnalysis, type AuthorizeExecution } from './execution-tools.ts'
+import { pauseTeamRuntime, cancelMemberRuntimeJobs, type ExecutionConfig } from './docker-runtime.ts'
+import { registerCtf2Bridge } from './ctf2-tools.ts'
 import { withPlanDiagnostics } from './plan-diagnostics.ts'
 import { memberAvailable, availabilityLabel, foldFailureInbox, recoveryAdvice } from './availability.ts'
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
@@ -139,6 +142,7 @@ export { steerCaptainReport } from './members.ts'
 
 /** Resolved plugin config consumed by the tools. */
 export interface ToolsConfig {
+  execution?: ExecutionConfig
   ctf2?: PlatformConfig
   /** State directory name under the captain's workspace. */
   stateDir: string
@@ -421,7 +425,7 @@ export async function haltTeamWork(input: {
   captain: Agent
   signal?: AbortSignal
   preserveTasks?: boolean
-}): Promise<{ teamName: string; cancelledTasks: number; alreadyHalted: boolean; goalPause: ReturnType<typeof pauseCaptainGoal> }> {
+}): Promise<{ teamName: string; cancelledTasks: number; alreadyHalted: boolean; goalPause: ReturnType<typeof pauseCaptainGoal>; runtimeStop: { stopped: boolean; error?: string } }> {
   const halted = await withTeamLock(teamLockKey(input.stateRoot, input.teamId), async () => {
     const fresh = await requireFreshCaptainTeam(input.stateRoot, input.teamId, input.captain.id)
     if (fresh.halted === true) {
@@ -467,6 +471,9 @@ export async function haltTeamWork(input: {
   // resume, and race the still-running HTTP stop request.
   const goalPause = pauseCaptainGoal(input.ctx, input.captain)
   input.captain.cancel({ kind: 'user' }, { keepInbox: true })
+  const pausedTeam = await readTeam(input.stateRoot, input.teamId)
+  const runtimeStop = pausedTeam ? await pauseTeamRuntime(workspaceOf(input.captain), pausedTeam) : { stopped: false }
+  if (runtimeStop.error) input.ctx.logger.warn('CTF Docker pause incomplete: ' + runtimeStop.error)
   await stopTeamMemberActivations(input.ctx, input.captain, halted.members, input.signal)
   // Interrupting a child emits a trailing subagent-settled notification. That
   // notification can start a fresh Captain turn after the first cancellation,
@@ -479,6 +486,7 @@ export async function haltTeamWork(input: {
     cancelledTasks: halted.cancelledTasks,
     alreadyHalted: halted.alreadyHalted,
     goalPause,
+    runtimeStop,
   }
 }
 
@@ -792,6 +800,31 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     captain.cancel({ kind: 'user' }, { keepInbox: true })
     return { teamId: discarded.teamId }
   }
+
+  const executionConfig = config.execution ?? { backend: 'native' as const }
+  const authorizeExecution: AuthorizeExecution = async (exec, options = {}) => {
+    const agent = requireCaptain(exec), workspace = workspaceOf(agent)
+    const team = await requireParticipantTeam(workspace, config, agent)
+    return withTeamLock(teamLockKey(stateRootOf(workspace, config), team.id), async () => {
+      const { team: fresh, identity } = await requireFreshParticipant(stateRootOf(workspace, config), team.id, agent.id)
+      if (options.mutate && (fresh.halted || fresh.phase === 'staged')) throw new Error('Team is halted or staged; runtime execution cannot resume it')
+      let task: TeamTask | undefined
+      if (identity.kind === 'member' && options.mutate) {
+        const member = requireMember(fresh, identity.name)
+        if (!memberAvailable(member)) throw new Error('Member execution is suspended')
+        const active = fresh.tasks.filter(t => t.assignee === identity.name && ['claimed', 'in_progress'].includes(t.status) && !t.reassigning)
+        task = options.taskId ? active.find(t => t.id === options.taskId) : active.length === 1 ? active[0] : undefined
+        if (!task) throw new Error('No current owned task for runtime execution')
+        if (options.command && (!options.taskId || !options.attemptId || task.attemptId !== options.attemptId)) throw new Error('task_id and current attempt_id are required; old attempts cannot execute')
+      } else if (options.taskId) {
+        task = fresh.tasks.find(t => t.id === options.taskId)
+        if (!task || task.assignee !== CAPTAIN_KEY || !['claimed', 'in_progress'].includes(task.status) || task.attemptId !== options.attemptId) throw new Error('Captain task attempt is stale or unowned')
+      }
+      return { agent, workspace, team: fresh, owner: identity.name, captain: identity.kind === 'captain', taskId: task?.id, attemptId: task?.attemptId }
+    })
+  }
+  registerExecutionTools(ctx, executionConfig, authorizeExecution)
+  registerCtf2Bridge(ctx, config.ctf2 ?? {}, authorizeExecution)
 
   const runtime: CTFTeamsRuntime = {
     isPendingMember: memberSelections.isPendingMember,
@@ -1205,6 +1238,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         await writeTeam(stateRoot, fresh)
         return { ...member }
       })
+      await cancelMemberRuntimeJobs(workspace, team, old.name)
       await stopTeamMemberActivations(ctx, captain, [old], exec.signal)
       await recordRetiredMemberIds(stateRoot, [old.id])
       await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
@@ -1372,6 +1406,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         })
         return { member: { ...member }, requeued }
       })
+      await cancelMemberRuntimeJobs(workspace, team, revoked.member.name)
       if (revoked.member.id !== '') {
         await recordRetiredMemberIds(stateRoot, [revoked.member.id])
         await stopTeamMemberActivations(ctx, captain, [revoked.member], exec.signal)
@@ -1654,6 +1689,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         }
       })
 
+      await cancelMemberRuntimeJobs(workspace, team, revoked.previousAssignee, args.task_id)
       let quiescenceError: unknown
       if (revoked.previousMember !== undefined) {
         try {
@@ -2534,6 +2570,8 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       await writeTeam(stateRoot, fresh)
       return roster
     })
+    const runtimeStop = await pauseTeamRuntime(workspace, team)
+    if (runtimeStop.error) throw new Error('Container stop failed; archive was deferred: ' + runtimeStop.error)
     await recordRetiredMemberIds(stateRoot, members.map(member => member.id))
     await stopTeamMemberActivations(ctx, captain, members, signal)
     await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
@@ -2598,12 +2636,13 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
   ctx.tools.register(defineTool({
     name: 'ctf_teams_image_to_text',
-    description: 'Read-only image analysis when the member model cannot see images: ASCII, OCR candidates, QR/barcode decode or pixel comparison. Requires local optional dependencies. Ambiguous characters remain candidates; platform verification is mandatory.',
+    description: 'Read-only image analysis when the member model cannot see images: ASCII, OCR candidates, QR/barcode decode or pixel comparison. Uses the selected execution runtime; Docker mode uses the image Python and image dependencies. Ambiguous characters remain candidates; platform verification is mandatory.',
     parameters: { image: { type: 'string', required: true, description: 'Image path inside the solve workspace.' }, action: { type: 'string', enum: ['ascii', 'ocr', 'decode', 'compare'] }, compare: { type: 'string' }, width: { type: 'number' } },
     output: { schema: { type: 'object', additionalProperties: false, properties: { result: { type: 'string', required: true } } }, render: (_args, value) => [{ type: 'text', text: value.result }] },
     async execute(args, exec) {
       const caller = requireCaptain(exec), workspace = workspaceOf(caller)
       await requireParticipantTeam(workspace, config, caller)
+      if (executionConfig.backend === 'docker') return { result: await dockerImageAnalysis(exec, executionConfig, authorizeExecution, args) }
       const argv = [fileURLToPath(new URL('../assets/ctf/image_to_text.py', import.meta.url)), '--workspace', workspace, '--image', args.image, '--action', args.action ?? 'ascii']
       if (args.compare) argv.push('--compare', args.compare)
       if (args.width !== undefined) {
@@ -3310,12 +3349,12 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
 
   ctx.tools.register(defineTool({
     name: 'ctf_teams_env',
-    description: 'CTF toolchain service: check the local host or an explicitly selected WSL distribution, then plan local installs. runtime=wsl requires distribution; omitted distribution returns installed names without starting one. A failed WSL startup is a runtime error, never a list of missing tools. WSL checks do not install software. action=check (default) probes every managed tool in parallel (pwntools, pycryptodome, z3, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions; action=install builds a curated per-platform plan (apt/pip/brew/gem, executed argv-by-argv without a shell — heavy tools like sage/ghidra/pwndbg report their manual command instead) and runs it; pass dry_run=true to see the plan without executing; action=list shows the managed catalog. Run check at team start and before telling a lane to "just pip install" something.',
+    description: 'CTF toolchain service: default checks the actual Docker solving container. Explicit runtime=local or wsl inspects advanced environments; native installs require execution.backend=native. runtime=wsl requires distribution; omitted distribution returns installed names without starting one. A failed WSL startup is a runtime error, never a list of missing tools. WSL checks do not install software. action=check (default) probes every managed tool in parallel (pwntools, pycryptodome, z3, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions; action=install builds a curated per-platform plan (apt/pip/brew/gem, executed argv-by-argv without a shell — heavy tools like sage/ghidra/pwndbg report their manual command instead) and runs it; pass dry_run=true to see the plan without executing; action=list shows the managed catalog. Run check at team start and before telling a lane to "just pip install" something.',
     parameters: {
       action: { type: 'string', enum: ['check', 'install', 'list'], description: 'check (default), install, or list the managed catalog.' },
       tools: { type: 'array', items: { type: 'string' }, description: 'Subset of tool ids (e.g. ["pwntools","volatility3"]); omitted = all managed tools for check, and the detected-missing set for install.' },
       dry_run: { type: 'boolean', description: 'install only: return the plan without executing.' },
-      runtime: { type: 'string', enum: ['local', 'wsl'], description: 'check only: local (default) or Windows WSL. Results always identify the inspected runtime.' },
+      runtime: { type: 'string', enum: ['docker', 'local', 'wsl'], description: 'check only: local (default) or Windows WSL. Results always identify the inspected runtime.' },
       distribution: { type: 'string', description: 'runtime=wsl: exact installed distribution name, e.g. kali-linux. Omit to list names without launching a distribution.' },
     },
     output: {
@@ -3325,6 +3364,12 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
     async execute(args, exec) {
       requireCaptain(exec)
       const envConfig = config.env ?? {}
+      if (args.action !== 'list' && (args.runtime === 'docker' || args.runtime === undefined && executionConfig.backend === 'docker')) {
+        if (args.distribution !== undefined) throw new Error('distribution only applies to explicit WSL inspection')
+        if (args.action === 'install') throw new Error('Docker toolchain is image-managed. Use ctf_teams_exec to create a per-team virtualenv for additional packages; no host installation was attempted.')
+        return checkDockerEnvironment(exec, executionConfig, authorizeExecution, args.tools)
+      }
+      if (executionConfig.backend === 'docker' && args.action === 'install') throw new Error('Host installation requires the advanced native execution configuration')
       if (args.runtime === 'wsl' && args.action === 'install') throw new Error('WSL runtime is check-only; inspect it first, then install explicitly inside that distribution. No local install was attempted.')
       if (args.distribution !== undefined && args.runtime !== 'wsl') throw new Error('distribution requires runtime=wsl')
       if (envConfig.allowInstall === false && args.action === 'install' && args.dry_run !== true) {
@@ -3347,7 +3392,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
       }
       if (action === 'check') {
         const inspected = await detectRuntimeTools({
-          runtime: args.runtime, distribution: args.distribution, tools: args.tools,
+          runtime: args.runtime === 'docker' ? undefined : args.runtime, distribution: args.distribution, tools: args.tools,
           timeoutMs: envConfig.probeTimeoutMs, python: envConfig.pythonBin,
         })
         result.inspection_scope = 'Managed catalog + selected runtime PATH/Python probes, not a complete machine inventory. Unknown/missing does not prove absence from offline tool directories.'

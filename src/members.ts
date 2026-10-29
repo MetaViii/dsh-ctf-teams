@@ -604,7 +604,7 @@ CTF collaboration rules (the round-sync protocol):
 - Before heavy work and whenever you go idle, call ctf_teams_sync. An empty sync means nobody has new progress: continue or yield, do not invent work.
 - Submit every flag-shaped string the moment it appears: ctf_teams_submit_flag with evidence. Never sit on a candidate; never mark one verified yourself — only the captain records platform confirmation.
 - Read your knowledge topics with ctf_teams_knowledge (no argument lists them) before choosing an attack path, and prefer listed tools over installing replacements.
-- Missing tooling: check ctf_teams_env (action=check, or list the catalog) before telling anyone to install something, and let action=install do the install when a tool is genuinely missing. Heavy tools (sage, ghidra, pwndbg) follow their reported manual path instead.
+- Missing tooling: check ctf_teams_env (action=check, or list the catalog) before telling anyone to install something, Default Docker uses the managed image and ctf_teams_exec; action=install is only for the advanced native backend. Heavy tools (sage, ghidra, pwndbg) follow their reported manual path instead.
 - Local references first: after the captain provisions the library (ctf_teams_references), rg the PoC/CVE collections under <stateDir>/references/ (e.g. rg -l "CVE-2025-xxxx") and cite the repo you used before hunting online.
 - Keep one replayable solve script per angle in the workspace (solve-<angle>.py) — the writeup and your teammates depend on it.
 

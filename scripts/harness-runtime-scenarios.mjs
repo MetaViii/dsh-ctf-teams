@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const json = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 
-export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability', 'ctf2-regression'];
+export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability', 'ctf2-regression', 'docker-execution', 'native-execution'];
 
 /** Run the same fixture and persisted-state assertions against an already prepared runtime. */
 export async function runRuntimeScenarios({ report, runtime, command, environment, selectedScenarios = runtimeScenarios, linkWorkspacePackages = false }) {
@@ -116,6 +116,10 @@ for (const scenario of selectedScenarios) {
       name: ./fixture-protocol.mjs
 `);
     }
+    if (scenario === 'docker-execution' || scenario === 'native-execution') {
+        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-docker.mjs'), join(profile, 'fixture-docker.mjs'));
+        writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: runtime-lab-fixture\n  disabled: true\n- id: headless-startup\n  disabled: true\n- id: headless-runner\n  disabled: true\n- id: ctf-teams\n  config:\n    execution:\n      backend: '+(scenario === 'native-execution' ? 'native' : 'docker')+'\n      autoBuild: false\n      image: '+JSON.stringify(process.env.CTF_RUNTIME_TEST_IMAGE || 'dsh-ctf-tools:0.1.36')+'\n- insert:\n    - id: runtime-lab-docker\n      name: ./fixture-docker.mjs\n');
+    }
     if (scenario === 'ctf2-regression') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-ctf2.mjs'), join(profile, 'fixture-ctf2.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + '- id: runtime-lab-fixture\n  disabled: true\n- id: headless-startup\n  disabled: true\n- id: headless-runner\n  disabled: true\n- id: ctf-teams\n  config:\n    references:\n      autoSync: off\n- insert:\n    - id: runtime-lab-ctf2-regression\n      name: ./fixture-ctf2.mjs\n');
@@ -140,6 +144,25 @@ for (const scenario of selectedScenarios) {
     const tracePath = join(report, scenario, 'trace.jsonl');
     const result = await command([process.execPath, join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'headless', 'Run the authorized deterministic CTFTeams fixture immediately.'], workspace, environment({ DSH_HOME: home, DSH_PERMISSION_MODE: 'danger-full-access', DSH_TELEMETRY_DISABLED: '1', LAB_TRACE: tracePath, LAB_TEAMS: '1', LAB_SCENARIO: scenario }), scenario, 90000);
     const trace = existsSync(tracePath) ? readFileSync(tracePath, 'utf8').trim().split('\n').filter(Boolean).map(s => JSON.parse(s)) : [];
+    if (scenario === 'native-execution') {
+        const assertions={exit0:result.code===0&&!result.timedOut,marker:result.stdout.includes('NATIVE_PRODUCT_PASSED'),actualFile:trace.some(x=>x.event==='native-product-passed'&&x.actualFile)};
+        runs.push({scenario,passed:Object.values(assertions).every(Boolean),assertions,exit:{code:result.code,timedOut:result.timedOut}});
+        continue;
+    }
+    if (scenario === 'docker-execution') {
+        const evidence=trace.find(x=>x.event==='docker-product-passed');
+        const assertions={exit0:result.code===0&&!result.timedOut,marker:result.stdout.includes('DOCKER_PRODUCT_PASSED'),realBytes:!!evidence?.bytes,workspaceMode:!!evidence?.workspaceMode,readOnlyDenied:!!evidence?.readOnlyDenied,pauseStopsJobs:!!evidence?.pauseStopsJobs};
+        runs.push({scenario,passed:Object.values(assertions).every(Boolean),assertions,exit:{code:result.code,timedOut:result.timedOut}});
+        if(Object.values(assertions).every(Boolean)) {
+            const coldTrace=join(report,scenario,'docker-cold-trace.jsonl');
+            const cold=await command([process.execPath,join(runtime,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','headless'],workspace,environment({DSH_HOME:home,DSH_PERMISSION_MODE:'danger-full-access',DSH_TELEMETRY_DISABLED:'1',LAB_TRACE:coldTrace,LAB_DOCKER_COLD:'1'}),scenario+'-cold',90000);
+            const events=existsSync(coldTrace)?readFileSync(coldTrace,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[];
+            const restored=events.find(x=>x.event==='docker-cold-passed');
+            const checks={exit0:cold.code===0&&!cold.timedOut,marker:cold.stdout.includes('DOCKER_COLD_PASSED'),sameCaptain:!!restored?.sameCaptain,filesPreserved:!!restored?.filesPreserved,noOldJobReplay:!!restored?.noOldJobReplay};
+            runs.push({scenario:'docker-cold-restore',passed:Object.values(checks).every(Boolean),assertions:checks,exit:{code:cold.code,timedOut:cold.timedOut}});
+        }
+        continue;
+    }
     if (scenario === 'ctf2-regression') {
         const assertions = { exit0: result.code === 0 && !result.timedOut, productMarker: result.stdout.includes('CTF2_REGRESSION_PASSED'), durableEvidence: trace.some(x => x.event === 'ctf2-regression-passed') };
         runs.push({ scenario, passed: Object.values(assertions).every(Boolean), assertions, exit: { code: result.code, signal: result.signal, timedOut: result.timedOut } });

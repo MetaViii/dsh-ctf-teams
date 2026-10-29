@@ -347,7 +347,7 @@ export function installDashboardRoute(ctx: Context, options: DashboardRouteOptio
           if(action.action==='halt'){
             if(!team||typeof agent.cancel!=='function'){sendJson(response,503,{error:'live runtime cancellation is unavailable; no prompt-only pause was sent'});return}
             const stopped=await haltTeamWork({ctx,stateRoot,teamId:team.id,captain:agent as unknown as Agent,preserveTasks:true})
-            sendJson(response,200,{ok:true,action:'halt',label:'暂停',halted:true,goal_pause:stopped.goalPause.status,message:'战队已暂停，任务检查点已保留。'+(stopped.goalPause.status==='paused'?'当前会话目标已暂停。':stopped.goalPause.status==='failed'||stopped.goalPause.status==='unavailable'?'目标服务未确认暂停，请核对目标状态。':'')})
+            sendJson(response,200,{ok:true,action:'halt',label:'暂停',halted:true,goal_pause:stopped.goalPause.status,runtime_stop:stopped.runtimeStop,message:'战队已暂停，任务检查点已保留。'+(stopped.runtimeStop.error?'容器停止未确认，请检查 Docker 状态。':'')+(stopped.goalPause.status==='paused'?'当前会话目标已暂停。':stopped.goalPause.status==='failed'||stopped.goalPause.status==='unavailable'?'目标服务未确认暂停，请核对目标状态。':'')})
             return
           }
           agent.followup(createUserMessage({

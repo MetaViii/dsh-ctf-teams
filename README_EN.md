@@ -22,7 +22,7 @@ A real CTF solve is a race on several fronts at once. CTFTeams keeps the agent-t
 - **Evidence provenance and handover** — observation/interpretation/decision claims can reference premises; refuted or inconclusive premises mark dependent conclusions for recheck. Captain checkpoints separate reported notes from fresh runtime state and reject stale writes. An optional per-challenge lane cap bounds task dispatch; see the [implementation and limits](./docs/ctf2-iteration8-2026-10-23/README.md).
 - **Evidence-gated flags** — candidates are submitted with reproducible evidence, retained with advisory format warnings, deduplicated by exact case-sensitive content, and only the captain records the platform verdict. A verified flag flips the whole team into writeup mode.
 - **Shipped knowledge base** — kali toolbox, pwntools, SageMath, Volatility 3, per-domain playbooks (web / pwn / reverse / crypto / forensics / misc), and a fresh-PoC/CVE hunting workflow, readable in-session via `ctf_teams_knowledge`.
-- **Toolchain service** — `ctf_teams_env` probes the machine for every managed tool (pwntools, volatility3, sage, gdb, nmap, hashcat, tshark, exiftool, …) with versions, then installs the missing ones from a curated apt/pip/brew/gem map — argv-by-argv, no shell. Heavy tools (sage, ghidra, pwndbg) report their manual command instead.
+- **Docker toolchain** — commands and environment checks use the same managed Linux container by default. Common crypto, binary, web and forensics tools ship in its build recipe. Native/WSL execution and the curated native installer remain explicit advanced options.
 - **Reference library, pre-provisioned** — the small PoC/skill repos (ctf-skills, Awesome-POC) clone automatically when a team is created; `ctf_teams_references` syncs the rest (exphub, 0xMarcio pocindex/cve, trickest/cve, PoC-in-GitHub, cvelistV5) on demand into `<workspace>/.ctf-teams/references/` and hands each agent the absolute paths + `rg` hints, so N-day hunting works offline before any web search.
 - **Live dashboard tab, and it is operable** — a `解题面板` view next to 对话 / 轨迹: challenge header, task progress bar, member lanes with live activity and unseen-board badges, the finding feed, the flag board and the host-computed `Next` line, refreshed every 1.5 s from a trust-gated route. Its controls drive the solve — 开始解题 (challenge form), 批准并运行, 推进一轮, 暂停 / 继续, 核对 flag, 附件 (workspace file picker), 写 WRITEUP, 导出 WP / 导出复盘 — normal solve actions become one user turn. Pause directly persists a runtime halt, preserves unfinished work and pauses the current goal when the host supports it.
 - **Terminal dashboard** — the same picture in the harness transcript, for surfaces without the tab: `ctf_teams_status` (model + human) and `/ctf-teams-board` (human only, zero model turns).
@@ -159,14 +159,14 @@ Task planning is `captain` mode: the profile supplies people and guardrails; the
 Before the squad starts, the captain (or any member) readies the box:
 
 ```
-ctf_teams_env  { action: "check" }                  # probe pwntools, vol3, sage, kali tools …
-ctf_teams_env  { action: "install", dry_run: true } # review the plan
-ctf_teams_env  { action: "install" }                # install the missing ones (apt/pip/brew/gem)
+ctf_teams_runtime { action: "prepare" }            # prepare/build the default Docker image
+ctf_teams_env  { action: "check" }                  # probe that same container
+ctf_teams_exec { command: "python3 --version" }     # Bash syntax inside /work
 ctf_teams_references { action: "sync", repo: "all" }# clone the PoC/CVE/skill libraries
 ctf_teams_references { action: "path", repo: "exphub" }
 ```
 
-The managed catalog covers ~40 tools (python stack, pwn/reverse, web, crypto, forensics, misc). `check` reports versions and per-tool install hints; `install` executes curated argv sequences directly (no shell), re-probes what it installed, and never auto-runs heavy tools — sage/ghidra/pwndbg print their manual path. Disable execution entirely with `env.allowInstall: false` (dry-run keeps working).
+The managed catalog is a bounded inventory, not proof that every challenge environment is covered. Default checks run in Docker; explicit local/WSL checks diagnose advanced environments. Native `install` uses curated argv sequences and is controlled by `env.allowInstall`. Docker jobs run unprivileged; put extra Python dependencies in a project virtual environment under `/work`. The captain can use `ctf_teams_ctf2` for explicit host-managed platform access without exposing OAuth files to the container.
 
 The reference manifest ships curated entries — the collections stay on GitHub (several are multi-GB), so the service shallow-clones what you ask for into the workspace instead of bloating the package:
 
@@ -217,11 +217,15 @@ Format mismatches are recorded with a warning, preserving the candidate's wrappe
 
 Findings start **unverified**, including legacy reports and high-confidence raw output. `report_finding` accepts `evidence_kind` (`raw_output`, `inference`, `guess`), `confidence` (`low`, `medium`, `high`) and `evidence`. The captain records an independent check with `verify_finding({finding_id,method,result,note})`; `result` is `confirmed`, `refuted` or `inconclusive`. Verification history stays on disk and is published as a new sync beat. The terminal uses `?` / `✓` / `✗`; the Web view and exports show evidence and verification details.
 
-`create({replaceExisting:true,…})` explicitly archives your prior solve after validating the new draft. `delete` returns `archive_path`; both actions remind you to check a recorded environment ID and release its platform slot. The plugin does not control platform containers. `archive_summary({team_id:"quick-solve",archived:true})` retrieves all findings, checks, tasks and platform verdicts as writeup source material.
+`create({replaceExisting:true,…})` explicitly archives your prior solve after validating the new draft. `delete` stops the owned solving container and returns `archive_path`; both actions remind you to release recorded platform targets separately. The captain's `ctf_teams_ctf2` bridge exposes explicit target lifecycle actions. `archive_summary({team_id:"quick-solve",archived:true})` retrieves the durable solve record.
 
 Board storage and HTTP/model text use UTF-8. Windows persistence and Chinese dashboard rendering have regression coverage. If an external command produces GBK bytes, configure that command/session for UTF-8 (for Python, `PYTHONUTF8=1`); the board cannot recover text already corrupted before it was reported.
 
 ## Configuration
+
+Solving defaults to Docker (`execution.backend: docker`). Use `ctf_teams_runtime` to prepare the shipped image, stage explicit attachments and inspect/cancel jobs; use `ctf_teams_exec` for Bash commands. The image can be built ahead of time with `node scripts/runtime-setup.mjs build`. The initial full image targets Linux AMD64. Missing Docker is reported without falling back to a host shell.
+
+Each team mounts only `.ctf-teams-work/<identity>/` at `/work`; files persist on the host. Full logs and runtime state live separately in `.ctf-teams-runtime/<identity>/`. Team pause stops its container and saves logs. Explicit resume preserves files without replaying old commands or restarting old services. Set `execution: { backend: native }` as an advanced option for native/WSL execution. Existing tools and data are retained. See the [runtime guide](./docs/docker-runtime-2026-10-28/README.md).
 
 ```yaml
 # cordis.patch.yml / profile config

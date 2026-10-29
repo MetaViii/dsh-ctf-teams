@@ -1,0 +1,6 @@
+**
+!runtime/
+!runtime/Dockerfile
+!runtime/job.py
+!runtime/requirements.lock
+!image_to_text.py

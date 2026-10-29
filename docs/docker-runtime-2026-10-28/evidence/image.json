@@ -1,0 +1,25 @@
+{
+  "tag": "dsh-ctf-tools:0.1.36",
+  "id": "sha256:cf8f947cf3fbd4de3f223e328bdb2626736e0df84df8a33c2f9c9ab80ccf9f11",
+  "architecture": "amd64",
+  "os": "linux",
+  "sizeBytes": 8387593577,
+  "labels": {
+    "io.ctf-teams.runtime": "1",
+    "io.ctf-teams.toolkit": "0.1.36",
+    "org.opencontainers.image.source": "https://github.com/MetaViii/dsh-ctf-teams"
+  },
+  "inputSha256": {
+    ".dockerignore": "590c67e5c79380203012da995ccefb02db1889c68e4395c9a11a126504c333c0",
+    "runtime/Dockerfile": "a9ed69be4f156e15f96335da975f578235ad8ef529071399926ec520f00c88d2",
+    "runtime/job.py": "f3d00d749a92de22e4a3f07c321ae4962938b7910748bc2258e4c2de425409d3",
+    "runtime/requirements.lock": "12bcc3fd88b453469571576db93b3570a3a327b073251c1ef2dbcee1770b16d6",
+    "image_to_text.py": "1677f45a4dbdccbb58018e4fc15ba92f5003efc2005ac8430a6af0ba0e359e4e"
+  },
+  "pipDependencyCheck": "No broken requirements found.",
+  "limits": [
+    "apt repositories and Ruby resolution are not bit-reproducible",
+    "No public image registry push",
+    "linux/amd64 only verified"
+  ]
+}

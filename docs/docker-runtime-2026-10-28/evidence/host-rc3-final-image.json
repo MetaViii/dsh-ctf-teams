@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "version": "0.2.1-rc.3",
+  "artifactSha256": "294f22dd98d0c882e2d3b8960e2c2bfa10a0d1acb51487fa30f028a5615091d6",
+  "platform": "win32",
+  "node": "v24.21.0",
+  "runs": [
+    {
+      "scenario": "docker-execution",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "marker": true,
+        "realBytes": true,
+        "workspaceMode": true,
+        "readOnlyDenied": true,
+        "pauseStopsJobs": true
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false
+      }
+    },
+    {
+      "scenario": "docker-cold-restore",
+      "passed": true,
+      "assertions": {
+        "exit0": true,
+        "marker": true,
+        "sameCaptain": true,
+        "filesPreserved": true,
+        "noOldJobReplay": true
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false
+      }
+    }
+  ],
+  "unverified": [
+    "Interactive desktop GUI",
+    "Real model/provider APIs",
+    "Online platform submissions",
+    "Other operating systems",
+    "Live user-data migration"
+  ]
+}

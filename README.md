@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.35-2563eb?style=flat-square" alt="源码版本 0.1.35"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.36-2563eb?style=flat-square" alt="源码版本 0.1.36"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
@@ -47,6 +47,7 @@
 | **故障恢复与交接** | 区分配置错误、限流和临时基础设施故障；合并重复通知，保留检查点与剩余事项，支持修复模型路由和重派任务。 |
 | **解题面板** | 查看成员活动、任务进度、发现和 flag 判定；支持暂停、继续、核对候选、导出记录与归档。 |
 | **工具与知识支持** | 内置分领域知识库、工具链检测和参考仓库同步；非视觉模型可使用 ASCII、OCR、QR/条码和像素比较入口。 |
+| **默认 Docker 工具箱** | 随包提供完整镜像构建配方；命令、后台作业和图像助手使用同一工具环境，暂停停止容器，成果保存到本机。 |
 
 <a id="quick-start"></a>
 
@@ -59,7 +60,8 @@
 | 宿主 | 已安装并可正常运行的 DeepSeek Harness；本轮增强功能在 `0.2.0-rc.2` 验收。 |
 | Node.js | CLI / 源码环境使用 `22.x`（≥ `22.19.0`）或 `24+`，与 `package.json` 一致。 |
 | 模型 | 宿主中已有可用的模型配置。成员默认沿用队长模型，也可按团队模板指定。 |
-| 工作区 | 题目附件、解题脚本与输出所在的目录。工具链依题目需要准备。 |
+| Docker | 默认解题需要运行中的 Docker Engine／Docker Desktop，使用 Linux 容器；本轮工具镜像面向 `linux/amd64`。首次构建需要网络与足够磁盘空间。 |
+| 工作区 | 附件与成果所在目录；插件为每队创建独立、持久保存的容器工作目录。 |
 
 宿主兼容采用两层策略：`0.2.1` 起的 `0.2.x`（含预发布）允许加载，运行时按实际 API 选择适配路径；精确验收版本单独记录在 [兼容性清单](./compatibility.json)。后续 RC / 补丁更新无需逐个加入白名单。`0.3.x` 及更高版本仍需审查；允许加载不等于已经验收。升级后可运行 `dsh-ctf-teams-doctor`，区分已测试版本、范围内未测试版本和依赖混装。见 [更新兼容说明](./docs/harness-forward-compatibility-2026-10-17/README.md)。
 
@@ -246,6 +248,12 @@ await tools.ctf_teams_mark_flag({
     autoApprove: true
     slashCommand: true
     boardCommand: true
+    execution:
+      backend: docker
+      image: dsh-ctf-tools:0.1.36
+      autoBuild: true
+      memoryMb: 2048
+      cpus: 2
     env:
       allowInstall: true
       probeTimeoutMs: 10000
@@ -260,9 +268,10 @@ await tools.ctf_teams_mark_flag({
 | `autoApprove` | `true` 提交计划后运行；`false` 保留先审阅后批准的流程。 |
 | `defaultProfile` / `profiles` | 默认团队模板与自定义阵容；同名模板覆盖内置配置。空字符串可关闭默认阵容。 |
 | `memberModel` / 成员 `provider`、`model` | 设置成员模型；省略时按宿主与队长配置解析。可配置备用路由 `fallback`。 |
-| `env.allowInstall` | 控制工具链安装执行；关闭后仍可检查与预览安装计划。重型工具提供手动安装提示。 |
+| `execution` | 默认 Docker 后端、镜像和资源限制；`backend: native` 显式启用本机／WSL 高级环境。 |
+| `env.allowInstall` | 仅控制原生后端的受管安装；Docker 通过镜像准备工具链，额外 Python 依赖可放在队伍工作目录的虚拟环境。 |
 | `references.autoSync` | 随附配置使用 `small`，建队时同步小型参考库；`off` 关闭，`all` 包含大型仓库。 |
-| `ctf2` | 可选 CTF2 代理地址、超时与宿主管理设置；默认不启动托管代理。 |
+| `ctf2` | 可选 CTF2 代理地址、超时与宿主管理设置；队长可显式用 `ctf_teams_ctf2(connect)` 启动随包代理，使用宿主既有 OAuth。 |
 
 修改配置后重启对应宿主。模型修复、资源条件和可选代理设置的完整示例见 [增强指南](./docs/ctf2-improvements-2026-10-14/README.md#使用方式)。
 
@@ -289,7 +298,13 @@ profiles:
 
 ### 知识库与参考资料
 
-`ctf_teams_knowledge` 提供 Web、Pwn、Reverse、Crypto、Forensics、Misc 及 Kali、pwntools、SageMath、Volatility 3 等资料。`ctf_teams_env` 分别检查本机和明确选择的 WSL 发行版，不把 Windows PATH 的缺失结论套到 Linux。
+默认解题命令通过 `ctf_teams_exec` 在 Docker 执行，`ctf_teams_runtime` 准备环境、导入附件和查看／取消后台作业；没有 Docker 时明确报告故障，不自动回退本机。首次 `prepare` 可从包内 Dockerfile 构建镜像，也可预先运行包内 `node scripts/runtime-setup.mjs build`。工具镜像与验收边界见 [Docker 运行时指南](./docs/docker-runtime-2026-10-28/README.md)。
+
+每队目录 `.ctf-teams-work/<身份哈希>/` 映射为容器 `/work`；脚本和输出保存在本机，完整命令日志另外写入 `.ctf-teams-runtime/<身份哈希>/`。通过普通文件工具在返回的 `host_workdir` 创建脚本，通过容器执行相对路径。`runtime import` 显式复制附件，拒绝覆盖已有成果。面板暂停停止整队容器并保留文件；明确继续后复用环境，不重放旧命令或自动重启旧服务。
+
+高级用户可设置插件配置 `execution: { backend: native }`，保留本机／WSL 执行。现有本机工具不会被卸载。默认环境检查与图像助手使用容器里的 Python；平台和参考库专用桥接仍由宿主管理。容器不等于题目靶机，也不能替代特定内核、Windows 动态分析或硬件环境。
+
+`ctf_teams_knowledge` 提供 Web、Pwn、Reverse、Crypto、Forensics、Misc 及 Kali、pwntools、SageMath、Volatility 3 等资料。`ctf_teams_env` 默认检查实际 Docker 解题环境；显式 `runtime: local` 或 `runtime: wsl` 可诊断高级环境，不把 Windows PATH 的缺失结论套到 Linux。
 
 ```js
 await tools.ctf_teams_env({ action: 'check', runtime: 'wsl' }); // 只列发行版
@@ -327,6 +342,7 @@ node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output 
 | 题目与 flag | `set_challenge`、`submit_flag`、`mark_flag`、`mark_challenge_solved` |
 | 通信与状态 | `send_message`、`status`、`resume` |
 | 解题支持 | `knowledge`、`env`、`references`、`image_to_text`、`text_candidates`、`platform_check` |
+| 容器与平台 | `runtime`、`exec`；队长通过 `ctf2` 显式访问 CTF2 平台与提交候选。 |
 | 归档 | `delete`、`archive_summary` |
 
 完整工具名均带 `ctf_teams_` 前缀。成员只获得协作所需工具；题目判定、独立复核与成员路由修复等操作由队长执行。
@@ -351,7 +367,7 @@ Windows 的原生 `bash` 工具不能直接与 PowerShell 共用一个执行器�
 
 **`submit_flag` 会直接向比赛平台提交吗？**
 
-该工具登记共享看板上的候选。实际平台提交通过平台工具或接入完成，队长检查后使用 `mark_flag` 记录结果。外部提交成功后的自动对账尚未实现。
+该工具登记共享看板上的候选。队长可通过 `ctf_teams_ctf2(action: submit)` 显式向 CTF2 提交，再检查回执并用 `mark_flag` 记录结果。平台失败不自动重试；外部提交成功后的自动对账尚未实现。
 
 **已经分配任务，为什么成员还没有开始？**
 
@@ -373,6 +389,7 @@ Windows 的原生 `bash` 工具不能直接与 PowerShell 共用一个执行器�
 
 | 文档 | 内容 |
 | --- | --- |
+| [Docker 默认运行时](./docs/docker-runtime-2026-10-28/README.md) | 工具箱、文件与作业、暂停续做、原生高级选项和实际验收边界。 |
 | [第三轮改进与取舍](./docs/ctf2-improvements-2026-10-15/README.md) | CLI 可靠性、同步与接管、OCR 候选、运算检测，逐项说明哪些建议采纳及未采纳。 |
 | [本轮验证记录](./docs/ctf2-improvements-2026-10-15/validation.json) | 新回归、真实宿主与安装包验收的范围和结果。 |
 | [协作知识库](./assets/ctf/knowledge/coordination.md) | 默认规划、队长接管、私信与发现、单环境排队及平台战绩核验。 |

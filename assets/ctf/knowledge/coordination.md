@@ -28,6 +28,10 @@
 
 ## Windows shell 与工具探测
 
+默认后端现为 Docker：解题命令使用 `ctf_teams_exec`（Bash 语法），`ctf_teams_env` 默认检测同一容器。先用 `ctf_teams_runtime prepare`，导入明确附件，在返回的 host_workdir 写脚本、容器 `/work` 执行。后台作业返回 job_id；暂停整队容器，保存文件与日志，明确继续后按检查点启动必要服务，不重放旧命令。没有 Docker 不得自行换成本机执行。以下 Windows／WSL 说明仅用于 `execution.backend: native` 高级配置或显式诊断。
+
+CTF2 的平台操作由队长通过 `ctf_teams_ctf2` 执行：connect 使用现有宿主 OAuth 文件启动包内代理；whoami、题目列表、附件 URL、环境生命周期及 submit 均有明确 action。平台凭据不进入解题容器。收到附件 URL 后在 `/work` 下载；submit 只返回实际回执，不自动修改本地 flag 裁决。平台限流或写入结果未知时先核对状态，不自动重试。暂停战队不停止宿主管理的共享代理。参考仓库仍在宿主侧，用普通文件搜索工具读取，不能把宿主绝对路径直接传给容器的 rg。
+
 Windows 上用 `pwsh` 执行 PowerShell；组合了 dsh-ops 且其 Bash 运行时可用时，用独立的 `ops_bash` 执行 POSIX 命令。不要只去掉预设的 Windows 禁用条件：宿主的 `tool-bash` 与 `tool-pwsh` 共享 `ctx.shell`，直接同时启用可能把 Bash 文本交给 PowerShell。WSL 命令可通过 `pwsh` 显式调用 `wsl.exe -d <实际发行版> --exec /bin/bash ...`，先验证实际启动成功及目标工具存在。
 
 `ctf_teams_env` 默认检查宿主本地。Windows 另用 `{runtime:"wsl"}` 列出发行版，再传 `{runtime:"wsl",distribution:"kali-linux",tools:["python3","sage"]}` 检查明确的 Linux 环境。结果包含解释器和实际搜索 PATH，超时/探针故障为 unknown，不算缺失；自定义虚拟环境仍需另验。分别验证 Windows、Git Bash、WSL；发行版存在也不代表每个工具存在。`Get-Acl` / 模块加载等 workspace preparation 错误发生在用户命令之前，换 workdir、重复重试或切换权限模式不能修复。保留第一条完整错误与实际解释器路径，先修执行环境，再启动代理或批量解题。

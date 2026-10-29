@@ -1,0 +1,25 @@
+{
+  "capturedAt": "2026-10-28T07:28:05.710Z",
+  "scope": "Read-only bounded source/writeup scan; counts are files mentioning a tool family, not solved challenges or proof of successful execution. Credentials and plugin state excluded.",
+  "files": 4582,
+  "bytes": 34648364,
+  "skippedLargeFiles": 6,
+  "toolFamilyFileMentions": {
+    "python": 3408,
+    "pwntools": 105,
+    "crypto": 269,
+    "sage": 30,
+    "z3": 29,
+    "sympy": 53,
+    "binary": 332,
+    "debugger": 9,
+    "unpack": 416,
+    "image": 547,
+    "network": 146,
+    "web": 93,
+    "memory": 0,
+    "java": 68,
+    "media": 48,
+    "windows": 139
+  }
+}

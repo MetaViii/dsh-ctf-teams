@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "image": "dsh-ctf-tools:0.1.36",
+  "imageId": "sha256:cf8f947cf3fbd4de3f223e328bdb2626736e0df84df8a33c2f9c9ab80ccf9f11",
+  "checks": {
+    "containerIdentityRecorded": true,
+    "binaryRoundTrip": true,
+    "nonzeroPreserved": true,
+    "fullLogsPersisted": true,
+    "deadlineKillsJob": true,
+    "invalidWorkingDirectoryTerminates": true,
+    "ownerFence": true,
+    "pauseStopsBackgroundAndAdmission": true,
+    "pausedLogsSaved": true,
+    "resumePreservesFilesWithoutReplayingOldJobs": true,
+    "attemptRetirementCancelsOwnedJobs": true,
+    "externalStopDoesNotResurrectStaleJobs": true,
+    "longCommandUsesStdin": true,
+    "durableJobLedger": true,
+    "originalAttachmentUnchanged": true
+  },
+  "unverified": [
+    "Real challenge/model solving quality",
+    "Other operating systems",
+    "Malicious kernel escape isolation"
+  ]
+}

@@ -5,6 +5,8 @@ node_modules/
 
 # Plugin runtime state (teams, inboxes, findings) and synced reference clones.
 .ctf-teams/
+.ctf-teams-runtime/
+.ctf-teams-work/
 
 # Challenge work: solve scripts, transcripts, payloads, writeups and platform
 # credentials belong to the workspace of the solve, never to this repository.
