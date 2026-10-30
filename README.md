@@ -11,7 +11,7 @@
 <p align="center">并行探索 · 共享证据 · 平台复核 · 持久化进度</p>
 
 <p align="center">
-  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.36-2563eb?style=flat-square" alt="源码版本 0.1.36"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/source-v0.1.37-2563eb?style=flat-square" alt="源码版本 0.1.37"></a>
   <a href="./compatibility.json"><img src="https://img.shields.io/badge/Harness-0.2.0--rc.2-059669?style=flat-square" alt="本轮验收宿主 0.2.0-rc.2"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-d97706?style=flat-square" alt="MIT License"></a>
 </p>
@@ -39,6 +39,7 @@
 | **并行解题** | 默认四名全栈 CTF 成员，覆盖 Web、Pwn、Reverse、Crypto、Forensics、Misc；按攻击角度组织任务，阵容可自定义。 |
 | **共享发现与独立复核** | 记录原始输出、推断、猜测和复现依据；队长单独登记复核结果，死胡同与纠正同样保留。 |
 | **假设与实验台账** | 按题目共享可检验的预测、实验方法和观察结果，保留失败与纠正历史；可绑定工作区文件哈希，发现证据已变更。 |
+| **实验选择与停损** | 比较低成本对照与不同假设，明确正反观察条件；Docker 实验绑定次数和时间预算，无结论或反证后由队长复核，保留成果。 |
 | **解题记录检索** | 按需检索队内实验方法、任务结果和检查点，先看短摘要再展开；面板筛选证据并支持队长单条复核，减少重复探索。 |
 | **证据依赖与队长交接** | 区分观察、解释和决策；前提失效后标记相关结论待复核。交接快照保留队长笔记和运行状态，恢复时显示变化。 |
 | **候选 flag 审计** | 保留包装和大小写，格式不符只警告；返回持久化引用，支持独立候选变体及判定历史。平台接受结果由队长记录。 |
@@ -250,7 +251,6 @@ await tools.ctf_teams_mark_flag({
     boardCommand: true
     execution:
       backend: docker
-      image: dsh-ctf-tools:0.1.36
       autoBuild: true
       memoryMb: 2048
       cpus: 2
@@ -329,6 +329,8 @@ node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output 
 
 共享假设与实验的用法、文件证据边界和本轮验证见[第七轮迭代](./docs/ctf2-iteration7-2026-10-23/README.md)。
 
+难题可先用 `ctf_teams_experiment` 登记有界实验，再比较 `next` 的短名单。选定后把 `experiment_ref` 交给 `ctf_teams_exec`；达到预算后保存结果并复核前提。无效或环境故障实验只记为无结论，平台判定保持独立。使用方法与实际约束见[实验选择、反证与停损](./docs/research-control-2026-10-30/README.md)。
+
 ## 工具索引
 
 日常使用通过自然语言和面板即可。编写自定义工作流时，可按以下分组查找工具：
@@ -337,7 +339,7 @@ node scripts/ctf2-cli.mjs scan-unsolved practice_ground_id=<ground_id> --output 
 | --- | --- |
 | 战队与计划 | `create`、`approve`、`edit_plan`、`add_member`、`update_member`、`remove_member` |
 | 任务执行与交接 | `create_task`、`claim_task`、`update_task`、`reassign_task`、`amend_task` |
-| 发现与复核 | `report_finding`、`verify_finding`、`evidence`、`hypothesis`、`sync` |
+| 发现与复核 | `report_finding`、`verify_finding`、`evidence`、`hypothesis`、`experiment`、`sync` |
 | 交接与增援 | `checkpoint`、`set_challenge(max_parallel_lanes)`；并行任务容量由调度器检查，队长根据反证与不同角度决定增援。 |
 | 题目与 flag | `set_challenge`、`submit_flag`、`mark_flag`、`mark_challenge_solved` |
 | 通信与状态 | `send_message`、`status`、`resume` |

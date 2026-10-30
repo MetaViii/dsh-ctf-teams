@@ -23,6 +23,7 @@ export interface RuntimeJob {
   id: string; owner: string; task_id?: string; attempt_id?: string; command: string
   status: string; started_at: number; exit_code?: number | null
   stdout?: string; stderr?: string; stdout_path?: string; stderr_path?: string
+  experiment_ref?: string
 }
 interface RuntimeState { version: 1; scope: RuntimeScope; image: string; image_id: string; container_id: string; container_started_at?: string; jobs: RuntimeJob[]; paused: boolean }
 interface RunResult { code: number; stdout: string; stderr: string }
@@ -201,7 +202,7 @@ export async function readRuntimeJob(scope: RuntimeScope, id: string, owner: str
     return { ...job }
   })
 }
-export async function executeRuntime(scope: RuntimeScope, config: ExecutionConfig, input: { command: string; workdir?: string; timeoutMs?: number; waitMs?: number; owner: string; taskId?: string; attemptId?: string }, signal: AbortSignal, admit: () => Promise<void>): Promise<RuntimeJob> {
+export async function executeRuntime(scope: RuntimeScope, config: ExecutionConfig, input: { command: string; workdir?: string; timeoutMs?: number; waitMs?: number; owner: string; taskId?: string; attemptId?: string; beforeLaunch?: (id: string, timeout: number) => Promise<{ timeoutMs: number; experimentRef?: string }> }, signal: AbortSignal, admit: () => Promise<void>): Promise<RuntimeJob> {
   if (!input.command.trim() || Buffer.byteLength(input.command, 'utf8') > 100_000) throw new Error('command must contain 1..100000 UTF-8 bytes; store larger scripts in files')
   const workdir = input.workdir ?? '.'
   if (workdir.includes('\\') || posix.isAbsolute(workdir) || workdir.split('/').includes('..') || /[\x00-\x1f]/.test(workdir)) throw new Error('workdir must be a relative container path beneath /work')
@@ -213,10 +214,11 @@ export async function executeRuntime(scope: RuntimeScope, config: ExecutionConfi
     await admit(); signal.throwIfAborted()
     const state = await load(scope)
     if (!state || state.paused) throw new Error('Runtime is paused')
-    const job: RuntimeJob = { id, owner: input.owner, command: input.command, status: 'running', started_at: Date.now(), task_id: input.taskId, attempt_id: input.attemptId }
+    const admission = await input.beforeLaunch?.(id, timeout) ?? { timeoutMs: timeout }
+    const job: RuntimeJob = { id, owner: input.owner, command: input.command, status: 'running', started_at: Date.now(), task_id: input.taskId, attempt_id: input.attemptId, experiment_ref: admission.experimentRef }
     state.jobs.push(job); await save(state)
     try {
-      await required(['exec', '--interactive', '--user', '0', scope.container, 'python3', '/opt/ctf-teams/job.py', 'start', id], { signal, input: JSON.stringify({ command: input.command, cwd: posix.join('/work', workdir), timeout: timeout / 1000 }) })
+      await required(['exec', '--interactive', '--user', '0', scope.container, 'python3', '/opt/ctf-teams/job.py', 'start', id], { signal, input: JSON.stringify({ command: input.command, cwd: posix.join('/work', workdir), timeout: admission.timeoutMs / 1000 }) })
     } catch (error) {
       // A cancelled client can have delivered start. Stop the whole owned container
       // before reporting a failed launch; never leave an untracked execution.

@@ -1,0 +1,32 @@
+{
+  "evidence": [
+    {
+      "event": "docker-product-passed",
+      "bytes": true,
+      "workspaceMode": true,
+      "readOnlyDenied": true,
+      "pauseStopsJobs": true,
+      "captain": "docker-2567a453-46db-487f-87b4-be4b63b8d7b3",
+      "research": {
+        "cheapControlFirst": true,
+        "concurrentBudgetStopsDuplicate": true,
+        "omissionCannotBypass": true,
+        "reviewedRefutationGatesRoute": true,
+        "realDeadline": true,
+        "invaliditySeparated": true,
+        "refutationCancelsActualJob": true,
+        "pauseBudgetFrozen": true
+      }
+    }
+  ],
+  "coldRestore": {
+    "exit0": true,
+    "marker": true,
+    "sameCaptain": true,
+    "filesPreserved": true,
+    "noOldJobReplay": true,
+    "researchLedgerPreserved": true,
+    "pausedBudgetPreserved": true
+  },
+  "scope": "Synthetic SQLite cardinality control, actual commands/files and deterministic model boundary. Not a live CTF solve-rate experiment."
+}

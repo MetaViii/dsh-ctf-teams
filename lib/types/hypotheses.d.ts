@@ -1,5 +1,6 @@
 import type { EvidenceFile } from './evidence-files.ts';
 import type { TeamState } from './types.ts';
+import type { HypothesisReview } from './research.ts';
 export interface HypothesisTest {
     id: string;
     key: string;
@@ -11,6 +12,8 @@ export interface HypothesisTest {
     nextStep?: string;
     files: EvidenceFile[];
     ts: number;
+    validity?: 'valid' | 'infrastructure' | 'invalid';
+    experimentRef?: string;
 }
 export interface ChallengeHypothesis {
     id: string;
@@ -21,6 +24,7 @@ export interface ChallengeHypothesis {
     ts: number;
     revision: number;
     tests: HypothesisTest[];
+    reviews?: HypothesisReview[];
 }
 export declare function requireHypothesis(team: TeamState, id: string | undefined): ChallengeHypothesis;
 export declare function proposeHypothesis(team: TeamState, input: {
@@ -43,6 +47,8 @@ export interface RecordTestInput {
     basis: HypothesisTest['basis'];
     nextStep?: string;
     files: EvidenceFile[];
+    validity?: HypothesisTest['validity'];
+    experimentRef?: string;
 }
 export declare function recordHypothesisTest(team: TeamState, input: RecordTestInput): {
     hypothesis: ChallengeHypothesis;

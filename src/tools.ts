@@ -24,6 +24,8 @@ import { randomUUID } from 'node:crypto'
 import { registerExecutionTools, checkDockerEnvironment, dockerImageAnalysis, type AuthorizeExecution } from './execution-tools.ts'
 import { pauseTeamRuntime, cancelMemberRuntimeJobs, type ExecutionConfig } from './docker-runtime.ts'
 import { registerCtf2Bridge } from './ctf2-tools.ts'
+import { registerResearchTools } from './research-tools.ts'
+import { pauseExperiments, researchSummary } from './research.ts'
 import { withPlanDiagnostics } from './plan-diagnostics.ts'
 import { memberAvailable, availabilityLabel, foldFailureInbox, recoveryAdvice } from './availability.ts'
 import { dispatchState, taskBlockReason, validatePreflight } from './task-admission.ts'
@@ -453,6 +455,7 @@ export async function haltTeamWork(input: {
       member.status = 'idle'
     }
     fresh.halted = true
+    pauseExperiments(fresh, now)
     fresh.haltedAt = now
     await writeTeam(input.stateRoot, fresh)
     appendTeamEvent(input.ctx, captainSessionOf(input.ctx, fresh.captainSessionId, input.captain.session), 'ctf-teams/team-halted', {
@@ -820,10 +823,13 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
         task = fresh.tasks.find(t => t.id === options.taskId)
         if (!task || task.assignee !== CAPTAIN_KEY || !['claimed', 'in_progress'].includes(task.status) || task.attemptId !== options.attemptId) throw new Error('Captain task attempt is stale or unowned')
       }
-      return { agent, workspace, team: fresh, owner: identity.name, captain: identity.kind === 'captain', taskId: task?.id, attemptId: task?.attemptId }
+      const access = { agent, workspace, team: fresh, owner: identity.name, captain: identity.kind === 'captain', taskId: task?.id, attemptId: task?.attemptId }
+      if (options.updateState?.(access)) await writeTeam(stateRootOf(workspace, config), fresh)
+      return access
     })
   }
-  registerExecutionTools(ctx, executionConfig, authorizeExecution)
+  const research = registerResearchTools(ctx, authorizeExecution)
+  registerExecutionTools(ctx, executionConfig, authorizeExecution, research)
   registerCtf2Bridge(ctx, config.ctf2 ?? {}, authorizeExecution)
 
   const runtime: CTFTeamsRuntime = {
@@ -2457,6 +2463,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           created_at: team.createdAt,
           finding_count: team.findings?.length ?? 0,
           hypothesis_summary: hypothesisSummary(team),
+          research_summary: researchSummary(team),
           evidence_summary: evidenceSummary(team),
           planning_signals: planningSignals(team),
           ...identity.kind === 'captain' ? { captain_checkpoint: checkpointSummary(team) } : {},
@@ -3252,6 +3259,7 @@ export function registerCTFTeamsTools(ctx: Context, config: ToolsConfig): CTFTea
           ...(team.findings ?? []).flatMap(finding => [formatFinding(finding), ...(finding.verifications ?? []).map(check => `  - ${check.result} by ${check.by}; method: ${check.method}; ${check.note ?? ''}`)]),
           '', '## Captain handovers (reported notes, not runtime proof)', '', ...(team.captainCheckpoints??[]).map(checkpoint=>JSON.stringify(checkpoint)),
           '', '## Hypotheses and experiments (unverified reports; hashes are integrity only)', '', ...hypothesisArchive(team),
+          '', '## Experiment plans and decisions (reported, not proof)', JSON.stringify(team.experiments ?? [], null, 2),
           '', '## Flags', '', ...(team.flags ?? []).map(formatFlag),
           '', '## Tasks', '', ...team.tasks.map(task => `- ${task.id}: ${task.subject} [${task.status}]${task.output ? `\n${task.output}` : ''}`),
           '', '> Source material from durable state. Include only independently verified commands and real output in WRITEUP.md.',

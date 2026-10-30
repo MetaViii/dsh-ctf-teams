@@ -2,6 +2,7 @@
 import { appendFinding } from './findings.ts'
 import type { EvidenceFile } from './evidence-files.ts'
 import type { TeamState } from './types.ts'
+import type { HypothesisReview } from './research.ts'
 
 export interface HypothesisTest {
   id: string
@@ -14,6 +15,8 @@ export interface HypothesisTest {
   nextStep?: string
   files: EvidenceFile[]
   ts: number
+  validity?: 'valid' | 'infrastructure' | 'invalid'
+  experimentRef?: string
 }
 
 export interface ChallengeHypothesis {
@@ -25,6 +28,7 @@ export interface ChallengeHypothesis {
   ts: number
   revision: number
   tests: HypothesisTest[]
+  reviews?: HypothesisReview[]
 }
 
 function text(value: string | undefined, name: string, max = 4000): string {
@@ -63,13 +67,17 @@ export interface RecordTestInput {
   basis: HypothesisTest['basis']
   nextStep?: string
   files: EvidenceFile[]
+  validity?: HypothesisTest['validity']
+  experimentRef?: string
 }
 
 export function recordHypothesisTest(team: TeamState, input: RecordTestInput) {
   const hypothesis = requireHypothesis(team, input.hypothesisId)
   const data = { by: input.by, key: text(input.key, 'test_key', 160), method: text(input.method, 'method'), observation: text(input.observation, 'observation'), outcome: input.outcome, basis: input.basis,
-    ...(input.nextStep === undefined ? {} : { nextStep: text(input.nextStep, 'next_step', 2000) }), files: input.files }
+    ...(input.nextStep === undefined ? {} : { nextStep: text(input.nextStep, 'next_step', 2000) }), files: input.files,
+    ...(input.validity ? { validity: input.validity } : {}), ...(input.experimentRef ? { experimentRef: input.experimentRef } : {}) }
   if (!['supports', 'refutes', 'inconclusive'].includes(data.outcome) || !['construction', 'measurement', 'observation'].includes(data.basis)) throw new Error('invalid outcome or basis')
+  if (data.validity !== undefined && (!['valid', 'infrastructure', 'invalid'].includes(data.validity) || data.validity !== 'valid' && data.outcome !== 'inconclusive')) throw new Error('non-valid experiments must be inconclusive')
   if (data.basis === 'measurement' && data.outcome === 'refutes' && !data.nextStep) throw new Error('measurement-based refutation requires next_step to distinguish uncertainty from a constructive counterexample')
   const same = hypothesis.tests.find(test => test.by === data.by && test.key === data.key)
   if (same) {
@@ -97,6 +105,7 @@ export function hypothesisArchive(team: TeamState): string[] {
   return (team.hypotheses ?? []).flatMap(item => [
     `- ${item.id} [challenge=${item.challengeId}; revision=${item.revision}] ${item.statement}`,
     `  Prediction: ${item.prediction}; proposed by ${item.by}`,
+    ...(item.reviews ?? []).map(review => `  Captain review: ${review.verdict}; revision=${review.revision}; tests=${review.testIds.join(',')}; reason=${review.reason}; reported judgment, not platform proof`),
     ...item.tests.flatMap(test => [`  - ${test.id}: REPORTED ${test.outcome}; basis=${test.basis}; by=${test.by}; method: ${test.method}; observation: ${test.observation}${test.nextStep ? `; next: ${test.nextStep}` : ''}`,
       ...test.files.map(file => `    File snapshot: ${file.path}; sha256=${file.sha256}; bytes=${file.bytes}; captured_at=${file.capturedAt} (integrity only)`) ]),
   ])

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import type { EvidenceFile } from './evidence-files.ts'
 import { boardReference, evidenceSummary, findingReference } from './evidence-graph.ts'
 import type { TeamState } from './types.ts'
+import { researchSummary } from './research.ts'
 
 export interface CaptainCheckpoint {
   revision: number
@@ -27,12 +28,13 @@ export function runtimeBrief(team: TeamState) {
     open_tasks: openTasks.slice(0,40).map(task => ({ id: task.id, subject: task.subject.slice(0,160), status: task.status, assignee: task.assignee ?? null, attempt_id: task.attemptId ?? null, challenge_id: task.challengeId ?? null, resource_key: task.resourceKey ?? null })),
     // Count and hash all rows, including those omitted from the compact presentation.
     resources: team.tasks.filter(task => task.resourceKey && ['claimed','in_progress'].includes(task.status)).slice(0,40).map(task => ({task_id:task.id, resource_key:task.resourceKey, owner:task.assignee})),
+    research: researchSummary(team),
     evidence: evidenceSummary(team), needs_recheck: rechecks.slice(0,20).map(finding => findingReference(team, finding)),
     max_parallel_lanes: team.challenge?.maxParallelLanes ?? null,
     truncated: openTasks.length > 40 || candidates.length > 20 || rechecks.length > 20 || team.tasks.filter(task=>task.resourceKey && ['claimed','in_progress'].includes(task.status)).length > 40,
   }
   const stateRef = createHash('sha256').update(JSON.stringify({
-    facts, tasks: team.tasks, flags: team.flags ?? [], findings: team.findings ?? [], hypotheses: team.hypotheses ?? [],
+    facts, tasks: team.tasks, flags: team.flags ?? [], findings: team.findings ?? [], hypotheses: team.hypotheses ?? [], experiments: team.experiments ?? [], experiment_focus: team.experimentFocus ?? {},
     challenge: team.challenge ?? {}, members: team.members,
   })).digest('hex')
   return { state_ref: stateRef, facts }

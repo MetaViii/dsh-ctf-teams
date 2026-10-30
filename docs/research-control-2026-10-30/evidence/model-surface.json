@@ -1,0 +1,177 @@
+{
+  "scope": "Compiled definitions snapshot; actual bridge exercised by runtime-rc3.json",
+  "researchPrompt": "For a difficult or uncertain challenge, use ctf_teams_hypothesis for competing explanations, then ctf_teams_experiment(action=\"plan\") before expensive exploitation or brute force. State a reproducible method, a positive observable, a falsifying observable, a stable coverage_key for the same input/target/parameters, estimated cost and a bounded run/time budget. Include a cheap control that can disprove the shared premise; a 500, timeout or failed tool is not scientific refutation. action=\"next\" gives a transparent cost-first shortlist, not a probability of success. Test distinct hypotheses instead of assigning several agents the same premise. Use the returned experiment_ref in ctf_teams_exec. Once focused, omitting/changing the reference cannot bypass that owner's review boundary. Docker admission limits runs and caps each command to the remaining experiment time. Read jobs/logs and report observation, validity and evidence. The captain reviews named test IDs and reasons, not a vote count. Reviewed refutation and repeated valid inconclusive tests require review before further experiments. Only the captain may release/reopen a route with a reason; reopen preserves history and cannot erase a refutation. Team pause freezes the clock and preserves plans, without granting old task attempts new authority. Native shells and other tools are not governed by Docker experiment budgets.",
+  "memberPrompt": "You are a CTFTeams expert. Follow your task/persona and current attempt_id. Use ctf_teams_hypothesis/experiment for competing explanations, cheap falsifying controls and bounded Docker experiments; inspect logs and report validity. Stop at review/budget boundaries; ask captain to change/reopen the route. Share findings and send one task-scoped report to captain. Never create, approve, edit or resume teams, verify flags, erase failed work or relabel stale attempts. If durable membership is missing, report to parent; never create a replacement.",
+  "memberPromptBytes": 548,
+  "experimentTool": {
+    "description": "Choose and bound difficult-challenge experiments. next/list are read-only. plan records distinct positive/falsifying observables, coverage key and cost; it never executes. Use experiment_ref in ctf_teams_exec for Docker run/time stop-loss. report links finished jobs to unverified hypothesis evidence. Only captain reviews named tests or releases/reopens a route with a reason. stop cancels owned jobs and retains work. No timers/model wakeups or automatic solve verdicts. Old unplanned commands retain compatibility; once focused, an owner cannot omit/change the reference to evade review.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "next",
+            "list",
+            "plan",
+            "report",
+            "review",
+            "stop",
+            "release",
+            "reopen"
+          ]
+        },
+        "ledger_ref": {
+          "type": "string",
+          "description": "All mutations: exact current ledger_ref. Read next/list first."
+        },
+        "experiment_ref": {
+          "type": "string",
+          "description": "Exact generation-bound reference from plan/list; report/stop/release/reopen."
+        },
+        "challenge_id": {
+          "type": "string",
+          "description": "Optional read filter."
+        },
+        "hypothesis_id": {
+          "type": "string",
+          "description": "plan/review: existing hypothesis in the same team."
+        },
+        "alternatives": {
+          "type": "array",
+          "description": "plan: up to 5 other hypotheses distinguished by this test; same challenge.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage_key": {
+          "type": "string",
+          "description": "plan: stable input/target/parameter identity, 1..160 chars. Cross-member duplicate work returns the original plan."
+        },
+        "method": {
+          "type": "string",
+          "description": "plan: reproducible test method, at most 2000 chars. Data only."
+        },
+        "if_true": {
+          "type": "string",
+          "description": "plan: expected observable if the main hypothesis holds."
+        },
+        "if_false": {
+          "type": "string",
+          "description": "plan: observable that would falsify the main hypothesis."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "control",
+            "discriminator",
+            "exploit"
+          ]
+        },
+        "estimated_seconds": {
+          "type": "number",
+          "description": "plan: estimated cost, 1..3600, not a success probability."
+        },
+        "budget_seconds": {
+          "type": "number",
+          "description": "plan: active wall-time budget from first launch, default 300; 1..3600. Team halt freezes it."
+        },
+        "max_runs": {
+          "type": "number",
+          "description": "plan: max Docker commands this cycle, default 3, max 20."
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "attempt_id": {
+          "type": "string"
+        },
+        "bind_task_id": {
+          "type": "string",
+          "description": "captain reopen: explicit current task binding after pause/reassignment."
+        },
+        "bind_attempt_id": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string",
+          "description": "captain reopen: explicitly transfer to this current task owner; history remains."
+        },
+        "expected_revision": {
+          "type": "number",
+          "description": "stop/release/reopen: current experiment revision. review/report: current hypothesis revision."
+        },
+        "observation": {
+          "type": "string",
+          "description": "report: actual observation, at most 4000 chars."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "supports",
+            "refutes",
+            "inconclusive"
+          ]
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "construction",
+            "measurement",
+            "observation"
+          ]
+        },
+        "validity": {
+          "type": "string",
+          "description": "report: non-valid tests must be inconclusive.",
+          "enum": [
+            "valid",
+            "infrastructure",
+            "invalid"
+          ]
+        },
+        "next_step": {
+          "type": "string"
+        },
+        "evidence_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "test_ids": {
+          "type": "array",
+          "description": "review: 1..20 hypothesis test IDs inspected by captain.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "refuted",
+            "inconclusive"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "description": "review/stop/release/reopen: concrete justification, at most 2000 chars."
+        },
+        "offset": {
+          "type": "number"
+        },
+        "limit": {
+          "type": "number",
+          "description": "list: default 10, max 20."
+        }
+      },
+      "required": [
+        "action"
+      ]
+    }
+  },
+  "captainVisible": true,
+  "memberVisible": true,
+  "guards": "Captain review/release/reopen and current task/attempt checked at the execution boundary."
+}

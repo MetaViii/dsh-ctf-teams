@@ -9,6 +9,7 @@
  */
 
 import type { ChallengeHypothesis } from './hypotheses.ts'
+import type { ExperimentPlan } from './research.ts'
 import type { CaptainCheckpoint } from './captain-checkpoint.ts'
 
 /** Task lifecycle statuses in progression order. */
@@ -449,6 +450,9 @@ export interface TeamState {
   /** Challenge-scoped hypotheses with append-only, unverified experiment reports. */
   hypotheses?: ChallengeHypothesis[]
   hypothesisSeq?: number
+  experiments?: ExperimentPlan[]
+  experimentSeq?: number
+  experimentFocus?: Record<string, string>
   /** Versioned captain handovers; runtime facts and reported notes remain separate. */
   captainCheckpoints?: CaptainCheckpoint[]
   /** Team round counter; advances with each board beat (finding/flag). */

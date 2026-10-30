@@ -151,14 +151,14 @@ for (const scenario of selectedScenarios) {
     }
     if (scenario === 'docker-execution') {
         const evidence=trace.find(x=>x.event==='docker-product-passed');
-        const assertions={exit0:result.code===0&&!result.timedOut,marker:result.stdout.includes('DOCKER_PRODUCT_PASSED'),realBytes:!!evidence?.bytes,workspaceMode:!!evidence?.workspaceMode,readOnlyDenied:!!evidence?.readOnlyDenied,pauseStopsJobs:!!evidence?.pauseStopsJobs};
+        const assertions={exit0:result.code===0&&!result.timedOut,marker:result.stdout.includes('DOCKER_PRODUCT_PASSED'),realBytes:!!evidence?.bytes,workspaceMode:!!evidence?.workspaceMode,readOnlyDenied:!!evidence?.readOnlyDenied,pauseStopsJobs:!!evidence?.pauseStopsJobs,...Object.fromEntries(['cheapControlFirst','concurrentBudgetStopsDuplicate','omissionCannotBypass','reviewedRefutationGatesRoute','realDeadline','invaliditySeparated','refutationCancelsActualJob','pauseBudgetFrozen'].map(key=>[key,!!evidence?.research?.[key]]))};
         runs.push({scenario,passed:Object.values(assertions).every(Boolean),assertions,exit:{code:result.code,timedOut:result.timedOut}});
         if(Object.values(assertions).every(Boolean)) {
             const coldTrace=join(report,scenario,'docker-cold-trace.jsonl');
             const cold=await command([process.execPath,join(runtime,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','headless'],workspace,environment({DSH_HOME:home,DSH_PERMISSION_MODE:'danger-full-access',DSH_TELEMETRY_DISABLED:'1',LAB_TRACE:coldTrace,LAB_DOCKER_COLD:'1'}),scenario+'-cold',90000);
             const events=existsSync(coldTrace)?readFileSync(coldTrace,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[];
             const restored=events.find(x=>x.event==='docker-cold-passed');
-            const checks={exit0:cold.code===0&&!cold.timedOut,marker:cold.stdout.includes('DOCKER_COLD_PASSED'),sameCaptain:!!restored?.sameCaptain,filesPreserved:!!restored?.filesPreserved,noOldJobReplay:!!restored?.noOldJobReplay};
+            const checks={exit0:cold.code===0&&!cold.timedOut,marker:cold.stdout.includes('DOCKER_COLD_PASSED'),sameCaptain:!!restored?.sameCaptain,filesPreserved:!!restored?.filesPreserved,noOldJobReplay:!!restored?.noOldJobReplay,researchLedgerPreserved:!!restored?.researchLedgerPreserved,pausedBudgetPreserved:!!restored?.pausedBudgetPreserved};
             runs.push({scenario:'docker-cold-restore',passed:Object.values(checks).every(Boolean),assertions:checks,exit:{code:cold.code,timedOut:cold.timedOut}});
         }
         continue;

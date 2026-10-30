@@ -6,11 +6,12 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { TeamState } from './types.ts'
 import { relative, resolve, isAbsolute, basename } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import type { ResearchHooks } from './research-tools.ts'
 import { detectTools, TOOL_SPECS } from './env.ts'
 import { DEFAULT_CTF_IMAGE, dockerCommand, executeRuntime, prepareRuntime, runtimeController, runtimeScope, runtimeStatus, stageRuntimeInput, readRuntimeJob, cancelRuntimeJob, pauseTeamRuntime, type ExecutionConfig } from './docker-runtime.ts'
 
 export interface ExecutionAccess { agent: Agent; team: TeamState; owner: string; captain: boolean; workspace: string; taskId?: string; attemptId?: string }
-export type AuthorizeExecution = (exec: ToolRunContext, options?: { mutate?: boolean; taskId?: string; attemptId?: string; command?: boolean }) => Promise<ExecutionAccess>
+export type AuthorizeExecution = (exec: ToolRunContext, options?: { mutate?: boolean; taskId?: string; attemptId?: string; command?: boolean; updateState?: (access: ExecutionAccess) => boolean }) => Promise<ExecutionAccess>
 const runtimeOwners = new WeakMap<AuthorizeExecution, Map<string, ExecutionAccess>>()
 
 export const DOCKER_EXECUTION_PROMPT = `CTF execution defaults to Docker. After creating the team, use ctf_teams_runtime(action="prepare") to prepare the shipped ${DEFAULT_CTF_IMAGE} toolchain. Use ctf_teams_exec for ALL solving commands (Bash syntax), including Python, Sage, debugger and network tools; never silently fall back to pwsh/bash/ops_bash on the host. Runtime preparation may build the image on first use. No Docker image means an environment blocker, not a reason to reinstall host dependencies. ctf_teams_runtime(action="status") is read-only and never starts a container.
@@ -35,7 +36,7 @@ function render(value: Record<string, JsonValue>): string {
   return JSON.stringify(value, null, 2)
 }
 
-export function registerExecutionTools(ctx: Context, config: ExecutionConfig, authorize: AuthorizeExecution): void {
+export function registerExecutionTools(ctx: Context, config: ExecutionConfig, authorize: AuthorizeExecution, research?: ResearchHooks): void {
   const owned = new Map<string, ExecutionAccess>()
   runtimeOwners.set(authorize, owned)
   async function access(exec: ToolRunContext, mutate = false, taskId?: string, attemptId?: string, command = false) {
@@ -85,6 +86,7 @@ export function registerExecutionTools(ctx: Context, config: ExecutionConfig, au
       command: { type: 'string', required: true },
       workdir: { type: 'string', description: 'Relative directory beneath /work; default dot. Use the normal file tools to create scripts in host_workdir.' },
       task_id: { type: 'string' }, attempt_id: { type: 'string' },
+      experiment_ref: { type: 'string', description: 'Optional generation-bound experiment plan reference; a focused route stays gated when omitted. Run/time budgets apply before launch.' },
       timeout_ms: { type: 'number', description: 'Command deadline, integer 1..3600000.' },
       wait_ms: { type: 'number', description: 'Foreground wait, integer 0..30000; running jobs continue until deadline/pause/cancel.' },
     },
@@ -92,7 +94,9 @@ export function registerExecutionTools(ctx: Context, config: ExecutionConfig, au
     presentCall: args => ({ card: 'terminal', title: args.command, cwd: args.workdir ?? '/work' }),
     async execute(args, exec) {
       const a = await access(exec, true, args.task_id, args.attempt_id, true)
-      const job = await executeRuntime(a.scope, config, { command: args.command, workdir: args.workdir, timeoutMs: args.timeout_ms, waitMs: args.wait_ms, owner: a.value.owner, taskId: a.value.taskId, attemptId: a.value.attemptId }, a.signal, a.admit)
+      await research?.check(exec, args.task_id, args.attempt_id, args.experiment_ref)
+      const job = await executeRuntime(a.scope, config, { command: args.command, workdir: args.workdir, timeoutMs: args.timeout_ms, waitMs: args.wait_ms, owner: a.value.owner, taskId: a.value.taskId, attemptId: a.value.attemptId,
+        beforeLaunch: research ? (id, timeout) => research.reserve(exec, id, timeout, args.task_id, args.attempt_id, args.experiment_ref) : undefined }, a.signal, a.admit)
       return result({ ...job }, a.scope)
     },
   }))

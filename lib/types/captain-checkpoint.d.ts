@@ -42,6 +42,11 @@ export declare function runtimeBrief(team: TeamState): {
             resource_key: string | undefined;
             owner: string | undefined;
         }[];
+        research: {
+            plans: number;
+            focused: number;
+            needs_review: number;
+        };
         evidence: {
             total: number;
             needs_recheck: number;

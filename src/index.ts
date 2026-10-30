@@ -37,6 +37,7 @@ import { installWindowsShellCompatibility } from './windows-shell.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
 import { CTF_PROFILE_NAME, withBuiltinCtfProfile } from './ctf-profile.ts'
 import { DOCKER_EXECUTION_PROMPT } from './execution-tools.ts'
+import { RESEARCH_PROMPT } from './research.ts'
 import type { ExecutionConfig } from './docker-runtime.ts'
 import { WRITEUP_COMPLETION } from './writeup.ts'
 import { installProxySupervisor, type PlatformConfig } from './platform.ts'
@@ -278,7 +279,7 @@ export function apply(ctx: Context, config: Config): void {
     order: config.promptSectionOrder,
     // Keep the bounded profile directory available without extra tool calls.
     // installTeamCapabilities snapshots this once; no business state rewrites it.
-    captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(profiles), { autoApprove }) + (resolved.execution?.backend === 'docker' ? '\n\n' + DOCKER_EXECUTION_PROMPT : '\nAdvanced native execution is configured; explicitly choose local or WSL tools.'),
+    captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(profiles), { autoApprove }) + '\n\n' + RESEARCH_PROMPT + (resolved.execution?.backend === 'docker' ? '\n\n' + DOCKER_EXECUTION_PROMPT : '\nAdvanced native execution is configured; explicitly choose local or WSL tools.'),
   })
 
   // The Web dashboard tab: its read-only state route plus the trust-fenced

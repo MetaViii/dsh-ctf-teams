@@ -1,0 +1,101 @@
+{
+  "date": "2026-10-30",
+  "pluginVersion": "0.1.37",
+  "artifact": {
+    "file": "dsh-ctf-teams-research-0.1.37.tgz",
+    "sha256": "447988c21caedde100fd94676d5f7a70a07e7ab582f779ebc14fe1608052da2e"
+  },
+  "sourceRegression": {
+    "build": true,
+    "typecheck": true,
+    "fullVerify": true,
+    "newResearchTests": 8
+  },
+  "runtime": {
+    "host": "0.2.1-rc.3",
+    "passed": true,
+    "scenarios": 15,
+    "researchAssertions": {
+      "exit0": true,
+      "marker": true,
+      "realBytes": true,
+      "workspaceMode": true,
+      "readOnlyDenied": true,
+      "pauseStopsJobs": true,
+      "cheapControlFirst": true,
+      "concurrentBudgetStopsDuplicate": true,
+      "omissionCannotBypass": true,
+      "reviewedRefutationGatesRoute": true,
+      "realDeadline": true,
+      "invaliditySeparated": true,
+      "refutationCancelsActualJob": true,
+      "pauseBudgetFrozen": true
+    },
+    "coldAssertions": {
+      "exit0": true,
+      "marker": true,
+      "sameCaptain": true,
+      "filesPreserved": true,
+      "noOldJobReplay": true,
+      "researchLedgerPreserved": true,
+      "pausedBudgetPreserved": true
+    },
+    "recommended": {
+      "host": "0.2.0-rc.2",
+      "passed": true
+    }
+  },
+  "toolkit": {
+    "reused": true,
+    "tag": "dsh-ctf-tools:0.1.36",
+    "imageId": "sha256:cf8f947cf3fbd4de3f223e328bdb2626736e0df84df8a33c2f9c9ab80ccf9f11",
+    "rebuildRequired": false
+  },
+  "installation": {
+    "version": "0.1.37",
+    "hostVersion": "0.2.1-rc.3",
+    "artifactSha256": "447988c21caedde100fd94676d5f7a70a07e7ab582f779ebc14fe1608052da2e",
+    "allPackagedFilesMatched": true,
+    "comparedFiles": 174,
+    "otherPluginVersionsUnchanged": true,
+    "configBytesUnchanged": true,
+    "dataContentsUnchanged": true,
+    "dataHashesAndMetadataUnchanged": true,
+    "metadataOnlyChanges": [],
+    "dataCounts": {
+      "sessions": 511,
+      "storages": 501,
+      "agent-presets": 3,
+      "ctf-teams": 312,
+      "agent-teams": 0,
+      "runtime": 2279,
+      "work": 182483
+    },
+    "backupContentVerified": true,
+    "desktopRestarted": true,
+    "composedCtfPresetPresent": true,
+    "guiConfirmed": false,
+    "teamResumed": false,
+    "npmPublished": false,
+    "ctfHostRowPresent": true,
+    "otherSkippedBundleCount": 0,
+    "desktopRunning": true,
+    "desktopMainWindowReady": true,
+    "desktopProcessResponding": true,
+    "postStartupExistingTeamFilesUnchanged": true,
+    "guiValidation": "Main window responds; no interactive new-session solve/board verification. No existing team resumed."
+  },
+  "backup": {
+    "method": "Resumable native copy plus bounded-memory SHA-256 validation of source and backup; symlinks preserved",
+    "workFiles": 182483,
+    "workBytes": 4912545595
+  },
+  "limits": [
+    "No real-model same-budget solve-rate comparison",
+    "No live platform writes",
+    "Interactive GUI feature validation pending",
+    "Native shells/other tools and model tokens are outside Docker experiment quotas",
+    "Unplanned legacy commands retain behavior; plan coverage/cost/verdicts remain claims",
+    "No DSH upgrade, npm publication or halted-team resume"
+  ]
+}

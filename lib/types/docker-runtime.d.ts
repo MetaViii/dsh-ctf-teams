@@ -28,6 +28,7 @@ export interface RuntimeJob {
     stderr?: string;
     stdout_path?: string;
     stderr_path?: string;
+    experiment_ref?: string;
 }
 interface RuntimeState {
     version: 1;
@@ -62,6 +63,10 @@ export declare function executeRuntime(scope: RuntimeScope, config: ExecutionCon
     owner: string;
     taskId?: string;
     attemptId?: string;
+    beforeLaunch?: (id: string, timeout: number) => Promise<{
+        timeoutMs: number;
+        experimentRef?: string;
+    }>;
 }, signal: AbortSignal, admit: () => Promise<void>): Promise<RuntimeJob>;
 export declare function cancelRuntimeJob(scope: RuntimeScope, id: string, owner: string, captain: boolean): Promise<RuntimeJob>;
 export declare function pauseTeamRuntime(workspace: string, team: TeamState): Promise<{
